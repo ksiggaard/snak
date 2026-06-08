@@ -1,0 +1,7 @@
+dist
+node_modules
+src-tauri
+src/components/ui
+src/index.css
+src/lib/utils.ts
+*.md
