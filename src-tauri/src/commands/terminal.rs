@@ -9,7 +9,7 @@
 //!
 //! The command text is passed to the spawned process as **data, never
 //! interpolated into a shell string**:
-//! - It is handed to the terminal via the `KDE_LLM_STAGED_CMD` environment
+//! - It is handed to the terminal via the `SNAK_STAGED_CMD` environment
 //!   variable (`Command::env`), so shell metacharacters, quotes, newlines,
 //!   `$(...)`, backticks, `;`, `&&`, etc. are inert bytes in an env var — not
 //!   tokens the launcher parses.
@@ -23,10 +23,10 @@
 //! Mirrors the desktop-only, platform-gated pattern of `take_screenshot`.
 
 /// Name of the environment variable carrying the staged command to the shell.
-const STAGED_CMD_ENV: &str = "KDE_LLM_STAGED_CMD";
+const STAGED_CMD_ENV: &str = "SNAK_STAGED_CMD";
 
 /// A bash `--rcfile` that, on interactive startup, sources the user's normal
-/// config and then stages `$KDE_LLM_STAGED_CMD` **without executing it**:
+/// config and then stages `$SNAK_STAGED_CMD` **without executing it**:
 ///
 /// - It is pushed as the newest history entry (`history -s`) so pressing the
 ///   Up arrow recalls it.
@@ -43,23 +43,23 @@ const BASH_RCFILE: &str = "\
 if [ -f /etc/bash.bashrc ]; then . /etc/bash.bashrc; fi\n\
 if [ -f \"$HOME/.bashrc\" ]; then . \"$HOME/.bashrc\"; fi\n\
 \n\
-__kde_llm_stage() {\n\
-  READLINE_LINE=\"${KDE_LLM_STAGED_CMD}\"\n\
+__snak_stage() {\n\
+  READLINE_LINE=\"${SNAK_STAGED_CMD}\"\n\
   READLINE_POINT=${#READLINE_LINE}\n\
   bind -r '\\e[0n' 2>/dev/null\n\
 }\n\
 \n\
-if [ -n \"${KDE_LLM_STAGED_CMD}\" ]; then\n\
-  history -s \"${KDE_LLM_STAGED_CMD}\"\n\
+if [ -n \"${SNAK_STAGED_CMD}\" ]; then\n\
+  history -s \"${SNAK_STAGED_CMD}\"\n\
   echo '# Command staged below (and in history: press Up). Review, then Enter to run — not auto-executed.'\n\
-  bind -x '\"\\e[0n\": __kde_llm_stage' 2>/dev/null\n\
+  bind -x '\"\\e[0n\": __snak_stage' 2>/dev/null\n\
   printf '\\e[5n'\n\
 fi\n\
 ";
 
 /// Write the rcfile to a temp path and return it.
 fn write_rcfile() -> Result<std::path::PathBuf, String> {
-    let path = temp_path("kde-llm-stage", "bashrc");
+    let path = temp_path("snak-stage", "bashrc");
     std::fs::write(&path, BASH_RCFILE).map_err(|e| format!("failed to write rcfile: {e}"))?;
     Ok(path)
 }
@@ -123,7 +123,7 @@ fn launch_terminal(command: &str) -> Result<(), String> {
     // env var, then `exec`s interactive bash with our rcfile (which stages, not
     // runs, the command). The model command is only ever written to / read from
     // the data file as bytes — never interpolated into shell syntax.
-    let cmd_file = temp_path("kde-llm-cmd", "txt");
+    let cmd_file = temp_path("snak-cmd", "txt");
     std::fs::write(&cmd_file, command).map_err(|e| format!("failed to write command file: {e}"))?;
 
     let launcher = format!(
@@ -136,7 +136,7 @@ fn launch_terminal(command: &str) -> Result<(), String> {
         file = shell_single_quote(&cmd_file.to_string_lossy()),
         rc = shell_single_quote(&rcfile.to_string_lossy()),
     );
-    let launcher_path = temp_path("kde-llm-launch", "command");
+    let launcher_path = temp_path("snak-launch", "command");
     std::fs::write(&launcher_path, launcher)
         .map_err(|e| format!("failed to write launcher: {e}"))?;
 
@@ -177,11 +177,11 @@ mod tests {
     fn rcfile_stages_without_executing() {
         // The rcfile must never run the staged command itself: no bare command
         // expansion, only assignment to the readline buffer / history.
-        assert!(BASH_RCFILE.contains("READLINE_LINE=\"${KDE_LLM_STAGED_CMD}\""));
-        assert!(BASH_RCFILE.contains("history -s \"${KDE_LLM_STAGED_CMD}\""));
+        assert!(BASH_RCFILE.contains("READLINE_LINE=\"${SNAK_STAGED_CMD}\""));
+        assert!(BASH_RCFILE.contains("history -s \"${SNAK_STAGED_CMD}\""));
         // It must NOT eval/exec the staged command.
         assert!(!BASH_RCFILE.contains("eval"));
-        assert!(!BASH_RCFILE.contains("$(${KDE_LLM_STAGED_CMD})"));
+        assert!(!BASH_RCFILE.contains("$(${SNAK_STAGED_CMD})"));
     }
 
     #[test]

@@ -1,4 +1,4 @@
-# KDE LLM
+# snak
 
 LLM chat app for KDE. Supporting Mistral, OpenAI, Antropic and Gemini API keys.
 

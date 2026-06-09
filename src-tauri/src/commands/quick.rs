@@ -77,7 +77,7 @@ fn temp_png_path() -> std::path::PathBuf {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    std::env::temp_dir().join(format!("kde-llm-shot-{nanos}.png"))
+    std::env::temp_dir().join(format!("snak-shot-{nanos}.png"))
 }
 
 fn read_and_encode(path: &std::path::Path) -> Result<Option<String>, String> {

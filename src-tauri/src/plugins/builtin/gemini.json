@@ -1,11 +1,11 @@
 {
-  "id": "com.kdellm.gemini",
+  "id": "com.snak.gemini",
   "name": "Google Gemini",
   "version": "1.0.0",
   "category": "provider",
   "apiVersion": 1,
   "description": "Gemini models from Google.",
-  "author": "KDE LLM",
+  "author": "snak",
   "enabledByDefault": true,
   "contributes": {
     "id": "gemini",

@@ -1,11 +1,11 @@
 {
-  "id": "com.kdellm.openai",
+  "id": "com.snak.openai",
   "name": "OpenAI",
   "version": "1.0.0",
   "category": "provider",
   "apiVersion": 1,
   "description": "GPT models from OpenAI.",
-  "author": "KDE LLM",
+  "author": "snak",
   "enabledByDefault": true,
   "contributes": {
     "id": "openai",

@@ -8,7 +8,7 @@ use keyring::{Entry, Error as KeyringError};
 
 /// Keychain service name. Keys are stored per provider under this service,
 /// with the provider id (e.g. "anthropic") as the account/username.
-const SERVICE: &str = "com.kdellm.app";
+const SERVICE: &str = "com.snak.app";
 
 fn entry(provider: &str) -> Result<Entry, String> {
     Entry::new(SERVICE, provider).map_err(|e| e.to_string())

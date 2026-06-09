@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 
 .worktrees/
+
+# Affinity Designer lock files
+*~lock~

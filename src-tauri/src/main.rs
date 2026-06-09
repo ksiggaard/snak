@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    kde_llm_app_lib::run()
+    snak_lib::run()
 }
