@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -30,16 +30,23 @@ export function Themes() {
   // Enabled `theme` contributions from the T12 plugin registry, mapped into the
   // same shape as folder themes so they share the selector and apply path.
   const loadPlugins = usePlugins((s) => s.load);
-  const pluginThemes = usePlugins((s) =>
-    selectRegistry(s).themes.map(
-      (t, i): InstalledTheme => ({
-        id: `plugin:${t.name}:${i}`,
-        name: t.name,
-        author: null,
-        version: "",
-        css: t.css,
-      }),
-    ),
+  // Select the stable `themes` array off the (memoized) registry, then map it
+  // in a `useMemo`. Mapping *inside* the selector would return a fresh array on
+  // every render → infinite re-render (the same bug that black-screened the
+  // composer); see `selectRegistry`.
+  const themeContributions = usePlugins((s) => selectRegistry(s).themes);
+  const pluginThemes = useMemo(
+    () =>
+      themeContributions.map(
+        (t, i): InstalledTheme => ({
+          id: `plugin:${t.name}:${i}`,
+          name: t.name,
+          author: null,
+          version: "",
+          css: t.css,
+        }),
+      ),
+    [themeContributions],
   );
 
   const [dir, setDir] = useState<string | null>(null);
