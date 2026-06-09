@@ -11,8 +11,27 @@ export interface Thread {
   title: string;
   provider: Provider;
   model: string;
+  /** Project this thread belongs to, or null for a project-less thread. */
+  project_id: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  instructions: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectFile {
+  id: string;
+  project_id: string;
+  name: string;
+  /** Decoded UTF-8 text content, injected into the system context. */
+  content: string;
+  created_at: string;
 }
 
 export interface Message {

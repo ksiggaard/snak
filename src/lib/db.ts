@@ -3,6 +3,8 @@ import type {
   Attachment,
   AttachmentKind,
   Message,
+  Project,
+  ProjectFile,
   Provider,
   Role,
   Thread,
@@ -32,13 +34,21 @@ export async function createThread(input: {
   provider: Provider;
   model: string;
   title?: string;
+  /** Optional project to create the thread inside. */
+  projectId?: string | null;
 }): Promise<Thread> {
   const db = await getDb();
   const id = newId();
   await db.execute(
-    `INSERT INTO threads (id, title, provider, model)
-     VALUES ($1, $2, $3, $4)`,
-    [id, input.title ?? "New chat", input.provider, input.model],
+    `INSERT INTO threads (id, title, provider, model, project_id)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [
+      id,
+      input.title ?? "New chat",
+      input.provider,
+      input.model,
+      input.projectId ?? null,
+    ],
   );
   const thread = await getThread(id);
   if (!thread) throw new Error("Failed to read back created thread");
@@ -79,6 +89,19 @@ export async function setThreadProviderModel(
     `UPDATE threads SET provider = $1, model = $2, updated_at = datetime('now')
      WHERE id = $3`,
     [provider, model, id],
+  );
+}
+
+/** Assign (or clear, with null) the project a thread belongs to. */
+export async function setThreadProject(
+  id: string,
+  projectId: string | null,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE threads SET project_id = $1, updated_at = datetime('now')
+     WHERE id = $2`,
+    [projectId, id],
   );
 }
 
@@ -191,4 +214,112 @@ export async function setSetting(key: string, value: string): Promise<void> {
      ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
     [key, value],
   );
+}
+
+// ---------------------------------------------------------------------------
+// Projects (T20) — grouped threads with shared instructions + reference files
+// ---------------------------------------------------------------------------
+
+export async function listProjects(): Promise<Project[]> {
+  const db = await getDb();
+  return db.select<Project[]>(
+    `SELECT * FROM projects ORDER BY updated_at DESC, created_at DESC`,
+  );
+}
+
+export async function getProject(id: string): Promise<Project | null> {
+  const db = await getDb();
+  const rows = await db.select<Project[]>(
+    `SELECT * FROM projects WHERE id = $1`,
+    [id],
+  );
+  return rows[0] ?? null;
+}
+
+export async function createProject(input: {
+  name?: string;
+  instructions?: string;
+}): Promise<Project> {
+  const db = await getDb();
+  const id = newId();
+  await db.execute(
+    `INSERT INTO projects (id, name, instructions) VALUES ($1, $2, $3)`,
+    [id, input.name ?? "New project", input.instructions ?? ""],
+  );
+  const project = await getProject(id);
+  if (!project) throw new Error("Failed to read back created project");
+  return project;
+}
+
+export async function renameProject(id: string, name: string): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE projects SET name = $1, updated_at = datetime('now') WHERE id = $2`,
+    [name, id],
+  );
+}
+
+export async function setProjectInstructions(
+  id: string,
+  instructions: string,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE projects SET instructions = $1, updated_at = datetime('now')
+     WHERE id = $2`,
+    [instructions, id],
+  );
+}
+
+/**
+ * Delete a project. Its threads are **orphaned to no-project** (project_id set
+ * to NULL), not deleted — chat history is preserved. Project files are removed
+ * explicitly (we don't rely on FK ON DELETE CASCADE, mirroring deleteThread).
+ */
+export async function deleteProject(id: string): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE threads SET project_id = NULL WHERE project_id = $1`,
+    [id],
+  );
+  await db.execute(`DELETE FROM project_files WHERE project_id = $1`, [id]);
+  await db.execute(`DELETE FROM projects WHERE id = $1`, [id]);
+}
+
+export async function listProjectFiles(
+  projectId: string,
+): Promise<ProjectFile[]> {
+  const db = await getDb();
+  return db.select<ProjectFile[]>(
+    `SELECT * FROM project_files WHERE project_id = $1 ORDER BY created_at ASC`,
+    [projectId],
+  );
+}
+
+export async function addProjectFile(input: {
+  project_id: string;
+  name: string;
+  content: string;
+}): Promise<ProjectFile> {
+  const db = await getDb();
+  const id = newId();
+  await db.execute(
+    `INSERT INTO project_files (id, project_id, name, content)
+     VALUES ($1, $2, $3, $4)`,
+    [id, input.project_id, input.name, input.content],
+  );
+  await db.execute(
+    `UPDATE projects SET updated_at = datetime('now') WHERE id = $1`,
+    [input.project_id],
+  );
+  const rows = await db.select<ProjectFile[]>(
+    `SELECT * FROM project_files WHERE id = $1`,
+    [id],
+  );
+  return rows[0];
+}
+
+export async function deleteProjectFile(id: string): Promise<void> {
+  const db = await getDb();
+  await db.execute(`DELETE FROM project_files WHERE id = $1`, [id]);
 }

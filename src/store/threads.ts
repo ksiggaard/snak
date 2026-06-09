@@ -4,14 +4,18 @@ import {
   addMessage,
   createThread,
   deleteThread,
+  getProject,
   getSetting,
+  listProjectFiles,
   listThreads,
   renameThread,
   setSetting,
+  setThreadProject,
   setThreadProviderModel,
 } from "@/lib/db";
-import { cancelStream, chatStream } from "@/lib/chat";
+import { cancelStream, chatStream, type ApiMessage } from "@/lib/chat";
 import { loadThreadMessages, type MessageView } from "@/lib/messages";
+import { buildProjectSystemText } from "@/lib/projects";
 import { PROVIDERS } from "@/lib/providers";
 import type { PreparedImage } from "@/lib/image";
 import type { Provider, Thread } from "@/types/db";
@@ -36,6 +40,8 @@ interface ThreadsState {
   messages: MessageView[];
   draftProvider: Provider;
   draftModel: string;
+  /** Project a new (draft) chat will be created in, or null for none. */
+  draftProjectId: string | null;
   busy: boolean;
   /** True between requesting a cancel and the stream actually stopping. */
   cancelling: boolean;
@@ -46,6 +52,13 @@ interface ThreadsState {
   refreshThreads: () => Promise<void>;
   selectThread: (id: string) => Promise<void>;
   startNewChat: () => void;
+  /** Start a new draft chat that will be created inside the given project. */
+  startNewChatInProject: (projectId: string) => void;
+  /** Move an existing thread into a project (or null to remove it). */
+  assignThreadProject: (
+    threadId: string,
+    projectId: string | null,
+  ) => Promise<void>;
   /** Set provider+model for the current thread, or the draft if none. */
   setProviderModel: (provider: Provider, model: string) => Promise<void>;
   send: (content: string, images: PreparedImage[]) => Promise<void>;
@@ -111,6 +124,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   messages: [],
   draftProvider: PROVIDERS[0].id,
   draftModel: PROVIDERS[0].defaultModel,
+  draftProjectId: null,
   busy: false,
   cancelling: false,
   error: null,
@@ -141,7 +155,26 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   },
 
   startNewChat: () => {
-    set({ currentThreadId: null, messages: [], error: null });
+    set({
+      currentThreadId: null,
+      messages: [],
+      error: null,
+      draftProjectId: null,
+    });
+  },
+
+  startNewChatInProject: (projectId) => {
+    set({
+      currentThreadId: null,
+      messages: [],
+      error: null,
+      draftProjectId: projectId,
+    });
+  },
+
+  assignThreadProject: async (threadId, projectId) => {
+    await setThreadProject(threadId, projectId);
+    await get().refreshThreads();
   },
 
   setProviderModel: async (provider, model) => {
@@ -163,14 +196,17 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       let id = get().currentThreadId;
       let provider: Provider;
       let model: string;
+      let projectId: string | null;
 
       if (!id) {
         provider = get().draftProvider;
         model = get().draftModel;
+        projectId = get().draftProjectId;
         const thread = await createThread({
           provider,
           model,
           title: deriveTitle(content || "Image"),
+          projectId,
         });
         id = thread.id;
         set({ currentThreadId: id });
@@ -180,6 +216,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         const t = get().threads.find((x) => x.id === id)!;
         provider = t.provider;
         model = t.model;
+        projectId = t.project_id;
       }
 
       const userMsg = await addMessage({
@@ -198,11 +235,31 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       const afterUser = await loadThreadMessages(id);
       set({ messages: afterUser });
 
-      const history = afterUser.map((m) => ({
+      const history: ApiMessage[] = afterUser.map((m) => ({
         role: m.role,
         content: m.content,
         images: m.images,
       }));
+
+      // Project base context: inject the project's instructions + reference
+      // files as a leading system message so every request in the project
+      // carries it. Rides the existing role:"system" handling in each provider
+      // (Anthropic top-level `system`, Gemini `systemInstruction`, OpenAI/Mistral
+      // pass-through) — no provider/Rust changes. Ordered before history.
+      if (projectId) {
+        const project = await getProject(projectId);
+        if (project) {
+          const files = await listProjectFiles(projectId);
+          const systemText = buildProjectSystemText(project, files);
+          if (systemText) {
+            history.unshift({
+              role: "system",
+              content: systemText,
+              images: [],
+            });
+          }
+        }
+      }
 
       // Stream the reply, appending a placeholder assistant bubble on the
       // first delta and growing it as chunks arrive.
