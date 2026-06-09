@@ -1,0 +1,16 @@
+{
+  "id": "com.kdellm.mistral",
+  "name": "Mistral",
+  "version": "1.0.0",
+  "category": "provider",
+  "apiVersion": 1,
+  "description": "Mistral models (OpenAI-compatible API).",
+  "author": "KDE LLM",
+  "enabledByDefault": true,
+  "contributes": {
+    "id": "mistral",
+    "label": "Mistral",
+    "defaultModel": "mistral-large-latest",
+    "keyHint": "…"
+  }
+}

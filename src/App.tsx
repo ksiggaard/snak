@@ -12,6 +12,7 @@ import {
   CLOSE_TO_TRAY_KEY,
   CloseToTraySetting,
 } from "@/components/settings/CloseToTray";
+import { Plugins } from "@/components/settings/Plugins";
 import { ChatView } from "@/components/chat/ChatView";
 import { ModelPicker } from "@/components/chat/ModelPicker";
 import { ThreadList } from "@/components/sidebar/ThreadList";
@@ -77,6 +78,7 @@ function App() {
             <ApiKeys />
             <ShortcutSetting />
             <CloseToTraySetting />
+            <Plugins />
           </div>
         ) : (
           <ChatView />

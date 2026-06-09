@@ -1,0 +1,16 @@
+{
+  "id": "com.kdellm.gemini",
+  "name": "Google Gemini",
+  "version": "1.0.0",
+  "category": "provider",
+  "apiVersion": 1,
+  "description": "Gemini models from Google.",
+  "author": "KDE LLM",
+  "enabledByDefault": true,
+  "contributes": {
+    "id": "gemini",
+    "label": "Google Gemini",
+    "defaultModel": "gemini-2.0-flash",
+    "keyHint": "AIza…"
+  }
+}
