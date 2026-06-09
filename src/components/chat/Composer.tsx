@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { prepareImage, type PreparedImage } from "@/lib/image";
 import { hasApiKey } from "@/lib/keys";
-import { PROVIDERS } from "@/lib/providers";
+import { useProviders } from "@/lib/providers";
 import type { Provider } from "@/types/db";
 
 interface ComposerProps {
@@ -15,12 +15,23 @@ interface ComposerProps {
   busy?: boolean;
   /** Currently selected provider — Send is gated on it having a stored key. */
   provider: Provider;
+  /** Whether the selected provider is currently enabled (T18). */
+  providerEnabled: boolean;
+  /** Whether any provider is enabled at all (false = all-disabled state). */
+  anyProvider: boolean;
 }
 
-const providerLabel = (id: Provider) =>
-  PROVIDERS.find((p) => p.id === id)?.label ?? id;
-
-export function Composer({ onSend, onCancel, busy, provider }: ComposerProps) {
+export function Composer({
+  onSend,
+  onCancel,
+  busy,
+  provider,
+  providerEnabled,
+  anyProvider,
+}: ComposerProps) {
+  const providers = useProviders();
+  const providerLabel = (id: Provider) =>
+    providers.find((p) => p.id === id)?.label ?? id;
   const [text, setText] = useState("");
   const [images, setImages] = useState<PreparedImage[]>([]);
   const [attachError, setAttachError] = useState<string | null>(null);
@@ -68,15 +79,23 @@ export function Composer({ onSend, onCancel, busy, provider }: ComposerProps) {
 
   function send() {
     const trimmed = text.trim();
-    if (busy || keyReady === false || (!trimmed && images.length === 0)) return;
+    if (
+      busy ||
+      !providerEnabled ||
+      keyReady === false ||
+      (!trimmed && images.length === 0)
+    )
+      return;
     onSend(trimmed, images);
     setText("");
     setImages([]);
     setAttachError(null);
   }
 
-  const noKey = keyReady === false;
-  const composeDisabled = busy || noKey;
+  // The selected provider being disabled overrides the no-key gating (the key
+  // check is moot when the provider can't be used at all). Composes with T6.
+  const noKey = providerEnabled && keyReady === false;
+  const composeDisabled = busy || !providerEnabled || noKey;
   const canSend = !composeDisabled && (text.trim().length > 0 || images.length > 0);
 
   return (
@@ -88,6 +107,18 @@ export function Composer({ onSend, onCancel, busy, provider }: ComposerProps) {
         void addFiles(e.dataTransfer.files);
       }}
     >
+      {!providerEnabled &&
+        (anyProvider ? (
+          <p className="text-muted-foreground text-xs">
+            “{providerLabel(provider)}” is disabled. Pick another provider above,
+            or re-enable it in Settings → Plugins.
+          </p>
+        ) : (
+          <p className="text-muted-foreground text-xs">
+            No providers are enabled. Enable a provider plugin in Settings →
+            Plugins to start chatting.
+          </p>
+        ))}
       {noKey && (
         <p className="text-muted-foreground text-xs">
           No API key set for {providerLabel(provider)}. Add one in Settings to

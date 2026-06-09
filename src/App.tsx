@@ -24,11 +24,13 @@ import { getSetting } from "@/lib/db";
 import { setGlobalShortcut, type QuickPayload } from "@/lib/quick";
 import { useThreads } from "@/store/threads";
 import { useProjects } from "@/store/projects";
+import { usePlugins } from "@/store/plugins";
 import { useTheme } from "@/store/theme";
 
 function App() {
   const init = useThreads((s) => s.init);
   const initProjects = useProjects((s) => s.init);
+  const loadPlugins = usePlugins((s) => s.load);
   const loadInstalledThemes = useTheme((s) => s.loadInstalled);
   const openProjectId = useProjects((s) => s.openProjectId);
   const closeProject = useProjects((s) => s.close);
@@ -38,11 +40,14 @@ function App() {
   useEffect(() => {
     void init();
     void initProjects();
+    // Load the plugin registry app-wide (T18) so the active provider list is
+    // correct on first paint — ModelPicker / ApiKeys / send-gating all read it.
+    void loadPlugins();
     // Re-apply the saved installable theme (T11) on startup. The themes folder
     // is the authoritative source here; plugin-contributed themes are composed
     // in the Themes settings card when it mounts.
     void loadInstalledThemes();
-  }, [init, initProjects, loadInstalledThemes]);
+  }, [init, initProjects, loadPlugins, loadInstalledThemes]);
 
   // Apply the user's saved global shortcut (Rust registers the default already).
   useEffect(() => {

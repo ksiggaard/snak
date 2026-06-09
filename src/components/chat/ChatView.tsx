@@ -1,6 +1,7 @@
 import { MessageList } from "@/components/chat/MessageList";
 import { Composer } from "@/components/chat/Composer";
 import { useThreads } from "@/store/threads";
+import { useProviders } from "@/lib/providers";
 
 export function ChatView() {
   const messages = useThreads((s) => s.messages);
@@ -12,10 +13,18 @@ export function ChatView() {
   const threads = useThreads((s) => s.threads);
   const draftProvider = useThreads((s) => s.draftProvider);
 
+  // Active providers from the enabled provider plugins (T18).
+  const providers = useProviders();
+
   // Provider in effect for the active thread (or the draft when unsaved) —
   // mirrors ModelPicker so the key-gating in Composer matches what will be used.
   const current = threads.find((t) => t.id === currentThreadId);
   const provider = current?.provider ?? draftProvider;
+
+  // The effective provider may be disabled (all providers off, or this thread
+  // references a since-disabled one). Composer gates Send on this with guidance.
+  const providerEnabled = providers.some((p) => p.id === provider);
+  const anyProvider = providers.length > 0;
 
   // Show "Thinking…" only until the first streamed token arrives; after that
   // the growing assistant bubble conveys progress.
@@ -33,6 +42,8 @@ export function ChatView() {
         onCancel={() => void cancel()}
         busy={busy}
         provider={provider}
+        providerEnabled={providerEnabled}
+        anyProvider={anyProvider}
       />
     </div>
   );

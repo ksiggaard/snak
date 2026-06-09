@@ -577,8 +577,8 @@ a button to open a terminal pre-loaded with that command.
 
 ## T18 — Bundled plugins active by default; providers as built-in plugins
 
-- **Status:** todo
-- **Owner:** —
+- **Status:** done
+- **Owner:** Wave3-T18
 - **Priority:** P3 (architectural; first real consumer of T12)
 - **Layer:** Rust + Frontend
 - **Depends on:** T12
@@ -610,6 +610,21 @@ disabled** (all models off) gracefully instead of assuming at least one exists.
 - Sequence after T12's host API and registry exist; this is the proof that the plugin model
   can express core functionality. Coordinate with T6's send-gating (no-key) so the
   no-provider-enabled and no-key states compose cleanly.
+- 2026-06-09 (Wave3-T18): Done. The four providers are now built-in, enabled-by-default
+  `provider` plugins (descriptors already seeded by T12 in `src-tauri/src/plugins/builtin/*.json`).
+  `src/lib/providers.ts` derives the active list from the **enabled** provider contributions
+  via `useProviders()` (reads `usePlugins` + `buildRegistry`), with two safeguards so chat
+  never regresses: (1) the hardcoded four remain as `FALLBACK_PROVIDERS`/`PROVIDERS` and are
+  returned while the plugin layer hasn't loaded yet; (2) contributions are filtered to the ids
+  the Rust dispatch knows (`anthropic|openai|mistral|gemini`). **Rust `providers/mod.rs`
+  dispatch is unchanged — it always resolves those ids, so the live streaming path is the
+  fallback; disabling is enforced frontend-only.** `ModelPicker`/`ApiKeys`/`ChatView`/`Composer`
+  drive off `useProviders()`; all-disabled and stored-but-disabled-provider states are handled
+  (clear messaging, Send gated, ModelPicker shows the stored provider as an inert option, no
+  crash). `App` loads the plugin registry on mount. Design doc:
+  `docs/superpowers/specs/2026-06-09-providers-as-plugins-design.md`. Verified: `npm run build`
+  / `lint` / `test` (101 pass, incl. new registry-derivation + fallback tests), `cargo build` /
+  `clippy` (clean) / `fmt --check` / `test` (20 pass).
 
 ---
 
