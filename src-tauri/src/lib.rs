@@ -76,6 +76,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/003_usage.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 5,
+            description: "user_memory: persistent memory-about-the-user for the system context",
+            sql: include_str!("../migrations/005_user_memory.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

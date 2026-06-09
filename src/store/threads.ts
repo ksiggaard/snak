@@ -9,14 +9,17 @@ import {
   getSetting,
   listProjectFiles,
   listThreads,
+  listUserMemory,
   renameThread,
   setSetting,
   setThreadProject,
   setThreadProviderModel,
+  SYSTEM_PROMPT_ADDENDUM_KEY,
 } from "@/lib/db";
 import { cancelStream, chatStream, type ApiMessage } from "@/lib/chat";
 import { loadThreadMessages, type MessageView } from "@/lib/messages";
 import { buildProjectSystemText } from "@/lib/projects";
+import { buildGlobalSystemText } from "@/lib/systemContext";
 import { PROVIDERS } from "@/lib/providers";
 import type { PreparedImage } from "@/lib/image";
 import type { Provider, Thread } from "@/types/db";
@@ -242,11 +245,17 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         images: m.images,
       }));
 
-      // Project base context: inject the project's instructions + reference
-      // files as a leading system message so every request in the project
-      // carries it. Rides the existing role:"system" handling in each provider
-      // (Anthropic top-level `system`, Gemini `systemInstruction`, OpenAI/Mistral
-      // pass-through) — no provider/Rust changes. Ordered before history.
+      // Leading system context, assembled at the message layer (not in the
+      // Rust providers). Precedence is global → project → thread; since we
+      // prepend, the project message is unshifted first and the global one
+      // second, so the array ends up ordered [global, project, ...history].
+      // Each provider concatenates consecutive role:"system" messages in array
+      // order (Anthropic/Gemini join with "\n\n"; OpenAI/Mistral pass them
+      // through), so this realizes the documented precedence without any
+      // provider/Rust changes.
+
+      // Project base context (T20): the project's instructions + reference
+      // files, for threads that belong to a project.
       if (projectId) {
         const project = await getProject(projectId);
         if (project) {
@@ -260,6 +269,22 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             });
           }
         }
+      }
+
+      // Global system context (T10): the custom system-prompt addendum + the
+      // user's memory entries. Global (applies to every thread/provider).
+      // Unshifted last so it sits first — ahead of the project message.
+      const [addendum, memory] = await Promise.all([
+        getSetting(SYSTEM_PROMPT_ADDENDUM_KEY),
+        listUserMemory(),
+      ]);
+      const globalSystemText = buildGlobalSystemText(addendum, memory);
+      if (globalSystemText) {
+        history.unshift({
+          role: "system",
+          content: globalSystemText,
+          images: [],
+        });
       }
 
       // Stream the reply, appending a placeholder assistant bubble on the

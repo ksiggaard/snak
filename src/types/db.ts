@@ -56,6 +56,14 @@ export interface Usage {
   created_at: string;
 }
 
+/** One free-text "memory about the user" row (T10, migration 005). */
+export interface UserMemory {
+  id: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export type AttachmentKind = "image";
 
 export interface Attachment {
