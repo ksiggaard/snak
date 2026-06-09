@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Scaffolded (Stage 0 complete): **Tauri v2 + React 19 + TypeScript + Vite**, styled with **Tailwind v4 + shadcn/ui**. Feature work (DB, providers, chat, tray, hotkey, screenshots) follows the staged plan. Most product capabilities below are not built yet — treat unbuilt items as the target.
+Built (Stages 1–6 complete): **Tauri v2 + React 19 + TypeScript + Vite**, styled with **Tailwind v4 + shadcn/ui**. The SQLite data layer, OS-keychain API keys, four streaming providers, multi-thread chat, multimodal images, and the quick-input overlay / global shortcut / screenshot capture are all implemented. The system tray (icon + menu, click-to-toggle, close-to-tray) closes the last remaining gap. See the per-stage sections below for specifics.
 
 ## Toolchain & commands
 

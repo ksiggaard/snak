@@ -44,8 +44,8 @@ These are built in the current tree — listed so agents don't duplicate work:
 
 ## T1 — System tray (minimize to tray)
 
-- **Status:** todo
-- **Owner:** —
+- **Status:** done
+- **Owner:** Agent A
 - **Priority:** P0 (headline gap vs. the intended product; no tray code exists today)
 - **Layer:** Rust (tray registration) + small frontend touch for window-close behavior
 - **Depends on:** —
@@ -66,13 +66,19 @@ menu and click-to-toggle behavior for the `main` window.
 **Notes:**
 - Tray APIs differ slightly across platforms; primary target is KDE/Linux but it should
   build on macOS too (dev machine). Note any platform gating used.
+- 2026-06-09 (Agent A): Added `tray-icon` feature to `tauri` in `Cargo.toml`. Tray built
+  in the `setup` hook in `lib.rs` (`TrayIconBuilder`, icon from `default_window_icon`),
+  menu with Show/Hide (`toggle_main`) + Quit (`app.exit(0)`); left-click-up toggles the
+  `main` window (no platform gating needed — tray-icon is cross-platform). Added
+  `core:tray:default` + `core:menu:default` to `capabilities/default.json`. cargo
+  build/clippy/fmt clean; manual tray click testing deferred (macOS dev box).
 
 ---
 
 ## T2 — Close-to-tray instead of quit
 
-- **Status:** todo
-- **Owner:** —
+- **Status:** done
+- **Owner:** Agent A
 - **Priority:** P1
 - **Layer:** Rust (window event handler) + Settings UI toggle (frontend)
 - **Depends on:** T1
@@ -87,6 +93,15 @@ keeps running for the global shortcut. Quit must remain reachable from the tray 
 - Quitting via the tray menu (T1) still fully exits.
 
 **Notes:**
+- 2026-06-09 (Agent A): Mechanism — Tauri managed state `CloseToTray(AtomicBool)`
+  defaulting to `true`, read synchronously by an `on_window_event` `CloseRequested`
+  handler for `main` (`api.prevent_close()` + `window.hide()` when enabled). A
+  `set_close_to_tray(enabled)` command (registered in `lib.rs`, appended to the handler
+  list) lets the frontend push the value; persistence is in the `settings` table
+  (`close_to_tray` = "1"/"0", absent = ON). New `CloseToTray.tsx` settings card
+  (Button toggle — no shadcn Switch in the tree) mounted in `App.tsx`, which also syncs
+  the saved value into managed state on startup. Tray Quit calls `app.exit(0)` directly,
+  bypassing the handler. Verified via cargo build/clippy/fmt + npm build/lint.
 
 ---
 
@@ -185,8 +200,8 @@ Tighten failure UX across the chat path.
 
 ## T7 — Fix stale status line in CLAUDE.md
 
-- **Status:** todo
-- **Owner:** —
+- **Status:** done
+- **Owner:** Agent A
 - **Priority:** P3 (docs)
 - **Layer:** Docs
 - **Depends on:** —
@@ -199,3 +214,6 @@ status line to reflect reality (and note the remaining gap: system tray, T1).
 - "Project status" accurately states what's built vs. outstanding. No other doc churn.
 
 **Notes:**
+- 2026-06-09 (Agent A): Rewrote the "## Project status" line in `CLAUDE.md` to reflect
+  Stages 1–6 + quick-input/shortcut/screenshots built, with the system tray (this work)
+  closing the last gap. No other sections touched.
