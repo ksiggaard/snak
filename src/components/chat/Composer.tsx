@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Paperclip, Square, X } from "lucide-react";
+import { Maximize2, Paperclip, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Canvas } from "@/components/chat/Canvas";
 import { prepareImage, type PreparedImage } from "@/lib/image";
 import { hasApiKey } from "@/lib/keys";
 import { useProviders } from "@/lib/providers";
@@ -35,6 +36,7 @@ export function Composer({
   const [text, setText] = useState("");
   const [images, setImages] = useState<PreparedImage[]>([]);
   const [attachError, setAttachError] = useState<string | null>(null);
+  const [canvasOpen, setCanvasOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Whether the selected provider has a stored API key. The value is reset to
@@ -90,6 +92,7 @@ export function Composer({
     setText("");
     setImages([]);
     setAttachError(null);
+    setCanvasOpen(false);
   }
 
   // The selected provider being disabled overrides the no-key gating (the key
@@ -107,6 +110,17 @@ export function Composer({
         void addFiles(e.dataTransfer.files);
       }}
     >
+      {canvasOpen && (
+        <Canvas
+          text={text}
+          onChange={setText}
+          images={images}
+          onRemoveImage={removeImage}
+          onSend={send}
+          canSend={canSend}
+          onClose={() => setCanvasOpen(false)}
+        />
+      )}
       {!providerEnabled &&
         (anyProvider ? (
           <p className="text-muted-foreground text-xs">
@@ -170,6 +184,16 @@ export function Composer({
           onClick={() => fileInputRef.current?.click()}
         >
           <Paperclip className="size-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label="Open canvas"
+          title="Open canvas — a larger editor with live Markdown preview"
+          disabled={composeDisabled}
+          onClick={() => setCanvasOpen(true)}
+        >
+          <Maximize2 className="size-4" />
         </Button>
         <Textarea
           value={text}
