@@ -1,5 +1,6 @@
 import { useState, type ComponentType } from "react";
 import { ApiKeys } from "@/components/settings/ApiKeys";
+import { DefaultModel } from "@/components/settings/DefaultModel";
 import { Memory } from "@/components/settings/Memory";
 import { ShortcutSetting } from "@/components/settings/Shortcut";
 import { CloseToTraySetting } from "@/components/settings/CloseToTray";
@@ -20,6 +21,7 @@ interface Section {
 // and clipped — see the left-nav layout below.
 const SECTIONS: Section[] = [
   { id: "api-keys", label: "API Keys", Component: ApiKeys },
+  { id: "default-model", label: "Default Model", Component: DefaultModel },
   { id: "memory", label: "Memory", Component: Memory },
   { id: "shortcut", label: "Shortcut", Component: ShortcutSetting },
   { id: "tray", label: "Close to Tray", Component: CloseToTraySetting },
