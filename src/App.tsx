@@ -13,6 +13,7 @@ import {
   CloseToTraySetting,
 } from "@/components/settings/CloseToTray";
 import { Plugins } from "@/components/settings/Plugins";
+import { McpServers } from "@/components/settings/McpServers";
 import { Themes } from "@/components/settings/Themes";
 import { Memory } from "@/components/settings/Memory";
 import { ChatView } from "@/components/chat/ChatView";
@@ -127,6 +128,7 @@ function App() {
             <ShortcutSetting />
             <CloseToTraySetting />
             <Themes />
+            <McpServers />
             <Plugins />
           </div>
         ) : showUsage ? (
