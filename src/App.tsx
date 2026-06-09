@@ -13,6 +13,7 @@ import {
   CloseToTraySetting,
 } from "@/components/settings/CloseToTray";
 import { Plugins } from "@/components/settings/Plugins";
+import { Themes } from "@/components/settings/Themes";
 import { ChatView } from "@/components/chat/ChatView";
 import { ModelPicker } from "@/components/chat/ModelPicker";
 import { ProjectView } from "@/components/projects/ProjectView";
@@ -22,10 +23,12 @@ import { getSetting } from "@/lib/db";
 import { setGlobalShortcut, type QuickPayload } from "@/lib/quick";
 import { useThreads } from "@/store/threads";
 import { useProjects } from "@/store/projects";
+import { useTheme } from "@/store/theme";
 
 function App() {
   const init = useThreads((s) => s.init);
   const initProjects = useProjects((s) => s.init);
+  const loadInstalledThemes = useTheme((s) => s.loadInstalled);
   const openProjectId = useProjects((s) => s.openProjectId);
   const closeProject = useProjects((s) => s.close);
   const [showSettings, setShowSettings] = useState(false);
@@ -33,7 +36,11 @@ function App() {
   useEffect(() => {
     void init();
     void initProjects();
-  }, [init, initProjects]);
+    // Re-apply the saved installable theme (T11) on startup. The themes folder
+    // is the authoritative source here; plugin-contributed themes are composed
+    // in the Themes settings card when it mounts.
+    void loadInstalledThemes();
+  }, [init, initProjects, loadInstalledThemes]);
 
   // Apply the user's saved global shortcut (Rust registers the default already).
   useEffect(() => {
@@ -90,6 +97,7 @@ function App() {
             <ApiKeys />
             <ShortcutSetting />
             <CloseToTraySetting />
+            <Themes />
             <Plugins />
           </div>
         ) : openProjectId ? (
