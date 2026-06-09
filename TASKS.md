@@ -92,8 +92,8 @@ keeps running for the global shortcut. Quit must remain reachable from the tray 
 
 ## T3 — Cancel / stop an in-progress generation
 
-- **Status:** todo
-- **Owner:** —
+- **Status:** done
+- **Owner:** Agent B
 - **Priority:** P1
 - **Layer:** Rust (abort the reqwest stream) + frontend (Composer stop button, store action)
 - **Depends on:** —
@@ -109,6 +109,16 @@ There is no way to stop a streaming response once it starts (no abort/cancel any
   the `chat_stream` command observes, or an equivalent approach. Document the choice.
 
 **Notes:**
+- 2026-06-09 (Agent B): Cancellation via a shared `CancelFlag(Arc<AtomicBool>)` in Tauri
+  managed state. `chat_stream` clears it at the start of each request; the new
+  `cancel_stream` command sets it. Each provider polls the flag inside its existing SSE
+  `on_data` closure and returns `Ok(false)` to early-exit — the same mechanism used for
+  `message_stop` / `[DONE]` — so a cancelled stream still resolves `Ok(ChatResponse{..})`
+  with the partial text (nothing lost). `for_each_sse_data`'s signature was left unchanged.
+  Frontend: `chat.ts` adds `cancelStream()`; store adds a `cancel()` action + `cancelling`
+  flag (the in-flight promise resolves with partial content via the normal completion path,
+  persisting only non-empty assistant text); `Composer` shows a destructive **Stop** button
+  while `busy`. Verified: `cargo build`/`clippy`/`fmt`, `npm run build`/`lint` all pass.
 
 ---
 
@@ -163,8 +173,8 @@ Tauri placeholders.
 
 ## T6 — Error & edge-case hardening
 
-- **Status:** todo
-- **Owner:** —
+- **Status:** done
+- **Owner:** Agent B
 - **Priority:** P2
 - **Layer:** Frontend + Rust
 - **Depends on:** —
@@ -180,6 +190,17 @@ Tighten failure UX across the chat path.
 - Long/empty/whitespace-only messages and very large pasted images are handled gracefully.
 
 **Notes:**
+- 2026-06-09 (Agent B): Errors routed through the store `error` field via a `friendlyError`
+  mapper that classifies the raw provider/Tauri message: missing key and empty-model are
+  surfaced from Rust with actionable text ("Add one in Settings."); reqwest failures →
+  "Network error…"; provider HTTP statuses (401/403/404/429/5xx) get tailored guidance while
+  still appending the provider's returned body (each provider module already returns
+  `"<provider> error <status>: <body>"` on non-2xx — verified). `chat_stream` rejects an
+  empty/whitespace model up front. Send is gated when the selected provider has no stored
+  key (`hasApiKey`, re-checked when the provider changes) with a hint in `Composer`; empty/
+  whitespace-only sends are a no-op (store + Composer); image prep failures (oversized/
+  unsupported) are caught and shown inline instead of throwing. Verified: `npm run build`/
+  `lint`, `cargo build`/`clippy`/`fmt` all pass.
 
 ---
 

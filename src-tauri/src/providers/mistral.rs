@@ -1,5 +1,7 @@
 //! Mistral chat API — OpenAI-compatible, so it reuses the OpenAI streaming path.
 
+use std::sync::atomic::AtomicBool;
+
 use tauri::ipc::Channel;
 
 use super::{openai, ChatResponse, CompletionRequest, Provider, StreamDelta};
@@ -14,6 +16,7 @@ impl Provider for Mistral {
         client: &reqwest::Client,
         req: &CompletionRequest<'_>,
         channel: &Channel<StreamDelta>,
+        cancel: &AtomicBool,
     ) -> anyhow::Result<ChatResponse> {
         openai::chat_completions_stream(
             client,
@@ -22,6 +25,7 @@ impl Provider for Mistral {
             req.model,
             req.messages,
             channel,
+            cancel,
         )
         .await
     }

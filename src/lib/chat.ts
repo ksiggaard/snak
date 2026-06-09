@@ -33,3 +33,13 @@ export function chatStream(
   channel.onmessage = (msg) => onDelta(msg.text);
   return invoke("chat_stream", { provider, model, messages, onDelta: channel });
 }
+
+/**
+ * Request cancellation of the in-flight stream. The Rust backend sets a shared
+ * flag the running provider loop observes; the pending `chatStream` promise then
+ * resolves normally with whatever text was accumulated so far (partial output is
+ * preserved, not discarded).
+ */
+export function cancelStream(): Promise<void> {
+  return invoke("cancel_stream");
+}

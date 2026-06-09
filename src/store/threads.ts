@@ -10,7 +10,7 @@ import {
   setSetting,
   setThreadProviderModel,
 } from "@/lib/db";
-import { chatStream } from "@/lib/chat";
+import { cancelStream, chatStream } from "@/lib/chat";
 import { loadThreadMessages, type MessageView } from "@/lib/messages";
 import { PROVIDERS } from "@/lib/providers";
 import type { PreparedImage } from "@/lib/image";
@@ -37,6 +37,8 @@ interface ThreadsState {
   draftProvider: Provider;
   draftModel: string;
   busy: boolean;
+  /** True between requesting a cancel and the stream actually stopping. */
+  cancelling: boolean;
   error: string | null;
   initialized: boolean;
 
@@ -47,11 +49,61 @@ interface ThreadsState {
   /** Set provider+model for the current thread, or the draft if none. */
   setProviderModel: (provider: Provider, model: string) => Promise<void>;
   send: (content: string, images: PreparedImage[]) => Promise<void>;
+  /** Stop the in-flight stream; partial text is persisted via the normal path. */
+  cancel: () => Promise<void>;
   rename: (id: string, title: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
 }
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/**
+ * Turn a raw error (Tauri command rejection string or JS Error) into a friendly,
+ * actionable message for the chat error banner. Provider modules already surface
+ * the upstream status + body (e.g. "provider error 401: {...}"); we add guidance
+ * for the common failure classes and keep the original detail where useful.
+ */
+function friendlyError(e: unknown): string {
+  const raw = errMsg(e);
+  const lower = raw.toLowerCase();
+
+  if (lower.includes("no api key")) {
+    return raw; // already actionable ("…Add one in Settings.")
+  }
+  if (lower.includes("no model selected")) {
+    return raw;
+  }
+  // reqwest connect/DNS/timeout failures bubble up as "… request failed: …".
+  if (
+    lower.includes("request failed") ||
+    lower.includes("dns") ||
+    lower.includes("connection") ||
+    lower.includes("timed out") ||
+    lower.includes("timeout") ||
+    lower.includes("network")
+  ) {
+    return `Network error — couldn't reach the provider. Check your connection and try again. (${raw})`;
+  }
+  // Provider HTTP errors: "anthropic error 401: …" / "provider error 429: …".
+  const statusMatch = raw.match(/error (\d{3})\b/);
+  if (statusMatch) {
+    const code = Number(statusMatch[1]);
+    if (code === 401 || code === 403) {
+      return `Authentication failed (${code}) — your API key may be invalid or expired. Update it in Settings. (${raw})`;
+    }
+    if (code === 404) {
+      return `Not found (404) — the model name may be wrong for this provider. Check the model field. (${raw})`;
+    }
+    if (code === 429) {
+      return `Rate limited (429) — too many requests or quota exceeded. Wait a moment and retry. (${raw})`;
+    }
+    if (code >= 500) {
+      return `The provider had a server error (${code}). Try again shortly. (${raw})`;
+    }
+    return `The provider rejected the request (${code}). ${raw}`;
+  }
+  return raw;
+}
 
 export const useThreads = create<ThreadsState>((set, get) => ({
   threads: [],
@@ -60,6 +112,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   draftProvider: PROVIDERS[0].id,
   draftModel: PROVIDERS[0].defaultModel,
   busy: false,
+  cancelling: false,
   error: null,
   initialized: false,
 
@@ -102,7 +155,10 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   },
 
   send: async (content, images) => {
-    set({ busy: true, error: null });
+    // Ignore empty/whitespace-only sends with no attachments.
+    if (!content.trim() && images.length === 0) return;
+    if (get().busy) return;
+    set({ busy: true, cancelling: false, error: null });
     try {
       let id = get().currentThreadId;
       let provider: Provider;
@@ -176,22 +232,40 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         });
       };
 
+      // On cancellation this still resolves with the partial text accumulated
+      // so far (the backend early-exits and returns Ok), so the same
+      // persistence path preserves whatever was generated.
       const result = await chatStream(provider, model, history, onDelta);
-      await addMessage({
-        thread_id: id,
-        role: "assistant",
-        content: result.content,
-      });
+      // Don't persist an empty assistant row (e.g. cancelled before any token).
+      if (result.content.length > 0) {
+        await addMessage({
+          thread_id: id,
+          role: "assistant",
+          content: result.content,
+        });
+      }
       // Replace the placeholder with the persisted rows.
       set({ messages: await loadThreadMessages(id) });
       // updated_at changed → reorder sidebar.
       await get().refreshThreads();
     } catch (e) {
-      set({ error: errMsg(e) });
+      set({ error: friendlyError(e) });
       const id = get().currentThreadId;
       if (id) set({ messages: await loadThreadMessages(id) });
     } finally {
-      set({ busy: false });
+      set({ busy: false, cancelling: false });
+    }
+  },
+
+  cancel: async () => {
+    if (!get().busy || get().cancelling) return;
+    set({ cancelling: true });
+    try {
+      await cancelStream();
+    } catch {
+      // If the cancel request itself fails, the stream will still complete
+      // normally; nothing actionable to surface to the user.
+      set({ cancelling: false });
     }
   },
 
