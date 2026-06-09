@@ -2,21 +2,9 @@ import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Button } from "@/components/ui/button";
 import { invoke } from "@tauri-apps/api/core";
-import { ApiKeys } from "@/components/settings/ApiKeys";
-import {
-  DEFAULT_SHORTCUT,
-  SHORTCUT_KEY,
-  ShortcutSetting,
-} from "@/components/settings/Shortcut";
-import {
-  CLOSE_TO_TRAY_KEY,
-  CloseToTraySetting,
-} from "@/components/settings/CloseToTray";
-import { Plugins } from "@/components/settings/Plugins";
-import { McpServers } from "@/components/settings/McpServers";
-import { Skills } from "@/components/settings/Skills";
-import { Themes } from "@/components/settings/Themes";
-import { Memory } from "@/components/settings/Memory";
+import { DEFAULT_SHORTCUT, SHORTCUT_KEY } from "@/components/settings/Shortcut";
+import { CLOSE_TO_TRAY_KEY } from "@/components/settings/CloseToTray";
+import { SettingsView } from "@/components/settings/SettingsView";
 import { ChatView } from "@/components/chat/ChatView";
 import { ModelPicker } from "@/components/chat/ModelPicker";
 import { ProjectView } from "@/components/projects/ProjectView";
@@ -24,6 +12,7 @@ import { UsageView } from "@/components/usage/UsageView";
 import { SearchResults } from "@/components/search/SearchResults";
 import { ThreadList } from "@/components/sidebar/ThreadList";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { getSetting } from "@/lib/db";
 import { setGlobalShortcut, type QuickPayload } from "@/lib/quick";
 import { useThreads } from "@/store/threads";
@@ -87,11 +76,12 @@ function App() {
 
   return (
     <div className="bg-background text-foreground flex h-screen">
+      <ConfirmDialog />
       <ThreadList />
 
       <main className="flex flex-1 flex-col gap-3 p-4">
         <header className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold tracking-tight">KDE LLM</h1>
+          <h1 className="text-lg font-semibold tracking-tight">snak</h1>
           {!showSettings && !showUsage && !openProjectId && !searchOpen && (
             <ModelPicker />
           )}
@@ -123,16 +113,7 @@ function App() {
         </header>
 
         {showSettings ? (
-          <div className="flex flex-1 flex-col items-center gap-4 overflow-y-auto">
-            <ApiKeys />
-            <Memory />
-            <ShortcutSetting />
-            <CloseToTraySetting />
-            <Themes />
-            <McpServers />
-            <Skills />
-            <Plugins />
-          </div>
+          <SettingsView />
         ) : showUsage ? (
           <UsageView />
         ) : searchOpen ? (
