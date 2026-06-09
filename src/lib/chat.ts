@@ -1,5 +1,6 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type { Provider, Role } from "@/types/db";
+import { enabledServersForChat } from "@/lib/mcp";
 
 export interface ApiImage {
   media_type: string;
@@ -32,8 +33,16 @@ export interface ChatResult {
  * are generated; the promise resolves with the full accumulated response (the
  * authoritative text to persist). The API key is read from the keychain in the
  * Rust backend — it is never passed from or returned to the frontend.
+ *
+ * MCP (T13): the enabled MCP servers are read from settings here (not passed by
+ * callers, so `send()`'s call site is unchanged) and handed to `chat_stream`.
+ * When no server is enabled the backend gets `undefined` and behaves exactly as
+ * before — no tools, a single provider round. Otherwise the backend exposes the
+ * servers' tools to the model and runs the tool-call round-trip server-side,
+ * still streaming text deltas through `onDelta` and resolving with the final
+ * `{content, model, usage}`.
  */
-export function chatStream(
+export async function chatStream(
   provider: Provider,
   model: string,
   messages: ApiMessage[],
@@ -41,7 +50,14 @@ export function chatStream(
 ): Promise<ChatResult> {
   const channel = new Channel<{ text: string }>();
   channel.onmessage = (msg) => onDelta(msg.text);
-  return invoke("chat_stream", { provider, model, messages, onDelta: channel });
+  const mcpServers = await enabledServersForChat();
+  return invoke("chat_stream", {
+    provider,
+    model,
+    messages,
+    onDelta: channel,
+    mcpServers,
+  });
 }
 
 /**

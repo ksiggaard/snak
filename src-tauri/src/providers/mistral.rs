@@ -24,6 +24,7 @@ impl Provider for Mistral {
             req.api_key,
             req.model,
             req.messages,
+            req.tools,
             channel,
             cancel,
         )

@@ -22,14 +22,38 @@ pub struct ImagePart {
     pub data: String,
 }
 
-/// A single conversation turn, as sent from the frontend.
+/// A single conversation turn. Most come from the frontend (`role`/`content`/
+/// `images`); the tool-call round-trip loop (T13) also synthesizes two extra
+/// turn shapes *in Rust* and appends them between provider rounds:
+///   - an assistant turn carrying `tool_calls` (what the model asked to run), and
+///   - a tool turn carrying `tool_results` (what the MCP servers returned).
+///
+/// Both extra fields default to empty, so frontend deserialization is unchanged
+/// and an ordinary turn serializes/maps exactly as before.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ChatMessage {
-    /// "user" | "assistant" | "system"
+    /// "user" | "assistant" | "system" | "tool"
     pub role: String,
+    #[serde(default)]
     pub content: String,
     #[serde(default)]
     pub images: Vec<ImagePart>,
+    /// Tool calls on an assistant turn (Rust-synthesized; never from frontend).
+    #[serde(default, skip_deserializing)]
+    pub tool_calls: Vec<ToolCall>,
+    /// Tool results on a tool turn (Rust-synthesized; never from frontend).
+    #[serde(default, skip_deserializing)]
+    pub tool_results: Vec<ToolResult>,
+}
+
+/// The result of executing one tool call, fed back to the model next round.
+#[derive(Debug, Clone)]
+pub struct ToolResult {
+    /// The originating tool-call id (correlates to `ToolCall::id`).
+    pub tool_call_id: String,
+    /// The tool name (some providers want it echoed on the result).
+    pub name: String,
+    pub content: String,
 }
 
 /// Token usage for one completion, captured from the provider's streaming
@@ -50,13 +74,42 @@ pub struct Usage {
     pub cache_read_tokens: u64,
 }
 
-/// Normalized completion result returned to the frontend once streaming ends.
+/// A tool the model may call, as exposed to a provider's tool-use API. `name` is
+/// already namespaced (`<server-id>__<tool>`) by the MCP layer; `input_schema` is
+/// a JSON Schema object. (T13)
+#[derive(Debug, Clone)]
+pub struct ToolDef {
+    pub name: String,
+    pub description: String,
+    pub input_schema: serde_json::Value,
+}
+
+/// A tool call the model emitted during streaming. `id` is the provider's
+/// tool-use id (used to correlate the result on the next round; synthesized for
+/// providers that don't supply one, e.g. Gemini). `arguments` is the parsed JSON
+/// input object. (T13)
+#[derive(Debug, Clone)]
+pub struct ToolCall {
+    pub id: String,
+    pub name: String,
+    pub arguments: serde_json::Value,
+}
+
+/// Normalized completion result returned once a provider stream ends. When
+/// `tool_calls` is non-empty the model wants tools run before it can finish; the
+/// chat loop executes them and calls the provider again (T13). An empty
+/// `tool_calls` (the default for a tool-less request) means normal completion —
+/// the no-tools path is byte-identical to before.
 #[derive(Debug, Serialize)]
 pub struct ChatResponse {
     pub content: String,
     pub model: String,
     /// Per-response token usage parsed from the stream's usage event(s).
     pub usage: Usage,
+    /// Tool calls the model emitted this round (skipped in serialization — the
+    /// frontend never sees them; the loop resolves them server-side).
+    #[serde(skip)]
+    pub tool_calls: Vec<ToolCall>,
 }
 
 /// One streamed text chunk, pushed to the frontend over a Tauri channel.
@@ -65,11 +118,14 @@ pub struct StreamDelta {
     pub text: String,
 }
 
-/// Everything a provider needs for one completion.
+/// Everything a provider needs for one completion. `tools` is empty for an
+/// ordinary chat request — a provider sends *no* `tools` field when the slice is
+/// empty, so the wire request is identical to before (T13 no-tools invariant).
 pub struct CompletionRequest<'a> {
     pub model: &'a str,
     pub api_key: &'a str,
     pub messages: &'a [ChatMessage],
+    pub tools: &'a [ToolDef],
 }
 
 /// Returns true if the user requested cancellation of the in-flight stream.
@@ -113,6 +169,58 @@ pub async fn stream(
         "gemini" => gemini::Gemini.stream(client, req, channel, cancel).await,
         other => anyhow::bail!("unknown provider: {other}"),
     }
+}
+
+/// Map `ToolDef`s to the Anthropic `tools` array shape
+/// (`{name, description, input_schema}`). Empty in → empty out (caller omits the
+/// field entirely when empty). Pure / unit-tested.
+pub(crate) fn anthropic_tools(tools: &[ToolDef]) -> Vec<serde_json::Value> {
+    tools
+        .iter()
+        .map(|t| {
+            serde_json::json!({
+                "name": t.name,
+                "description": t.description,
+                "input_schema": t.input_schema,
+            })
+        })
+        .collect()
+}
+
+/// Map `ToolDef`s to the OpenAI/Mistral `tools` array shape
+/// (`{type:"function", function:{name, description, parameters}}`).
+/// Pure / unit-tested.
+pub(crate) fn openai_tools(tools: &[ToolDef]) -> Vec<serde_json::Value> {
+    tools
+        .iter()
+        .map(|t| {
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": t.name,
+                    "description": t.description,
+                    "parameters": t.input_schema,
+                }
+            })
+        })
+        .collect()
+}
+
+/// Map `ToolDef`s to the Gemini `tools` shape
+/// (`[{functionDeclarations:[{name, description, parameters}]}]`).
+/// Pure / unit-tested.
+pub(crate) fn gemini_tools(tools: &[ToolDef]) -> Vec<serde_json::Value> {
+    let decls: Vec<serde_json::Value> = tools
+        .iter()
+        .map(|t| {
+            serde_json::json!({
+                "name": t.name,
+                "description": t.description,
+                "parameters": t.input_schema,
+            })
+        })
+        .collect();
+    vec![serde_json::json!({ "functionDeclarations": decls })]
 }
 
 /// Read a `u64` token count out of a JSON value at the given key, defaulting to
@@ -273,6 +381,47 @@ mod tests {
         assert_eq!(u.input_tokens, 200);
         assert_eq!(u.output_tokens, 300);
         assert_eq!(u.cache_read_tokens, 150);
+    }
+
+    fn sample_tool() -> ToolDef {
+        ToolDef {
+            name: "web__fetch_url".to_string(),
+            description: "Fetch a URL".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": { "url": { "type": "string" } },
+                "required": ["url"]
+            }),
+        }
+    }
+
+    #[test]
+    fn anthropic_tool_schema_shape() {
+        let out = anthropic_tools(&[sample_tool()]);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0]["name"], "web__fetch_url");
+        assert_eq!(out[0]["description"], "Fetch a URL");
+        assert!(out[0]["input_schema"]["properties"]["url"].is_object());
+        assert!(anthropic_tools(&[]).is_empty());
+    }
+
+    #[test]
+    fn openai_tool_schema_shape() {
+        let out = openai_tools(&[sample_tool()]);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0]["type"], "function");
+        assert_eq!(out[0]["function"]["name"], "web__fetch_url");
+        assert!(out[0]["function"]["parameters"]["properties"]["url"].is_object());
+    }
+
+    #[test]
+    fn gemini_tool_schema_shape() {
+        let out = gemini_tools(&[sample_tool()]);
+        assert_eq!(out.len(), 1);
+        let decls = out[0]["functionDeclarations"].as_array().unwrap();
+        assert_eq!(decls.len(), 1);
+        assert_eq!(decls[0]["name"], "web__fetch_url");
+        assert!(decls[0]["parameters"]["properties"]["url"].is_object());
     }
 
     #[test]

@@ -1,4 +1,5 @@
 mod commands;
+mod mcp;
 mod plugins;
 mod providers;
 
@@ -177,6 +178,7 @@ pub fn run() {
             plugins::list_plugins,
             plugins::set_plugin_enabled,
             plugins::uninstall_plugin,
+            mcp::mcp_list_tools,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

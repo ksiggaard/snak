@@ -8,8 +8,8 @@ use anyhow::{anyhow, Context};
 use tauri::ipc::Channel;
 
 use super::{
-    for_each_sse_data, is_cancelled, parse_gemini_usage, ChatResponse, CompletionRequest, Provider,
-    StreamDelta, Usage,
+    for_each_sse_data, gemini_tools, is_cancelled, parse_gemini_usage, ChatResponse,
+    CompletionRequest, Provider, StreamDelta, ToolCall, Usage,
 };
 
 const BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -33,6 +33,35 @@ impl Provider for Gemini {
                         system.push_str("\n\n");
                     }
                     system.push_str(&m.content);
+                }
+                _ if !m.tool_calls.is_empty() => {
+                    // Synthesized assistant turn → model role with functionCall parts (T13).
+                    let parts: Vec<serde_json::Value> = m
+                        .tool_calls
+                        .iter()
+                        .map(|tc| {
+                            serde_json::json!({
+                                "functionCall": { "name": tc.name, "args": tc.arguments }
+                            })
+                        })
+                        .collect();
+                    contents.push(serde_json::json!({ "role": "model", "parts": parts }));
+                }
+                _ if !m.tool_results.is_empty() => {
+                    // Synthesized tool-result turn → user role with functionResponse parts (T13).
+                    let parts: Vec<serde_json::Value> = m
+                        .tool_results
+                        .iter()
+                        .map(|tr| {
+                            serde_json::json!({
+                                "functionResponse": {
+                                    "name": tr.name,
+                                    "response": { "result": tr.content }
+                                }
+                            })
+                        })
+                        .collect();
+                    contents.push(serde_json::json!({ "role": "user", "parts": parts }));
                 }
                 role => {
                     let gemini_role = if role == "assistant" { "model" } else { "user" };
@@ -65,6 +94,9 @@ impl Provider for Gemini {
                 "parts": [{ "text": system }],
             });
         }
+        if !req.tools.is_empty() {
+            body["tools"] = serde_json::Value::Array(gemini_tools(req.tools));
+        }
 
         let url = format!("{BASE_URL}/{}:streamGenerateContent?alt=sse", req.model);
         let resp = client
@@ -83,6 +115,7 @@ impl Provider for Gemini {
 
         let mut content = String::new();
         let mut usage = Usage::default();
+        let mut tool_calls: Vec<ToolCall> = Vec::new();
 
         for_each_sse_data(resp, |data| {
             // Stop promptly on user cancellation, keeping the partial text.
@@ -106,6 +139,23 @@ impl Provider for Gemini {
                                 text: t.to_string(),
                             })
                             .map_err(|e| anyhow!("channel send failed: {e}"))?;
+                    } else if let Some(fc) = part.get("functionCall") {
+                        // Gemini emits a complete functionCall part (not streamed
+                        // fragments) and supplies no id — synthesize one (T13).
+                        let name = fc
+                            .get("name")
+                            .and_then(|n| n.as_str())
+                            .unwrap_or_default()
+                            .to_string();
+                        let arguments = fc
+                            .get("args")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({}));
+                        tool_calls.push(ToolCall {
+                            id: format!("call_{}", tool_calls.len()),
+                            name,
+                            arguments,
+                        });
                     }
                 }
             }
@@ -117,6 +167,7 @@ impl Provider for Gemini {
             content,
             model: req.model.to_string(),
             usage,
+            tool_calls,
         })
     }
 }
