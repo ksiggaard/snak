@@ -9,8 +9,10 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SearchField } from "@/components/search/SearchField";
 import { useThreads } from "@/store/threads";
 import { useProjects } from "@/store/projects";
+import { useSearch } from "@/store/search";
 import { PROVIDERS } from "@/lib/providers";
 import { cn } from "@/lib/utils";
 import type { Provider, Thread } from "@/types/db";
@@ -34,8 +36,14 @@ export function ThreadList() {
   const closeProject = useProjects((s) => s.close);
   const removeProject = useProjects((s) => s.remove);
 
-  // Selecting or starting a chat returns the main pane to the chat view.
-  const goToChat = closeProject;
+  const clearSearch = useSearch((s) => s.clear);
+
+  // Selecting or starting a chat returns the main pane to the chat view: close
+  // any open project pane AND dismiss the search results overlay.
+  const goToChat = () => {
+    clearSearch();
+    closeProject();
+  };
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -114,6 +122,7 @@ export function ThreadList() {
   return (
     <aside className="bg-card flex w-64 flex-col border-r">
       <div className="flex flex-col gap-2 p-2">
+        <SearchField />
         <Button
           className="w-full justify-start"
           variant="outline"

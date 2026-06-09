@@ -1,7 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { imageDataUrl, type MessageView } from "@/lib/messages";
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/components/chat/Markdown";
+import { useSearch } from "@/store/search";
 
 interface MessageListProps {
   messages: MessageView[];
@@ -10,10 +11,30 @@ interface MessageListProps {
 
 export function MessageList({ messages, pending }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const scrollToMessageId = useSearch((s) => s.scrollToMessageId);
+  const consumeScroll = useSearch((s) => s.consumeScroll);
+  // Message briefly highlighted after jumping to it from a search result.
+  const [flashId, setFlashId] = useState<string | null>(null);
 
+  // When a search result is opened, scroll to + flash the matched message
+  // instead of jumping to the bottom. Falls back to the bottom otherwise.
   useEffect(() => {
+    if (scrollToMessageId) {
+      const el = messageRefs.current.get(scrollToMessageId);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        setFlashId(scrollToMessageId);
+        const t = setTimeout(() => setFlashId(null), 2000);
+        consumeScroll();
+        return () => clearTimeout(t);
+      }
+      // Target not found (e.g. messages still loading) — consume to avoid a
+      // stale jump on the next render.
+      consumeScroll();
+    }
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, pending]);
+  }, [messages, pending, scrollToMessageId, consumeScroll]);
 
   if (messages.length === 0 && !pending) {
     return (
@@ -28,17 +49,22 @@ export function MessageList({ messages, pending }: MessageListProps) {
       {messages.map((m) => (
         <div
           key={m.id}
+          ref={(el) => {
+            if (el) messageRefs.current.set(m.id, el);
+            else messageRefs.current.delete(m.id);
+          }}
           className={cn(
-            "flex",
+            "flex scroll-mt-4",
             m.role === "user" ? "justify-end" : "justify-start",
           )}
         >
           <div
             className={cn(
-              "flex max-w-[80%] flex-col gap-2 rounded-lg px-3 py-2 text-sm",
+              "flex max-w-[80%] flex-col gap-2 rounded-lg px-3 py-2 text-sm transition-shadow",
               m.role === "user"
                 ? "bg-primary text-primary-foreground"
                 : "bg-muted text-foreground",
+              flashId === m.id && "ring-primary ring-2 ring-offset-2",
             )}
           >
             {m.images.length > 0 && (

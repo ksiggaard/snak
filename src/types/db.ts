@@ -56,6 +56,36 @@ export interface Usage {
   created_at: string;
 }
 
+/**
+ * One full-text search hit (T19, migration 004). A hit is either a thread
+ * **title** match or a **message** match; both carry the owning thread so the
+ * UI can group results by thread and open the thread on selection.
+ */
+export interface SearchHit {
+  /** Which searchable unit matched. */
+  kind: "title" | "message";
+  thread_id: string;
+  /** Empty string for a title hit; the matched message's id otherwise. */
+  message_id: string;
+  /** The thread's current title (for grouping/labelling). */
+  thread_title: string;
+  /** The matched message's role (for message hits; "user" for title hits). */
+  role: Role;
+  /** The raw matched text (title or message content). */
+  text: string;
+  /** Message timestamp (or the thread's updated_at for a title hit). */
+  created_at: string;
+  /** FTS5 bm25 relevance score (lower = better); 0 for the LIKE fallback. */
+  score: number;
+}
+
+/** Search hits for one thread, grouped for the results view. */
+export interface ThreadSearchGroup {
+  thread_id: string;
+  thread_title: string;
+  hits: SearchHit[];
+}
+
 export type AttachmentKind = "image";
 
 export interface Attachment {
