@@ -22,7 +22,7 @@ const LAST_THREAD_KEY = "last_thread_id";
 const STREAM_ID = "__streaming__";
 
 /** Derive a thread title from the first user message. */
-function deriveTitle(content: string): string {
+export function deriveTitle(content: string): string {
   const oneLine = content.replace(/\s+/g, " ").trim();
   return oneLine.length > 48
     ? `${oneLine.slice(0, 48)}…`
