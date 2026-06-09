@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { imageDataUrl, type MessageView } from "@/lib/messages";
 import { cn } from "@/lib/utils";
+import { Markdown } from "@/components/chat/Markdown";
 
 interface MessageListProps {
   messages: MessageView[];
@@ -52,9 +53,15 @@ export function MessageList({ messages, pending }: MessageListProps) {
                 ))}
               </div>
             )}
-            {m.content && (
-              <span className="whitespace-pre-wrap">{m.content}</span>
-            )}
+            {m.content &&
+              (m.role === "assistant" ? (
+                // Assistant text is Markdown (GFM + highlighted code fences).
+                // react-markdown tolerates partial/unclosed Markdown, so this
+                // is safe to render against the growing streaming placeholder.
+                <Markdown content={m.content} />
+              ) : (
+                <span className="whitespace-pre-wrap">{m.content}</span>
+              ))}
           </div>
         </div>
       ))}
