@@ -1,0 +1,16 @@
+{
+  "id": "com.kdellm.openai",
+  "name": "OpenAI",
+  "version": "1.0.0",
+  "category": "provider",
+  "apiVersion": 1,
+  "description": "GPT models from OpenAI.",
+  "author": "KDE LLM",
+  "enabledByDefault": true,
+  "contributes": {
+    "id": "openai",
+    "label": "OpenAI",
+    "defaultModel": "gpt-4o",
+    "keyHint": "sk-…"
+  }
+}

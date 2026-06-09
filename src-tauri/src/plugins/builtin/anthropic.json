@@ -1,0 +1,16 @@
+{
+  "id": "com.kdellm.anthropic",
+  "name": "Anthropic",
+  "version": "1.0.0",
+  "category": "provider",
+  "apiVersion": 1,
+  "description": "Claude models from Anthropic.",
+  "author": "KDE LLM",
+  "enabledByDefault": true,
+  "contributes": {
+    "id": "anthropic",
+    "label": "Anthropic",
+    "defaultModel": "claude-opus-4-8",
+    "keyHint": "sk-ant-…"
+  }
+}

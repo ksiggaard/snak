@@ -1,4 +1,5 @@
 mod commands;
+mod plugins;
 mod providers;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -144,6 +145,9 @@ pub fn run() {
             commands::quick::set_global_shortcut,
             commands::quick::take_screenshot,
             set_close_to_tray,
+            plugins::list_plugins,
+            plugins::set_plugin_enabled,
+            plugins::uninstall_plugin,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
