@@ -14,6 +14,7 @@ import {
 } from "@/components/settings/CloseToTray";
 import { Plugins } from "@/components/settings/Plugins";
 import { Themes } from "@/components/settings/Themes";
+import { Memory } from "@/components/settings/Memory";
 import { ChatView } from "@/components/chat/ChatView";
 import { ModelPicker } from "@/components/chat/ModelPicker";
 import { ProjectView } from "@/components/projects/ProjectView";
@@ -117,6 +118,7 @@ function App() {
         {showSettings ? (
           <div className="flex flex-1 flex-col items-center gap-4 overflow-y-auto">
             <ApiKeys />
+            <Memory />
             <ShortcutSetting />
             <CloseToTraySetting />
             <Themes />

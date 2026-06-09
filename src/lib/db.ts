@@ -9,6 +9,7 @@ import type {
   Role,
   Thread,
   Usage,
+  UserMemory,
 } from "@/types/db";
 
 // Must match `DB_URL` in src-tauri/src/lib.rs. Migrations are run by the
@@ -429,4 +430,52 @@ export async function dailyUsage(): Promise<DailyUsage[]> {
       GROUP BY day
       ORDER BY day ASC`,
   );
+}
+
+// ---------------------------------------------------------------------------
+// User memory (T10) — persistent "memory about the user" injected into the
+// system context. The custom system-prompt addendum is a single global value
+// stored in the `settings` table under SYSTEM_PROMPT_ADDENDUM_KEY (see below).
+// ---------------------------------------------------------------------------
+
+/** Settings key for the global custom system-prompt addendum (T10). */
+export const SYSTEM_PROMPT_ADDENDUM_KEY = "system_prompt_addendum";
+
+/** All user-memory rows, oldest first (the order they're injected). */
+export async function listUserMemory(): Promise<UserMemory[]> {
+  const db = await getDb();
+  return db.select<UserMemory[]>(
+    `SELECT * FROM user_memory ORDER BY created_at ASC`,
+  );
+}
+
+export async function addUserMemory(content: string): Promise<UserMemory> {
+  const db = await getDb();
+  const id = newId();
+  await db.execute(`INSERT INTO user_memory (id, content) VALUES ($1, $2)`, [
+    id,
+    content,
+  ]);
+  const rows = await db.select<UserMemory[]>(
+    `SELECT * FROM user_memory WHERE id = $1`,
+    [id],
+  );
+  return rows[0];
+}
+
+export async function updateUserMemory(
+  id: string,
+  content: string,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE user_memory SET content = $1, updated_at = datetime('now')
+     WHERE id = $2`,
+    [content, id],
+  );
+}
+
+export async function deleteUserMemory(id: string): Promise<void> {
+  const db = await getDb();
+  await db.execute(`DELETE FROM user_memory WHERE id = $1`, [id]);
 }
