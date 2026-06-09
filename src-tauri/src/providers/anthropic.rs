@@ -1,10 +1,14 @@
 //! Anthropic Messages API (https://api.anthropic.com/v1/messages), SSE streaming.
 //! Raw HTTP per the claude-api guidance (no official Rust SDK).
 
+use std::sync::atomic::AtomicBool;
+
 use anyhow::{anyhow, Context};
 use tauri::ipc::Channel;
 
-use super::{for_each_sse_data, ChatResponse, CompletionRequest, Provider, StreamDelta};
+use super::{
+    for_each_sse_data, is_cancelled, ChatResponse, CompletionRequest, Provider, StreamDelta,
+};
 
 const API_URL: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
@@ -18,6 +22,7 @@ impl Provider for Anthropic {
         client: &reqwest::Client,
         req: &CompletionRequest<'_>,
         channel: &Channel<StreamDelta>,
+        cancel: &AtomicBool,
     ) -> anyhow::Result<ChatResponse> {
         // Anthropic takes the system prompt as a top-level field; only
         // user/assistant turns belong in `messages`.
@@ -88,6 +93,10 @@ impl Provider for Anthropic {
         let mut model = req.model.to_string();
 
         for_each_sse_data(resp, |data| {
+            // Stop promptly on user cancellation, keeping the partial text.
+            if is_cancelled(cancel) {
+                return Ok(false);
+            }
             let v: serde_json::Value =
                 serde_json::from_str(data).context("parsing anthropic SSE")?;
             match v.get("type").and_then(|t| t.as_str()) {

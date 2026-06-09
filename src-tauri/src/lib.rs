@@ -68,6 +68,7 @@ fn migrations() -> Vec<Migration> {
 pub fn run() {
     tauri::Builder::default()
         .manage(CloseToTray::default())
+        .manage(commands::chat::CancelFlag::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
@@ -137,6 +138,7 @@ pub fn run() {
             commands::keys::has_api_key,
             commands::keys::delete_api_key,
             commands::chat::chat_stream,
+            commands::chat::cancel_stream,
             commands::quick::submit_quick,
             commands::quick::hide_quick,
             commands::quick::set_global_shortcut,

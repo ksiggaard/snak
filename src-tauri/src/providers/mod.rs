@@ -8,6 +8,8 @@ pub mod gemini;
 pub mod mistral;
 pub mod openai;
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use anyhow::Context;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -50,15 +52,25 @@ pub struct CompletionRequest<'a> {
     pub messages: &'a [ChatMessage],
 }
 
+/// Returns true if the user requested cancellation of the in-flight stream.
+/// Threaded into each provider's SSE closure so it can early-exit (returning the
+/// partially-accumulated text) the same way `message_stop` / `[DONE]` does.
+pub(crate) fn is_cancelled(cancel: &AtomicBool) -> bool {
+    cancel.load(Ordering::Relaxed)
+}
+
 #[allow(async_fn_in_trait)]
 pub trait Provider {
     /// Stream a completion, emitting text deltas on `channel`, and return the
-    /// fully-accumulated response when the stream ends.
+    /// fully-accumulated response when the stream ends. `cancel` is polled
+    /// inside the SSE loop: when set, the provider stops early and returns
+    /// whatever text it has accumulated so far.
     async fn stream(
         &self,
         client: &reqwest::Client,
         req: &CompletionRequest<'_>,
         channel: &Channel<StreamDelta>,
+        cancel: &AtomicBool,
     ) -> anyhow::Result<ChatResponse>;
 }
 
@@ -68,12 +80,17 @@ pub async fn stream(
     provider: &str,
     req: &CompletionRequest<'_>,
     channel: &Channel<StreamDelta>,
+    cancel: &AtomicBool,
 ) -> anyhow::Result<ChatResponse> {
     match provider {
-        "anthropic" => anthropic::Anthropic.stream(client, req, channel).await,
-        "openai" => openai::OpenAi.stream(client, req, channel).await,
-        "mistral" => mistral::Mistral.stream(client, req, channel).await,
-        "gemini" => gemini::Gemini.stream(client, req, channel).await,
+        "anthropic" => {
+            anthropic::Anthropic
+                .stream(client, req, channel, cancel)
+                .await
+        }
+        "openai" => openai::OpenAi.stream(client, req, channel, cancel).await,
+        "mistral" => mistral::Mistral.stream(client, req, channel, cancel).await,
+        "gemini" => gemini::Gemini.stream(client, req, channel, cancel).await,
         other => anyhow::bail!("unknown provider: {other}"),
     }
 }

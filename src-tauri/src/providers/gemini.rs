@@ -2,10 +2,14 @@
 //! Roles differ: assistant -> "model", and the system prompt goes in
 //! `systemInstruction` rather than the `contents` array.
 
+use std::sync::atomic::AtomicBool;
+
 use anyhow::{anyhow, Context};
 use tauri::ipc::Channel;
 
-use super::{for_each_sse_data, ChatResponse, CompletionRequest, Provider, StreamDelta};
+use super::{
+    for_each_sse_data, is_cancelled, ChatResponse, CompletionRequest, Provider, StreamDelta,
+};
 
 const BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -17,6 +21,7 @@ impl Provider for Gemini {
         client: &reqwest::Client,
         req: &CompletionRequest<'_>,
         channel: &Channel<StreamDelta>,
+        cancel: &AtomicBool,
     ) -> anyhow::Result<ChatResponse> {
         let mut system = String::new();
         let mut contents = Vec::new();
@@ -78,6 +83,10 @@ impl Provider for Gemini {
         let mut content = String::new();
 
         for_each_sse_data(resp, |data| {
+            // Stop promptly on user cancellation, keeping the partial text.
+            if is_cancelled(cancel) {
+                return Ok(false);
+            }
             let v: serde_json::Value = serde_json::from_str(data).context("parsing gemini SSE")?;
             if let Some(parts) = v
                 .pointer("/candidates/0/content/parts")

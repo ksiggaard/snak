@@ -1,11 +1,14 @@
 //! OpenAI Chat Completions API (SSE streaming). The request/response shape is
 //! shared with Mistral via `chat_completions_stream`.
 
+use std::sync::atomic::AtomicBool;
+
 use anyhow::{anyhow, Context};
 use tauri::ipc::Channel;
 
 use super::{
-    for_each_sse_data, ChatMessage, ChatResponse, CompletionRequest, Provider, StreamDelta,
+    for_each_sse_data, is_cancelled, ChatMessage, ChatResponse, CompletionRequest, Provider,
+    StreamDelta,
 };
 
 const BASE_URL: &str = "https://api.openai.com/v1";
@@ -18,6 +21,7 @@ impl Provider for OpenAi {
         client: &reqwest::Client,
         req: &CompletionRequest<'_>,
         channel: &Channel<StreamDelta>,
+        cancel: &AtomicBool,
     ) -> anyhow::Result<ChatResponse> {
         chat_completions_stream(
             client,
@@ -26,6 +30,7 @@ impl Provider for OpenAi {
             req.model,
             req.messages,
             channel,
+            cancel,
         )
         .await
     }
@@ -40,6 +45,7 @@ pub(super) async fn chat_completions_stream(
     model: &str,
     messages: &[ChatMessage],
     channel: &Channel<StreamDelta>,
+    cancel: &AtomicBool,
 ) -> anyhow::Result<ChatResponse> {
     let msgs: Vec<_> = messages
         .iter()
@@ -92,6 +98,10 @@ pub(super) async fn chat_completions_stream(
     let mut model_out = model.to_string();
 
     for_each_sse_data(resp, |data| {
+        // Stop promptly on user cancellation, keeping the partial text.
+        if is_cancelled(cancel) {
+            return Ok(false);
+        }
         if data == "[DONE]" {
             return Ok(false);
         }
