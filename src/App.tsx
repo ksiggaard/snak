@@ -13,6 +13,7 @@ import {
   CloseToTraySetting,
 } from "@/components/settings/CloseToTray";
 import { Plugins } from "@/components/settings/Plugins";
+import { Skills } from "@/components/settings/Skills";
 import { Themes } from "@/components/settings/Themes";
 import { Memory } from "@/components/settings/Memory";
 import { ChatView } from "@/components/chat/ChatView";
@@ -127,6 +128,7 @@ function App() {
             <ShortcutSetting />
             <CloseToTraySetting />
             <Themes />
+            <Skills />
             <Plugins />
           </div>
         ) : showUsage ? (
