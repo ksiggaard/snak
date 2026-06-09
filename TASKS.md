@@ -530,8 +530,8 @@ and cache tokens, with a table and a GitHub-style activity heatmap.
 
 ## T17 — "Open in terminal" for bash code blocks
 
-- **Status:** todo
-- **Owner:** —
+- **Status:** done (Wave2-T17, 2026-06-09)
+- **Owner:** Wave2-T17
 - **Priority:** P2
 - **Layer:** Frontend (detect) + Rust (launch terminal)
 - **Depends on:** T8
