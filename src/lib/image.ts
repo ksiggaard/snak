@@ -13,14 +13,32 @@ export interface PreparedImage {
 const DEFAULT_MAX_DIM = 1568; // safe vision input size across providers
 const JPEG_QUALITY = 0.85;
 
+/**
+ * Compute downscaled, integer dimensions that fit within `maxDim` on the
+ * longer side. Never upscales (the scale factor is clamped to 1).
+ */
+export function scaledDimensions(
+  width: number,
+  height: number,
+  maxDim: number,
+): { width: number; height: number } {
+  const scale = Math.min(1, maxDim / Math.max(width, height));
+  return {
+    width: Math.round(width * scale),
+    height: Math.round(height * scale),
+  };
+}
+
 export async function prepareImage(
   file: Blob,
   maxDim = DEFAULT_MAX_DIM,
 ): Promise<PreparedImage> {
   const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
-  const width = Math.round(bitmap.width * scale);
-  const height = Math.round(bitmap.height * scale);
+  const { width, height } = scaledDimensions(
+    bitmap.width,
+    bitmap.height,
+    maxDim,
+  );
 
   const canvas = document.createElement("canvas");
   canvas.width = width;
