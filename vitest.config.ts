@@ -12,6 +12,8 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
+    // Don't discover test copies inside git worktrees (`.worktrees/`).
+    exclude: ["**/node_modules/**", "**/dist/**", "**/.worktrees/**"],
     coverage: {
       provider: "v8",
       reportsDirectory: "coverage",
