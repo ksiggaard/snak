@@ -27,7 +27,7 @@ sha256sums=('SKIP')
 build() {
     cd "$srcdir/$pkgname-$pkgver"
     npm ci
-    APPIMAGE_EXTRACT_AND_RUN=1 npm run tauri build -- --bundles deb
+    NO_STRIP=1 APPIMAGE_EXTRACT_AND_RUN=1 npm run tauri build -- --bundles deb
 }
 
 package() {
