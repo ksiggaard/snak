@@ -7,8 +7,8 @@ use anyhow::{anyhow, Context};
 use tauri::ipc::Channel;
 
 use super::{
-    for_each_sse_data, is_cancelled, ChatMessage, ChatResponse, CompletionRequest, Provider,
-    StreamDelta,
+    for_each_sse_data, is_cancelled, parse_openai_usage, ChatMessage, ChatResponse,
+    CompletionRequest, Provider, StreamDelta, Usage,
 };
 
 const BASE_URL: &str = "https://api.openai.com/v1";
@@ -77,6 +77,8 @@ pub(super) async fn chat_completions_stream(
     let body = serde_json::json!({
         "model": model,
         "stream": true,
+        // Ask for a final usage-only chunk after the content (OpenAI + Mistral).
+        "stream_options": { "include_usage": true },
         "messages": msgs,
     });
 
@@ -96,6 +98,7 @@ pub(super) async fn chat_completions_stream(
 
     let mut content = String::new();
     let mut model_out = model.to_string();
+    let mut usage = Usage::default();
 
     for_each_sse_data(resp, |data| {
         // Stop promptly on user cancellation, keeping the partial text.
@@ -109,6 +112,12 @@ pub(super) async fn chat_completions_stream(
             serde_json::from_str(data).context("parsing chat completions SSE")?;
         if let Some(m) = v.get("model").and_then(|m| m.as_str()) {
             model_out = m.to_string();
+        }
+        // The include_usage final chunk has an empty `choices` array and a
+        // populated top-level `usage` object; intermediate chunks have `usage:
+        // null`. Capture it whenever present.
+        if let Some(u) = v.get("usage").filter(|u| u.is_object()) {
+            usage = parse_openai_usage(u);
         }
         if let Some(t) = v
             .pointer("/choices/0/delta/content")
@@ -128,5 +137,6 @@ pub(super) async fn chat_completions_stream(
     Ok(ChatResponse {
         content,
         model: model_out,
+        usage,
     })
 }

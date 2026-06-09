@@ -2,6 +2,7 @@ import { create } from "zustand";
 import {
   addAttachment,
   addMessage,
+  addUsage,
   createThread,
   deleteThread,
   getProject,
@@ -295,11 +296,35 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       const result = await chatStream(provider, model, history, onDelta);
       // Don't persist an empty assistant row (e.g. cancelled before any token).
       if (result.content.length > 0) {
-        await addMessage({
+        const assistantMsg = await addMessage({
           thread_id: id,
           role: "assistant",
           content: result.content,
         });
+        // Record token usage for this response. Attribute it to the model the
+        // API actually used (`result.model`), falling back to the requested
+        // model — so usage stays correct even if the thread's model changes
+        // later. Skip if the provider reported no tokens at all (e.g. an early
+        // cancel that still emitted text but no usage event).
+        const u = result.usage;
+        if (
+          u &&
+          (u.input_tokens > 0 ||
+            u.output_tokens > 0 ||
+            u.cache_creation_tokens > 0 ||
+            u.cache_read_tokens > 0)
+        ) {
+          await addUsage({
+            message_id: assistantMsg.id,
+            thread_id: id,
+            provider,
+            model: result.model || model,
+            input_tokens: u.input_tokens,
+            output_tokens: u.output_tokens,
+            cache_creation_tokens: u.cache_creation_tokens,
+            cache_read_tokens: u.cache_read_tokens,
+          });
+        }
       }
       // Replace the placeholder with the persisted rows.
       set({ messages: await loadThreadMessages(id) });

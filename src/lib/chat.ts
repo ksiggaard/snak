@@ -12,9 +12,19 @@ export interface ApiMessage {
   images?: ApiImage[];
 }
 
+/** Token usage for one completion, mirroring Rust `providers::Usage`. */
+export interface ChatUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_tokens: number;
+  cache_read_tokens: number;
+}
+
 export interface ChatResult {
   content: string;
   model: string;
+  /** Per-response token usage captured from the stream's usage event(s). */
+  usage: ChatUsage;
 }
 
 /**
