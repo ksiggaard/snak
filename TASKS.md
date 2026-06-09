@@ -256,3 +256,363 @@ status line to reflect reality (and note the remaining gap: system tray, T1).
 - 2026-06-09 (Agent A): Rewrote the "## Project status" line in `CLAUDE.md` to reflect
   Stages 1–6 + quick-input/shortcut/screenshots built, with the system tray (this work)
   closing the last gap. No other sections touched.
+
+---
+
+# Product backlog (from README ideas)
+
+Larger forward-looking features sourced from `README.md` "IDEAS". These are coarse-grained
+and not yet sprint-scoped — refine the acceptance criteria (and consider a `brainstorming`
+pass) before claiming one. Several are interdependent (notably the plugin system T12,
+which T11/T14/T15 plug into).
+
+---
+
+## T8 — Markdown rendering for assistant responses
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P1
+- **Layer:** Frontend
+- **Depends on:** —
+
+(README idea 1.) Assistant messages are currently rendered as plain text in
+`src/components/chat/MessageList.tsx`. Render Markdown — headings, lists, links, tables,
+inline code, and fenced code blocks with syntax highlighting.
+
+**Acceptance criteria:**
+- Markdown in assistant messages renders richly (e.g. `react-markdown` + `remark-gfm`);
+  fenced code blocks get language-aware syntax highlighting and a copy-to-clipboard button.
+- Rendering is XSS-safe (no raw HTML injection) and themed via the existing CSS variables
+  in `src/index.css` (works in light/dark).
+- Streaming still works — partial/incomplete Markdown during a stream degrades gracefully
+  (no crash on an unclosed code fence).
+
+**Notes:**
+- Foundational for T10's code-block terminal button and T9's canvas editing.
+
+---
+
+## T9 — Canvas mode for editing long messages
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P2
+- **Layer:** Frontend
+- **Depends on:** T8
+
+(README idea 2.) A larger side/overlay "canvas" surface for composing and editing long
+Markdown messages, with a live preview, rather than the compact `Composer` textarea.
+
+**Acceptance criteria:**
+- Toggle a canvas view that edits Markdown with a live rendered preview (reusing T8's
+  renderer).
+- Content round-trips into the normal send flow (the store's `send`); images still attach.
+- Sensible UX for opening/closing without losing draft content.
+
+**Notes:**
+
+---
+
+## T10 — Settings: system-message append + user memory
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P1
+- **Layer:** Frontend + DB (Rust migration)
+- **Depends on:** —
+
+(README idea 3.) Extend the existing settings panel (`src/App.tsx`, `src/components/
+settings/`) with: (a) a custom string appended to the system prompt, and (b) persistent
+"memory about the user" injected into context.
+
+**Acceptance criteria:**
+- A settings field for a custom system-prompt addendum, persisted (global in the `settings`
+  table, or per-thread — decide and document) and actually prepended/merged into the
+  provider `system` field on each request (see how Anthropic/Gemini handle `system` in
+  `src-tauri/src/providers/`).
+- A "user memory" store (likely a new table via a numbered migration in
+  `src-tauri/migrations/`) editable in settings and injected into the system context.
+- Existing chats keep working when these are empty.
+
+**Notes:**
+- Anthropic/Gemini take `system`/`systemInstruction` specially — consult the `claude-api`
+  skill before changing request shapes.
+
+---
+
+## T11 — User-installable themes
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P2
+- **Layer:** Frontend + Rust (filesystem load)
+- **Depends on:** —
+
+(README idea 4.) A theme is a folder with a manifest file + a stylesheet; users drop themes
+into a themes directory and select them. Builds on the existing CSS-variable theming in
+`src/index.css` and `src/store/theme.ts`.
+
+**Acceptance criteria:**
+- Defined theme folder format: manifest (name/author/version) + a CSS file overriding the
+  documented CSS variables.
+- Rust loads installed themes from an app data directory and exposes them; the frontend
+  lists/selects/applies one (persisted alongside the existing theme preference).
+- Documentation of the available CSS variables and how to author a theme.
+
+**Notes:**
+- Could later be delivered as a "Theme" plugin category under T12.
+
+---
+
+## T12 — Plugin system (foundation)
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P3 (large / architectural)
+- **Layer:** Rust + Frontend
+- **Depends on:** —
+
+(README idea 5.) An extensibility framework so functionality can be added without core
+changes. Plugins are organized by **category**, e.g. "add LLM X support", "Theme",
+"Custom skills". This is the umbrella that T11/T14/T15 should plug into.
+
+**Acceptance criteria:**
+- A plugin manifest format + category taxonomy, and a defined install/discovery location
+  and lifecycle (enable/disable/uninstall).
+- A registry/host API plugins register against (at minimum: register a new provider into
+  `src/lib/providers.ts` + `src-tauri/src/providers/`, contribute a theme, contribute a
+  skill/slash command).
+- A settings UI listing installed plugins by category.
+- Security/sandboxing model for plugin code is explicitly considered and documented.
+
+**Notes:**
+- Big design effort — start with a `brainstorming` + `writing-plans` pass. Sequence before
+  T14 (slash commands) and T15 (skills); reconcile with T11 (themes).
+
+---
+
+## T13 — MCP support (with built-in web-browsing server)
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P2
+- **Layer:** Rust (MCP client + tool dispatch) + Frontend
+- **Depends on:** —
+
+(README idea 6.) Support the Model Context Protocol so the app can use external tools, and
+ship an out-of-the-box MCP server for web browsing.
+
+**Acceptance criteria:**
+- An MCP client in the Rust backend that connects to configured MCP servers and exposes
+  their tools to the model via each provider's tool-use API.
+- The streaming chat loop (`commands/chat.rs`, `providers/`) handles tool-call rounds
+  (request tool → execute via MCP → feed result back) without breaking SSE streaming.
+- A bundled/default web-browsing MCP server works out of the box; servers are configurable
+  in settings.
+
+**Notes:**
+- Tool use differs per provider — consult the `claude-api` skill for Anthropic tool-use and
+  MCP specifics before implementing the request/response shapes.
+
+---
+
+## T14 — Slash command support
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P3
+- **Layer:** Frontend (parsing/UX) + Rust (execution) + plugins
+- **Depends on:** T12
+
+(README idea 7.) Slash commands typed in the composer, installable via plugins. Example:
+`/terminal cat /path/to/file` runs a terminal command (via a plugin) and feeds the output
+into the chat.
+
+**Acceptance criteria:**
+- Composer detects `/command args`, with discovery/autocomplete of available commands.
+- Commands are contributed by plugins (T12); a command can transform input, inject context,
+  or run a backend action and feed output into the thread.
+- The `/terminal …` example works end-to-end as a reference plugin (executes via Rust,
+  output rendered in chat). Command execution has an explicit safety/confirmation model.
+
+**Notes:**
+- Running arbitrary terminal commands is dangerous — gate behind confirmation/allowlist.
+
+---
+
+## T15 — Skills support
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P3
+- **Layer:** Frontend + Rust + plugins
+- **Depends on:** T12
+
+(README idea 8.) Reusable "skills" — packaged instructions/capabilities the model can use —
+installable and managed like other plugin categories.
+
+**Acceptance criteria:**
+- A skill package format and a way to install/enable/disable skills (a plugin category
+  under T12).
+- Enabled skills are surfaced to the model (e.g. injected guidance and/or exposed as
+  tools), and a settings UI manages them.
+
+**Notes:**
+- Scope deliberately once T12's host API exists; align the skill format with that API.
+
+---
+
+## T16 — Token usage tracking
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P2
+- **Layer:** Rust (capture usage) + DB (migration) + Frontend (charts)
+- **Depends on:** —
+
+(README idea 9.) Record and visualize token usage across models over time: input, output,
+and cache tokens, with a table and a GitHub-style activity heatmap.
+
+**Acceptance criteria:**
+- Capture per-response usage (input/output/cache tokens + model + provider) from each
+  provider's API response in `src-tauri/src/providers/` and persist it (new table via a
+  numbered migration in `src-tauri/migrations/`).
+- A usage view: a sortable table (by model/date) and a GitHub-style colored-squares
+  calendar heatmap of activity.
+- Usage is attributed to the right model even when a thread's model changes.
+
+**Notes:**
+- Provider usage fields differ (Anthropic reports cache-read/-write tokens separately) —
+  consult the `claude-api` skill for the usage object shape. Streaming responses report
+  usage in specific SSE events; capture from the existing SSE loop.
+
+---
+
+## T17 — "Open in terminal" for bash code blocks
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P2
+- **Layer:** Frontend (detect) + Rust (launch terminal)
+- **Depends on:** T8
+
+(README idea 10.) When an assistant response contains a `bash`/`sh` fenced code block, show
+a button to open a terminal pre-loaded with that command.
+
+**Acceptance criteria:**
+- `bash`/`sh` code blocks (rendered via T8) get an "Open in terminal" action.
+- A Rust command launches the KDE terminal (e.g. Konsole) with the command staged but
+  **not auto-executed** (user reviews/runs it), mirroring the desktop-only, platform-gated
+  pattern of `take_screenshot` in `commands/quick.rs`.
+- Safe handling of multi-line commands and shell-special characters.
+
+**Notes:**
+- Never auto-run model-generated commands — stage only, require explicit user execution.
+
+---
+
+## T18 — Bundled plugins active by default; providers as built-in plugins
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P3 (architectural; first real consumer of T12)
+- **Layer:** Rust + Frontend
+- **Depends on:** T12
+
+The app should ship with a set of **premade plugins enabled out of the box** so it works
+on first launch with no setup. As the flagship case, **convert the current LLM support
+into plugins**: each of the four providers (Anthropic, OpenAI, Mistral, Gemini — today
+hardcoded in `src/lib/providers.ts` and `src-tauri/src/providers/`) becomes a built-in
+"add LLM X support" plugin under T12's plugin model, bundled and enabled by default.
+
+Because providers become toggleable plugins, the app **must handle every provider being
+disabled** (all models off) gracefully instead of assuming at least one exists.
+
+**Acceptance criteria:**
+- A built-in/bundled plugin concept (distinct from user-installed): ships with the app and
+  is enabled by default, but can be disabled like any plugin (T12).
+- The four providers are migrated to built-in plugins: the provider registry
+  (`src/lib/providers.ts`) and the Rust provider modules are sourced from enabled plugins
+  rather than a hardcoded list, with no regression to existing chat/streaming.
+- Disabling a provider plugin removes its models everywhere (`ModelPicker`, draft/thread
+  model selection, settings API-keys list) and the app stays consistent.
+- **All-disabled state handled:** when no provider is enabled, the chat UI shows a clear
+  empty/disabled state, Send is gated with guidance to enable a provider, the draft/last
+  model selection degrades safely, and existing threads referencing a now-disabled model
+  don't crash (clear messaging, re-enable path).
+- First-launch defaults are sensible (built-ins enabled).
+
+**Notes:**
+- Sequence after T12's host API and registry exist; this is the proof that the plugin model
+  can express core functionality. Coordinate with T6's send-gating (no-key) so the
+  no-provider-enabled and no-key states compose cleanly.
+
+---
+
+## T19 — Search previous dialogues
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P2
+- **Layer:** Frontend + DB
+- **Depends on:** —
+
+Let users search across their chat history — a rich search field plus a results page —
+to find and jump back into past conversations. History lives in the `threads`/`messages`
+tables (SQLite via `tauri-plugin-sql`); add typed query helpers in `src/lib/db.ts`.
+
+**Acceptance criteria:**
+- A search field (in the sidebar/`ThreadList` and/or a global shortcut) that queries both
+  thread titles and message content.
+- A results page/view showing matches grouped by thread, with a snippet of the matching
+  text and the matched terms highlighted; selecting a result opens that thread (and ideally
+  scrolls to the matching message).
+- Reasonably fast on large histories — consider a SQLite **FTS5** virtual table populated
+  via a numbered migration in `src-tauri/migrations/` (kept in sync on message insert),
+  rather than naive `LIKE` scans.
+- Empty/no-results state and clearing the search are handled cleanly.
+
+**Notes:**
+- If FTS5 is used, decide how the index stays current (triggers vs. app-side writes) and
+  document it; never edit a shipped migration — add a new numbered one.
+
+---
+
+## T20 — Projects (grouped threads with shared instructions + files)
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P2
+- **Layer:** DB (migration) + Rust + Frontend
+- **Depends on:** —
+
+Introduce **projects**: a named group of threads that share a common base context —
+project-level instructions and attached files — automatically applied to every thread in
+the project. (Conceptually like Claude/ChatGPT "Projects".)
+
+**Acceptance criteria:**
+- Data model via a numbered migration in `src-tauri/migrations/`: a `projects` table,
+  per-project **instructions** (text) and **files** (reuse the base64 `attachments`
+  pattern, or store text/file content for context), and a nullable `project_id` on
+  `threads` (a thread belongs to at most one project; threads can also exist with no
+  project). Don't rely on FK cascade — delete children explicitly like `deleteThread`.
+- Project instructions + files are injected as base context into every request for threads
+  in that project (merged with the per-thread/global system prompt from T10 and the message
+  history; mind provider `system`/`systemInstruction` handling).
+- Frontend: create/rename/delete projects; the sidebar groups threads by project; a project
+  view to edit its instructions and manage its files; creating a thread inside a project
+  inherits the base context.
+- Typed helpers in `src/lib/db.ts` and store actions in `src/store/threads.ts` (or a new
+  projects store); existing project-less threads keep working unchanged.
+
+**Acceptance criteria — edge cases:**
+- Large project files don't blow the context window — define a strategy (truncate, select,
+  or note as a follow-up) and surface it to the user.
+- Deleting a project: decide thread fate (orphan to no-project vs. cascade-delete) and
+  confirm destructive actions.
+
+**Notes:**
+- Composes with T10 (system-message/memory) — settle precedence: global → project → thread.
+- Before changing Anthropic/Gemini request shapes for context injection, consult the
+  `claude-api` skill.
