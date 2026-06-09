@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { deriveTitle } from "@/store/threads";
+import { deriveTitle, resolveDefault } from "@/store/threads";
+import { PROVIDERS } from "@/lib/providers";
 
 describe("deriveTitle", () => {
   it("returns a short message unchanged", () => {
@@ -40,5 +41,35 @@ describe("deriveTitle", () => {
     // 40 visible chars but lots of interior whitespace -> stays short.
     const s = "word ".repeat(8).trim().replace(/ /g, "    ");
     expect(deriveTitle(s)).toBe("word word word word word word word word");
+  });
+});
+
+describe("resolveDefault", () => {
+  it("uses the stored provider+model when both are present", () => {
+    expect(resolveDefault("openai", "gpt-4o")).toEqual({
+      provider: "openai",
+      model: "gpt-4o",
+    });
+  });
+
+  it("falls back to PROVIDERS[0] when the provider is missing", () => {
+    expect(resolveDefault(null, "gpt-4o")).toEqual({
+      provider: PROVIDERS[0].id,
+      model: PROVIDERS[0].defaultModel,
+    });
+  });
+
+  it("falls back to PROVIDERS[0] when the model is missing", () => {
+    expect(resolveDefault("openai", null)).toEqual({
+      provider: PROVIDERS[0].id,
+      model: PROVIDERS[0].defaultModel,
+    });
+  });
+
+  it("falls back to PROVIDERS[0] when both are missing", () => {
+    expect(resolveDefault(null, null)).toEqual({
+      provider: PROVIDERS[0].id,
+      model: PROVIDERS[0].defaultModel,
+    });
   });
 });

@@ -39,6 +39,26 @@ export function deriveTitle(content: string): string {
     : oneLine || "New chat";
 }
 
+/** The default provider+model for new interactions. */
+export interface DefaultModel {
+  provider: Provider;
+  model: string;
+}
+
+/**
+ * Resolve the persisted default (the `default_provider` / `default_model`
+ * settings strings) into a concrete provider+model, falling back to the first
+ * built-in provider when unset. Pure. The two keys are always written together
+ * by `setDefaultModel`, so they are either both present or both absent.
+ */
+export function resolveDefault(
+  provider: string | null,
+  model: string | null,
+): DefaultModel {
+  if (provider && model) return { provider: provider as Provider, model };
+  return { provider: PROVIDERS[0].id, model: PROVIDERS[0].defaultModel };
+}
+
 interface ThreadsState {
   threads: Thread[];
   /** null = an unsaved draft chat (created in the DB on first message). */
