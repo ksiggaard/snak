@@ -8,6 +8,7 @@ import type {
   Provider,
   Role,
   Thread,
+  Usage,
 } from "@/types/db";
 
 // Must match `DB_URL` in src-tauri/src/lib.rs. Migrations are run by the
@@ -124,6 +125,7 @@ export async function deleteThread(id: string): Promise<void> {
        (SELECT id FROM messages WHERE thread_id = $1)`,
     [id],
   );
+  await db.execute(`DELETE FROM usage WHERE thread_id = $1`, [id]);
   await db.execute(`DELETE FROM messages WHERE thread_id = $1`, [id]);
   await db.execute(`DELETE FROM threads WHERE id = $1`, [id]);
 }
@@ -322,4 +324,109 @@ export async function addProjectFile(input: {
 export async function deleteProjectFile(id: string): Promise<void> {
   const db = await getDb();
   await db.execute(`DELETE FROM project_files WHERE id = $1`, [id]);
+}
+
+// ---------------------------------------------------------------------------
+// Usage (T16) — per-response token usage, additive
+// ---------------------------------------------------------------------------
+
+/** Aggregated usage for a single model, for the usage table view. */
+export interface UsageByModel {
+  provider: Provider;
+  model: string;
+  responses: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_tokens: number;
+  cache_read_tokens: number;
+  /** input + output + cache (creation + read). */
+  total_tokens: number;
+  /** Most recent usage row's created_at for this model. */
+  last_used: string;
+}
+
+/** One day's total tokens, for the activity heatmap. */
+export interface DailyUsage {
+  /** Local "YYYY-MM-DD". */
+  day: string;
+  total_tokens: number;
+  responses: number;
+}
+
+/**
+ * Persist usage for one assistant response. `model` is the model that actually
+ * produced the response (captured from the API), so usage stays attributed to
+ * the right model even after a thread's model later changes.
+ */
+export async function addUsage(input: {
+  message_id: string;
+  thread_id: string;
+  provider: Provider;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_tokens: number;
+  cache_read_tokens: number;
+}): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `INSERT INTO usage (id, message_id, thread_id, provider, model,
+        input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [
+      newId(),
+      input.message_id,
+      input.thread_id,
+      input.provider,
+      input.model,
+      input.input_tokens,
+      input.output_tokens,
+      input.cache_creation_tokens,
+      input.cache_read_tokens,
+    ],
+  );
+}
+
+/** All usage rows, newest first. */
+export async function listUsage(): Promise<Usage[]> {
+  const db = await getDb();
+  return db.select<Usage[]>(`SELECT * FROM usage ORDER BY created_at DESC`);
+}
+
+/** Per-model rollup for the sortable usage table. */
+export async function usageByModel(): Promise<UsageByModel[]> {
+  const db = await getDb();
+  return db.select<UsageByModel[]>(
+    `SELECT provider,
+            model,
+            COUNT(*)                       AS responses,
+            SUM(input_tokens)              AS input_tokens,
+            SUM(output_tokens)             AS output_tokens,
+            SUM(cache_creation_tokens)     AS cache_creation_tokens,
+            SUM(cache_read_tokens)         AS cache_read_tokens,
+            SUM(input_tokens + output_tokens
+                + cache_creation_tokens + cache_read_tokens) AS total_tokens,
+            MAX(created_at)                AS last_used
+       FROM usage
+      GROUP BY provider, model
+      ORDER BY total_tokens DESC`,
+  );
+}
+
+/**
+ * Daily totals for the activity heatmap. Buckets by the *local* calendar day:
+ * `created_at` is a UTC "YYYY-MM-DD HH:MM:SS" string, so we convert to
+ * localtime in SQLite before slicing the date.
+ */
+export async function dailyUsage(): Promise<DailyUsage[]> {
+  const db = await getDb();
+  return db.select<DailyUsage[]>(
+    `SELECT date(created_at, 'localtime') AS day,
+            SUM(input_tokens + output_tokens
+                + cache_creation_tokens + cache_read_tokens) AS total_tokens,
+            COUNT(*) AS responses
+       FROM usage
+      GROUP BY day
+      ORDER BY day ASC`,
+  );
 }

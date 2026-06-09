@@ -7,7 +7,8 @@ use anyhow::{anyhow, Context};
 use tauri::ipc::Channel;
 
 use super::{
-    for_each_sse_data, is_cancelled, ChatResponse, CompletionRequest, Provider, StreamDelta,
+    for_each_sse_data, is_cancelled, merge_anthropic_usage, ChatResponse, CompletionRequest,
+    Provider, StreamDelta, Usage,
 };
 
 const API_URL: &str = "https://api.anthropic.com/v1/messages";
@@ -91,6 +92,7 @@ impl Provider for Anthropic {
 
         let mut content = String::new();
         let mut model = req.model.to_string();
+        let mut usage = Usage::default();
 
         for_each_sse_data(resp, |data| {
             // Stop promptly on user cancellation, keeping the partial text.
@@ -103,6 +105,17 @@ impl Provider for Anthropic {
                 Some("message_start") => {
                     if let Some(m) = v.pointer("/message/model").and_then(|m| m.as_str()) {
                         model = m.to_string();
+                    }
+                    // message_start.message.usage: input + cache tokens (output
+                    // is a placeholder here; the real count arrives in message_delta).
+                    if let Some(u) = v.pointer("/message/usage") {
+                        merge_anthropic_usage(&mut usage, u);
+                    }
+                }
+                Some("message_delta") => {
+                    // message_delta.usage: the authoritative output_tokens.
+                    if let Some(u) = v.get("usage") {
+                        merge_anthropic_usage(&mut usage, u);
                     }
                 }
                 Some("content_block_delta") => {
@@ -122,6 +135,10 @@ impl Provider for Anthropic {
         })
         .await?;
 
-        Ok(ChatResponse { content, model })
+        Ok(ChatResponse {
+            content,
+            model,
+            usage,
+        })
     }
 }

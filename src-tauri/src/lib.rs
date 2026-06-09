@@ -70,6 +70,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/002_projects.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 3,
+            description: "usage: per-response token usage (provider, model, tokens)",
+            sql: include_str!("../migrations/003_usage.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

@@ -16,6 +16,7 @@ import { Plugins } from "@/components/settings/Plugins";
 import { ChatView } from "@/components/chat/ChatView";
 import { ModelPicker } from "@/components/chat/ModelPicker";
 import { ProjectView } from "@/components/projects/ProjectView";
+import { UsageView } from "@/components/usage/UsageView";
 import { ThreadList } from "@/components/sidebar/ThreadList";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { getSetting } from "@/lib/db";
@@ -29,6 +30,7 @@ function App() {
   const openProjectId = useProjects((s) => s.openProjectId);
   const closeProject = useProjects((s) => s.close);
   const [showSettings, setShowSettings] = useState(false);
+  const [showUsage, setShowUsage] = useState(false);
 
   useEffect(() => {
     void init();
@@ -72,15 +74,30 @@ function App() {
       <main className="flex flex-1 flex-col gap-3 p-4">
         <header className="flex items-center gap-3">
           <h1 className="text-lg font-semibold tracking-tight">KDE LLM</h1>
-          {!showSettings && !openProjectId && <ModelPicker />}
-          {openProjectId && !showSettings && (
+          {!showSettings && !showUsage && !openProjectId && <ModelPicker />}
+          {openProjectId && !showSettings && !showUsage && (
             <Button variant="ghost" onClick={() => closeProject()}>
               ← Back to chat
             </Button>
           )}
           <div className="flex-1" />
           <ThemeToggle />
-          <Button variant="outline" onClick={() => setShowSettings((s) => !s)}>
+          <Button
+            variant={showUsage ? "default" : "outline"}
+            onClick={() => {
+              setShowUsage((s) => !s);
+              setShowSettings(false);
+            }}
+          >
+            Usage
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setShowSettings((s) => !s);
+              setShowUsage(false);
+            }}
+          >
             {showSettings ? "Close" : "Settings"}
           </Button>
         </header>
@@ -92,6 +109,8 @@ function App() {
             <CloseToTraySetting />
             <Plugins />
           </div>
+        ) : showUsage ? (
+          <UsageView />
         ) : openProjectId ? (
           <ProjectView />
         ) : (

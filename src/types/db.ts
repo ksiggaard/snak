@@ -42,6 +42,20 @@ export interface Message {
   created_at: string;
 }
 
+/** A persisted per-response token-usage row (T16, migration 003). */
+export interface Usage {
+  id: string;
+  message_id: string;
+  thread_id: string;
+  provider: Provider;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_tokens: number;
+  cache_read_tokens: number;
+  created_at: string;
+}
+
 export type AttachmentKind = "image";
 
 export interface Attachment {

@@ -504,8 +504,10 @@ installable and managed like other plugin categories.
 
 ## T16 — Token usage tracking
 
-- **Status:** todo
-- **Owner:** —
+- **Status:** done (Wave2-T16, 2026-06-09 — usage captured per-provider in the
+  streaming SSE loop, persisted to a v3 `usage` table, surfaced in a sortable
+  by-model table + GitHub-style activity heatmap.)
+- **Owner:** Wave2-T16
 - **Priority:** P2
 - **Layer:** Rust (capture usage) + DB (migration) + Frontend (charts)
 - **Depends on:** —

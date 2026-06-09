@@ -8,7 +8,8 @@ use anyhow::{anyhow, Context};
 use tauri::ipc::Channel;
 
 use super::{
-    for_each_sse_data, is_cancelled, ChatResponse, CompletionRequest, Provider, StreamDelta,
+    for_each_sse_data, is_cancelled, parse_gemini_usage, ChatResponse, CompletionRequest, Provider,
+    StreamDelta, Usage,
 };
 
 const BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -81,6 +82,7 @@ impl Provider for Gemini {
         }
 
         let mut content = String::new();
+        let mut usage = Usage::default();
 
         for_each_sse_data(resp, |data| {
             // Stop promptly on user cancellation, keeping the partial text.
@@ -88,6 +90,10 @@ impl Provider for Gemini {
                 return Ok(false);
             }
             let v: serde_json::Value = serde_json::from_str(data).context("parsing gemini SSE")?;
+            // Gemini reports cumulative usage on each chunk; the last one wins.
+            if let Some(u) = v.get("usageMetadata") {
+                usage = parse_gemini_usage(u);
+            }
             if let Some(parts) = v
                 .pointer("/candidates/0/content/parts")
                 .and_then(|p| p.as_array())
@@ -110,6 +116,7 @@ impl Provider for Gemini {
         Ok(ChatResponse {
             content,
             model: req.model.to_string(),
+            usage,
         })
     }
 }
