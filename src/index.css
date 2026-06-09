@@ -48,6 +48,19 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* ── Theme CSS-variable contract (T11) ──────────────────────────────────────
+ * The variables defined on `:root` (light) and `.dark` below are the documented
+ * theming surface. An installable theme is a folder (`theme.json` + `theme.css`)
+ * dropped into the app-data themes directory; its `theme.css` overrides any of
+ * these `--*` variables. The selected theme's CSS is injected into a `<style id
+ * ="installed-theme">` element appended to <head> (see `applyInstalledThemeCss`
+ * in src/lib/theme.ts), which loads after this file and so wins by cascade.
+ *
+ * To compose with light/dark, scope dark overrides under `.dark` in your CSS:
+ *     :root  { --background: …; --primary: …; }   // light
+ *     .dark  { --background: …; --primary: …; }   // dark
+ * Colors use the oklch() color space. Full authoring guide: docs/theming.md.
+ * ──────────────────────────────────────────────────────────────────────────── */
 :root {
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);

@@ -5,6 +5,9 @@ import {
   systemPrefersDark,
   resolveTheme,
   applyTheme,
+  getStoredThemeId,
+  storeThemeId,
+  applyInstalledThemeCss,
 } from "@/lib/theme";
 
 /** Install a matchMedia mock that reports the given dark-mode preference. */
@@ -28,6 +31,7 @@ function mockMatchMedia(prefersDark: boolean) {
 beforeEach(() => {
   localStorage.clear();
   document.documentElement.className = "";
+  document.getElementById("installed-theme")?.remove();
 });
 
 afterEach(() => {
@@ -100,5 +104,56 @@ describe("applyTheme", () => {
     mockMatchMedia(false);
     applyTheme("light");
     expect(document.documentElement.classList.contains("dark")).toBe(false);
+  });
+});
+
+describe("installed theme id (T11)", () => {
+  it("returns null when no theme id is stored", () => {
+    expect(getStoredThemeId()).toBeNull();
+  });
+
+  it("round-trips a stored theme id", () => {
+    storeThemeId("solarized");
+    expect(localStorage.getItem("theme-id")).toBe("solarized");
+    expect(getStoredThemeId()).toBe("solarized");
+  });
+
+  it("clears the stored id when set to null", () => {
+    storeThemeId("nord");
+    storeThemeId(null);
+    expect(getStoredThemeId()).toBeNull();
+    expect(localStorage.getItem("theme-id")).toBeNull();
+  });
+});
+
+describe("applyInstalledThemeCss (T11)", () => {
+  const styleEl = () =>
+    document.getElementById("installed-theme") as HTMLStyleElement | null;
+
+  it("injects a single <style> element with the CSS", () => {
+    applyInstalledThemeCss(":root { --background: red; }");
+    const el = styleEl();
+    expect(el).not.toBeNull();
+    expect(el?.tagName).toBe("STYLE");
+    expect(el?.textContent).toContain("--background: red");
+  });
+
+  it("replaces the CSS in place rather than appending a second element", () => {
+    applyInstalledThemeCss(":root { --background: red; }");
+    applyInstalledThemeCss(":root { --background: blue; }");
+    expect(document.querySelectorAll("#installed-theme").length).toBe(1);
+    expect(styleEl()?.textContent).toContain("--background: blue");
+  });
+
+  it("removes the element when passed null", () => {
+    applyInstalledThemeCss(":root { --background: red; }");
+    applyInstalledThemeCss(null);
+    expect(styleEl()).toBeNull();
+  });
+
+  it("removes the element when passed an empty string", () => {
+    applyInstalledThemeCss(":root {}");
+    applyInstalledThemeCss("");
+    expect(styleEl()).toBeNull();
   });
 });
