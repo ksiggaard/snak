@@ -119,6 +119,7 @@ fn builtin_manifests() -> Vec<PluginManifest> {
         include_str!("builtin/openai.json"),
         include_str!("builtin/mistral.json"),
         include_str!("builtin/gemini.json"),
+        include_str!("builtin/terminal.json"),
     ];
     BUILTINS
         .iter()
@@ -315,12 +316,21 @@ mod tests {
     #[test]
     fn all_builtins_are_valid_and_enabled_by_default() {
         let builtins = builtin_manifests();
-        assert_eq!(builtins.len(), 4, "expected 4 built-in providers");
+        // Four provider plugins (T18) + the /terminal slash-command plugin (T14).
+        assert_eq!(builtins.len(), 5, "expected 5 built-in plugins");
+        let providers = builtins.iter().filter(|m| m.category == "provider").count();
+        assert_eq!(providers, 4, "expected 4 built-in providers");
         for m in &builtins {
             validate_manifest(m).expect("built-in must validate");
-            assert_eq!(m.category, "provider");
             assert!(m.enabled_by_default, "built-ins default enabled");
         }
+        // The slash-command built-in is present and contributes /terminal.
+        assert!(
+            builtins
+                .iter()
+                .any(|m| m.category == "slash-command" && m.id == "com.kdellm.terminal"),
+            "expected the built-in /terminal slash-command plugin",
+        );
     }
 
     #[test]

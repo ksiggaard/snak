@@ -68,6 +68,13 @@ interface ThreadsState {
   /** Set provider+model for the current thread, or the draft if none. */
   setProviderModel: (provider: Provider, model: string) => Promise<void>;
   send: (content: string, images: PreparedImage[]) => Promise<void>;
+  /**
+   * Persist a synthetic assistant-role note into the current thread (creating a
+   * draft thread lazily, like `send`). Used by slash commands (T14) to feed a
+   * backend action's confirmation/output into the conversation without going
+   * through the LLM. Does not stream or call a provider.
+   */
+  postNote: (content: string) => Promise<void>;
   /** Stop the in-flight stream; partial text is persisted via the normal path. */
   cancel: () => Promise<void>;
   rename: (id: string, title: string) => Promise<void>;
@@ -376,6 +383,25 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     } finally {
       set({ busy: false, cancelling: false });
     }
+  },
+
+  postNote: async (content) => {
+    if (!content.trim()) return;
+    let id = get().currentThreadId;
+    if (!id) {
+      const thread = await createThread({
+        provider: get().draftProvider,
+        model: get().draftModel,
+        title: deriveTitle(content),
+        projectId: get().draftProjectId,
+      });
+      id = thread.id;
+      set({ currentThreadId: id });
+      await setSetting(LAST_THREAD_KEY, id);
+    }
+    await addMessage({ thread_id: id, role: "assistant", content });
+    set({ messages: await loadThreadMessages(id) });
+    await get().refreshThreads();
   },
 
   cancel: async () => {
