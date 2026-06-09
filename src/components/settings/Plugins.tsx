@@ -8,6 +8,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { usePlugins } from "@/store/plugins";
+import { confirmDialog } from "@/store/confirm";
 import {
   CATEGORY_LABELS,
   PLUGIN_CATEGORIES,
@@ -52,7 +53,13 @@ function PluginRow({ p }: { p: PluginInfo }) {
             size="sm"
             variant="outline"
             onClick={() => {
-              if (confirm(`Uninstall "${name}"?`)) void uninstall(id);
+              void confirmDialog({
+                title: `Uninstall "${name}"?`,
+                confirmText: "Uninstall",
+                destructive: true,
+              }).then((ok) => {
+                if (ok) void uninstall(id);
+              });
             }}
           >
             Uninstall

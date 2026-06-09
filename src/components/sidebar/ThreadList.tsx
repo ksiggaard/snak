@@ -13,6 +13,7 @@ import { SearchField } from "@/components/search/SearchField";
 import { useThreads } from "@/store/threads";
 import { useProjects } from "@/store/projects";
 import { useSearch } from "@/store/search";
+import { confirmDialog } from "@/store/confirm";
 import { PROVIDERS } from "@/lib/providers";
 import { cn } from "@/lib/utils";
 import type { Provider, Thread } from "@/types/db";
@@ -109,7 +110,13 @@ export function ThreadList() {
           type="button"
           aria-label="Delete conversation"
           onClick={() => {
-            if (confirm(`Delete "${t.title}"?`)) void remove(t.id);
+            void confirmDialog({
+              title: `Delete "${t.title}"?`,
+              confirmText: "Delete",
+              destructive: true,
+            }).then((ok) => {
+              if (ok) void remove(t.id);
+            });
           }}
           className="text-muted-foreground hover:text-destructive shrink-0 opacity-0 group-hover:opacity-100"
         >
@@ -217,12 +224,15 @@ export function ThreadList() {
                   type="button"
                   aria-label="Delete project"
                   onClick={() => {
-                    if (
-                      confirm(
-                        `Delete project "${project.name}"? Its chats are kept (moved out of the project).`,
-                      )
-                    )
-                      void removeProject(project.id);
+                    void confirmDialog({
+                      title: `Delete project "${project.name}"?`,
+                      description:
+                        "Its chats are kept (moved out of the project).",
+                      confirmText: "Delete",
+                      destructive: true,
+                    }).then((ok) => {
+                      if (ok) void removeProject(project.id);
+                    });
                   }}
                   className="text-muted-foreground hover:text-destructive shrink-0 opacity-0 group-hover:opacity-100"
                 >

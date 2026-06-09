@@ -16,6 +16,7 @@ import {
   type McpServer,
   type McpTransport,
 } from "@/lib/mcp";
+import { confirmDialog } from "@/store/confirm";
 
 /**
  * MCP servers settings card (T13). Lets the user toggle the built-in web-browse
@@ -141,7 +142,13 @@ export function McpServers() {
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      if (confirm(`Remove "${s.label}"?`)) remove(s.id);
+                      void confirmDialog({
+                        title: `Remove "${s.label}"?`,
+                        confirmText: "Remove",
+                        destructive: true,
+                      }).then((ok) => {
+                        if (ok) remove(s.id);
+                      });
                     }}
                   >
                     Remove
