@@ -57,12 +57,20 @@ const DEFAULT_SHORTCUT: &str = "Alt+Space";
 const DB_URL: &str = "sqlite:kde-llm.db";
 
 fn migrations() -> Vec<Migration> {
-    vec![Migration {
-        version: 1,
-        description: "init schema: threads, messages, attachments, settings",
-        sql: include_str!("../migrations/001_init.sql"),
-        kind: MigrationKind::Up,
-    }]
+    vec![
+        Migration {
+            version: 1,
+            description: "init schema: threads, messages, attachments, settings",
+            sql: include_str!("../migrations/001_init.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 2,
+            description: "projects: projects, project_files, threads.project_id",
+            sql: include_str!("../migrations/002_projects.sql"),
+            kind: MigrationKind::Up,
+        },
+    ]
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

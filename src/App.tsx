@@ -15,19 +15,25 @@ import {
 import { Plugins } from "@/components/settings/Plugins";
 import { ChatView } from "@/components/chat/ChatView";
 import { ModelPicker } from "@/components/chat/ModelPicker";
+import { ProjectView } from "@/components/projects/ProjectView";
 import { ThreadList } from "@/components/sidebar/ThreadList";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { getSetting } from "@/lib/db";
 import { setGlobalShortcut, type QuickPayload } from "@/lib/quick";
 import { useThreads } from "@/store/threads";
+import { useProjects } from "@/store/projects";
 
 function App() {
   const init = useThreads((s) => s.init);
+  const initProjects = useProjects((s) => s.init);
+  const openProjectId = useProjects((s) => s.openProjectId);
+  const closeProject = useProjects((s) => s.close);
   const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     void init();
-  }, [init]);
+    void initProjects();
+  }, [init, initProjects]);
 
   // Apply the user's saved global shortcut (Rust registers the default already).
   useEffect(() => {
@@ -50,6 +56,7 @@ function App() {
   useEffect(() => {
     const { startNewChat, send } = useThreads.getState();
     const unlisten = listen<QuickPayload>("quick-submit", (e) => {
+      useProjects.getState().close();
       startNewChat();
       void send(e.payload.text, e.payload.images);
     });
@@ -65,7 +72,12 @@ function App() {
       <main className="flex flex-1 flex-col gap-3 p-4">
         <header className="flex items-center gap-3">
           <h1 className="text-lg font-semibold tracking-tight">KDE LLM</h1>
-          <ModelPicker />
+          {!showSettings && !openProjectId && <ModelPicker />}
+          {openProjectId && !showSettings && (
+            <Button variant="ghost" onClick={() => closeProject()}>
+              ← Back to chat
+            </Button>
+          )}
           <div className="flex-1" />
           <ThemeToggle />
           <Button variant="outline" onClick={() => setShowSettings((s) => !s)}>
@@ -80,6 +92,8 @@ function App() {
             <CloseToTraySetting />
             <Plugins />
           </div>
+        ) : openProjectId ? (
+          <ProjectView />
         ) : (
           <ChatView />
         )}
