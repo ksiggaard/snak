@@ -19,6 +19,7 @@ import { ChatView } from "@/components/chat/ChatView";
 import { ModelPicker } from "@/components/chat/ModelPicker";
 import { ProjectView } from "@/components/projects/ProjectView";
 import { UsageView } from "@/components/usage/UsageView";
+import { SearchResults } from "@/components/search/SearchResults";
 import { ThreadList } from "@/components/sidebar/ThreadList";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { getSetting } from "@/lib/db";
@@ -26,6 +27,7 @@ import { setGlobalShortcut, type QuickPayload } from "@/lib/quick";
 import { useThreads } from "@/store/threads";
 import { useProjects } from "@/store/projects";
 import { usePlugins } from "@/store/plugins";
+import { useSearch } from "@/store/search";
 import { useTheme } from "@/store/theme";
 
 function App() {
@@ -35,6 +37,7 @@ function App() {
   const loadInstalledThemes = useTheme((s) => s.loadInstalled);
   const openProjectId = useProjects((s) => s.openProjectId);
   const closeProject = useProjects((s) => s.close);
+  const searchOpen = useSearch((s) => s.open);
   const [showSettings, setShowSettings] = useState(false);
   const [showUsage, setShowUsage] = useState(false);
 
@@ -87,7 +90,9 @@ function App() {
       <main className="flex flex-1 flex-col gap-3 p-4">
         <header className="flex items-center gap-3">
           <h1 className="text-lg font-semibold tracking-tight">KDE LLM</h1>
-          {!showSettings && !showUsage && !openProjectId && <ModelPicker />}
+          {!showSettings && !showUsage && !openProjectId && !searchOpen && (
+            <ModelPicker />
+          )}
           {openProjectId && !showSettings && !showUsage && (
             <Button variant="ghost" onClick={() => closeProject()}>
               ← Back to chat
@@ -126,6 +131,8 @@ function App() {
           </div>
         ) : showUsage ? (
           <UsageView />
+        ) : searchOpen ? (
+          <SearchResults />
         ) : openProjectId ? (
           <ProjectView />
         ) : (

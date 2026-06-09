@@ -1,4 +1,5 @@
 import Database from "@tauri-apps/plugin-sql";
+import { buildFtsMatch, searchTerms } from "@/lib/search";
 import type {
   Attachment,
   AttachmentKind,
@@ -7,6 +8,7 @@ import type {
   ProjectFile,
   Provider,
   Role,
+  SearchHit,
   Thread,
   Usage,
   UserMemory,
@@ -478,4 +480,107 @@ export async function updateUserMemory(
 export async function deleteUserMemory(id: string): Promise<void> {
   const db = await getDb();
   await db.execute(`DELETE FROM user_memory WHERE id = $1`, [id]);
+}
+
+// ---------------------------------------------------------------------------
+// Search (T19) — full-text search over thread titles + message content
+// ---------------------------------------------------------------------------
+
+/** Max search hits returned (the UI groups these by thread). */
+const SEARCH_LIMIT = 200;
+
+/**
+ * Search chat history (thread titles + message content) for `query`.
+ *
+ * Primary path: the FTS5 index (`search_fts`, migration 004), ranked by bm25
+ * (lower score = more relevant). The query is built safely via `buildFtsMatch`
+ * (quoted, prefix-matched terms AND-ed together). We join back to `threads` for
+ * the current title and to `messages` for the role/timestamp.
+ *
+ * Fallback: if the FTS query errors for any reason (e.g. an unexpected SQLite
+ * build without FTS5), we fall back to LIKE scans so search still works — just
+ * without ranking (score 0). FTS5 is expected to be present (libsqlite3-sys's
+ * bundled SQLite enables it), so the fallback is defence-in-depth.
+ *
+ * Returns a flat, relevance-ordered list; group with `groupHitsByThread`.
+ */
+export async function searchHistory(query: string): Promise<SearchHit[]> {
+  if (searchTerms(query).length === 0) return [];
+  const db = await getDb();
+  const match = buildFtsMatch(query);
+
+  try {
+    return await db.select<SearchHit[]>(
+      `SELECT f.kind                                   AS kind,
+              f.thread_id                              AS thread_id,
+              f.message_id                             AS message_id,
+              t.title                                  AS thread_title,
+              COALESCE(m.role, 'user')                 AS role,
+              f.text                                   AS text,
+              COALESCE(m.created_at, t.updated_at)     AS created_at,
+              bm25(search_fts)                         AS score
+         FROM search_fts f
+         JOIN threads t ON t.id = f.thread_id
+         LEFT JOIN messages m ON m.id = f.message_id
+        WHERE search_fts MATCH $1
+        ORDER BY score ASC
+        LIMIT $2`,
+      [match, SEARCH_LIMIT],
+    );
+  } catch {
+    return searchHistoryLike(db, query);
+  }
+}
+
+/**
+ * LIKE-scan fallback used only if the FTS query errors. AND-s every term across
+ * the title/content. No ranking (score 0); ordered newest-first.
+ */
+async function searchHistoryLike(
+  db: Database,
+  query: string,
+): Promise<SearchHit[]> {
+  const terms = searchTerms(query);
+  if (terms.length === 0) return [];
+
+  const titleWhere = terms.map((_, i) => `t.title LIKE $${i + 1}`).join(" AND ");
+  const msgWhere = terms
+    .map((_, i) => `m.content LIKE $${i + 1}`)
+    .join(" AND ");
+  const params = terms.map((t) => `%${t}%`);
+
+  const titleHits = await db.select<SearchHit[]>(
+    `SELECT 'title'   AS kind,
+            t.id       AS thread_id,
+            ''         AS message_id,
+            t.title    AS thread_title,
+            'user'     AS role,
+            t.title    AS text,
+            t.updated_at AS created_at,
+            0          AS score
+       FROM threads t
+      WHERE ${titleWhere}
+      ORDER BY t.updated_at DESC
+      LIMIT $${terms.length + 1}`,
+    [...params, SEARCH_LIMIT],
+  );
+
+  const messageHits = await db.select<SearchHit[]>(
+    `SELECT 'message'  AS kind,
+            m.thread_id AS thread_id,
+            m.id        AS message_id,
+            t.title     AS thread_title,
+            m.role      AS role,
+            m.content   AS text,
+            m.created_at AS created_at,
+            0           AS score
+       FROM messages m
+       JOIN threads t ON t.id = m.thread_id
+      WHERE ${msgWhere}
+      ORDER BY m.created_at DESC
+      LIMIT $${terms.length + 1}`,
+    [...params, SEARCH_LIMIT],
+  );
+
+  return [...titleHits, ...messageHits].slice(0, SEARCH_LIMIT);
 }

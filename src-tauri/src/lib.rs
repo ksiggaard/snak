@@ -77,6 +77,12 @@ fn migrations() -> Vec<Migration> {
             kind: MigrationKind::Up,
         },
         Migration {
+            version: 4,
+            description: "search: FTS5 index over thread titles + message content",
+            sql: include_str!("../migrations/004_search_fts.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
             version: 5,
             description: "user_memory: persistent memory-about-the-user for the system context",
             sql: include_str!("../migrations/005_user_memory.sql"),
