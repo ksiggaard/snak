@@ -158,6 +158,7 @@ pub fn run() {
             commands::quick::hide_quick,
             commands::quick::set_global_shortcut,
             commands::quick::take_screenshot,
+            commands::terminal::open_in_terminal,
             set_close_to_tray,
             plugins::list_plugins,
             plugins::set_plugin_enabled,

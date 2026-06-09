@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, SquareTerminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { codeText, languageFromClassName } from "@/lib/markdown";
+import { isShellLanguage, openInTerminal } from "@/lib/terminal";
 
 interface CodeBlockProps {
   className?: string;
@@ -21,6 +22,7 @@ export function CodeBlock({ className, children }: CodeBlockProps) {
   const language = languageFromClassName(className);
   const text = codeText(children);
   const [copied, setCopied] = useState(false);
+  const isShell = isShellLanguage(language);
 
   const onCopy = async () => {
     try {
@@ -32,6 +34,16 @@ export function CodeBlock({ className, children }: CodeBlockProps) {
     }
   };
 
+  // Stage (never auto-run) the command in an OS terminal for the user to review.
+  const onOpenInTerminal = async () => {
+    if (!text.trim()) return;
+    try {
+      await openInTerminal(text);
+    } catch {
+      // Launch failed (e.g. no terminal emulator); ignore silently.
+    }
+  };
+
   return (
     <div
       data-language={language ?? undefined}
@@ -39,22 +51,35 @@ export function CodeBlock({ className, children }: CodeBlockProps) {
     >
       <div className="border-border text-muted-foreground flex items-center justify-between border-b px-3 py-1 text-xs">
         <span className="font-mono">{language ?? "text"}</span>
-        <button
-          type="button"
-          onClick={onCopy}
-          aria-label="Copy code"
-          className="hover:text-foreground inline-flex items-center gap-1 transition-colors"
-        >
-          {copied ? (
-            <>
-              <Check className="size-3" /> Copied
-            </>
-          ) : (
-            <>
-              <Copy className="size-3" /> Copy
-            </>
+        <div className="flex items-center gap-3">
+          {isShell && (
+            <button
+              type="button"
+              onClick={onOpenInTerminal}
+              aria-label="Open in terminal"
+              title="Open in terminal (staged, not run — review and press Enter)"
+              className="hover:text-foreground inline-flex items-center gap-1 transition-colors"
+            >
+              <SquareTerminal className="size-3" /> Open in terminal
+            </button>
           )}
-        </button>
+          <button
+            type="button"
+            onClick={onCopy}
+            aria-label="Copy code"
+            className="hover:text-foreground inline-flex items-center gap-1 transition-colors"
+          >
+            {copied ? (
+              <>
+                <Check className="size-3" /> Copied
+              </>
+            ) : (
+              <>
+                <Copy className="size-3" /> Copy
+              </>
+            )}
+          </button>
+        </div>
       </div>
       <pre className="overflow-x-auto p-3 text-xs leading-relaxed">
         <code className={cn("font-mono", className)}>{children}</code>
