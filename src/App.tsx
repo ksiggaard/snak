@@ -1,12 +1,17 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Button } from "@/components/ui/button";
+import { invoke } from "@tauri-apps/api/core";
 import { ApiKeys } from "@/components/settings/ApiKeys";
 import {
   DEFAULT_SHORTCUT,
   SHORTCUT_KEY,
   ShortcutSetting,
 } from "@/components/settings/Shortcut";
+import {
+  CLOSE_TO_TRAY_KEY,
+  CloseToTraySetting,
+} from "@/components/settings/CloseToTray";
 import { ChatView } from "@/components/chat/ChatView";
 import { ModelPicker } from "@/components/chat/ModelPicker";
 import { ThreadList } from "@/components/sidebar/ThreadList";
@@ -27,6 +32,16 @@ function App() {
   useEffect(() => {
     getSetting(SHORTCUT_KEY).then((v) => {
       if (v && v !== DEFAULT_SHORTCUT) void setGlobalShortcut(v);
+    });
+  }, []);
+
+  // Sync the persisted close-to-tray preference into Rust managed state (which
+  // defaults to ON) so the window-close handler honours a saved "off".
+  useEffect(() => {
+    getSetting(CLOSE_TO_TRAY_KEY).then((v) => {
+      void invoke("set_close_to_tray", {
+        enabled: v === null ? true : v === "1",
+      });
     });
   }, []);
 
@@ -61,6 +76,7 @@ function App() {
           <div className="flex flex-1 flex-col items-center gap-4 overflow-y-auto">
             <ApiKeys />
             <ShortcutSetting />
+            <CloseToTraySetting />
           </div>
         ) : (
           <ChatView />
