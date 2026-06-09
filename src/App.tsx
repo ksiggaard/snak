@@ -14,6 +14,7 @@ import {
 } from "@/components/settings/CloseToTray";
 import { Plugins } from "@/components/settings/Plugins";
 import { McpServers } from "@/components/settings/McpServers";
+import { Skills } from "@/components/settings/Skills";
 import { Themes } from "@/components/settings/Themes";
 import { Memory } from "@/components/settings/Memory";
 import { ChatView } from "@/components/chat/ChatView";
@@ -129,6 +130,7 @@ function App() {
             <CloseToTraySetting />
             <Themes />
             <McpServers />
+            <Skills />
             <Plugins />
           </div>
         ) : showUsage ? (

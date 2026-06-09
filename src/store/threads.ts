@@ -19,6 +19,8 @@ import {
 import { cancelStream, chatStream, type ApiMessage } from "@/lib/chat";
 import { loadThreadMessages, type MessageView } from "@/lib/messages";
 import { buildProjectSystemText } from "@/lib/projects";
+import { buildSkillsSystemText } from "@/lib/skills";
+import { selectRegistry, usePlugins } from "@/store/plugins";
 import { buildGlobalSystemText } from "@/lib/systemContext";
 import { PROVIDERS } from "@/lib/providers";
 import type { PreparedImage } from "@/lib/image";
@@ -286,6 +288,18 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           images: [],
         });
       }
+
+      // Enabled skills (T15): instruction packs from `skill` plugins, alongside
+      // the global guidance — unshifted last so they lead the system context.
+      const skillsSystemText = buildSkillsSystemText(
+        selectRegistry(usePlugins.getState()).skills,
+      ); // T15 wire-in
+      if (skillsSystemText)
+        history.unshift({
+          role: "system",
+          content: skillsSystemText,
+          images: [],
+        });
 
       // Stream the reply, appending a placeholder assistant bubble on the
       // first delta and growing it as chunks arrive.
