@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -10,36 +10,24 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useProviders } from "@/lib/providers";
-import { deleteApiKey, hasApiKey, setApiKey } from "@/lib/keys";
+import { deleteApiKey, setApiKey } from "@/lib/keys";
+import { useKeys } from "@/store/keys";
 import type { Provider } from "@/types/db";
 
-type Statuses = Partial<Record<Provider, boolean>>;
 type Drafts = Partial<Record<Provider, string>>;
 
 export function ApiKeys() {
   // Only enabled provider plugins get a key row (T18) — disabling a provider
   // removes it from the settings list.
   const providers = useProviders();
-  const [statuses, setStatuses] = useState<Statuses>({});
+  // Presence comes from the cached keys store (no keychain reads on open). The
+  // store is loaded app-wide in App; save/remove keep its cache in sync.
+  const present = useKeys((s) => s.present);
+  const keysLoaded = useKeys((s) => s.loaded);
+  const setPresent = useKeys((s) => s.setPresent);
   const [drafts, setDrafts] = useState<Drafts>({});
   const [busy, setBusy] = useState<Provider | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  async function refresh(provider: Provider) {
-    const present = await hasApiKey(provider);
-    setStatuses((s) => ({ ...s, [provider]: present }));
-  }
-
-  // Load presence for every enabled provider. Re-runs if the enabled set changes
-  // (a newly-enabled provider gets its status checked). Keyed on the id list to
-  // keep the dependency primitive and stable.
-  const providerKey = providers.map((p) => p.id).join(",");
-  useEffect(() => {
-    Promise.all(providers.map((p) => refresh(p.id))).catch((e) =>
-      setError(e instanceof Error ? e.message : String(e)),
-    );
-    // providers is recomputed each render; providerKey captures its identity.
-  }, [providerKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function save(provider: Provider) {
     const key = (drafts[provider] ?? "").trim();
@@ -50,7 +38,7 @@ export function ApiKeys() {
       await setApiKey(provider, key);
       // Drop the plaintext from component state immediately after storing.
       setDrafts((d) => ({ ...d, [provider]: "" }));
-      await refresh(provider);
+      await setPresent(provider, true);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -63,7 +51,7 @@ export function ApiKeys() {
     setError(null);
     try {
       await deleteApiKey(provider);
-      await refresh(provider);
+      await setPresent(provider, false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -87,7 +75,7 @@ export function ApiKeys() {
           </p>
         )}
         {providers.map((p) => {
-          const saved = statuses[p.id];
+          const saved = keysLoaded ? present.has(p.id) : undefined;
           const draft = drafts[p.id] ?? "";
           const isBusy = busy === p.id;
           return (

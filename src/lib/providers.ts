@@ -36,7 +36,12 @@ export interface ProviderMeta {
  * contributions to this set, guarding against a malformed/unknown manifest
  * injecting an undispatchable provider into the UI.
  */
-const KNOWN_PROVIDER_IDS = ["anthropic", "openai", "mistral", "gemini"] as const;
+export const KNOWN_PROVIDER_IDS = [
+  "anthropic",
+  "openai",
+  "mistral",
+  "gemini",
+] as const;
 
 function isKnownProvider(id: string): id is Provider {
   return (KNOWN_PROVIDER_IDS as readonly string[]).includes(id);

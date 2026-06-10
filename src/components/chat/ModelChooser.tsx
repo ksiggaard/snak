@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { useModels } from "@/store/models";
+import { useKeys } from "@/store/keys";
 import { useProviders } from "@/lib/providers";
 import { buildModelOptions, currentModelLabel } from "@/lib/modelOptions";
-import { hasApiKey } from "@/lib/keys";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,26 +45,12 @@ export function ModelChooser({
     model,
   );
 
-  // Which enabled providers have a stored API key. Resolved async (like
-  // ApiKeys.tsx); recomputed when the provider list changes.
-  const [keyed, setKeyed] = useState<Set<Provider> | null>(null);
-  const providerKey = providers.map((p) => p.id).join(",");
-  useEffect(() => {
-    let active = true;
-    void Promise.all(
-      providers.map((p) => hasApiKey(p.id).then((ok) => [p.id, ok] as const)),
-    )
-      .then((pairs) => {
-        if (active) setKeyed(new Set(pairs.filter(([, ok]) => ok).map(([id]) => id)));
-      })
-      .catch(() => {
-        if (active) setKeyed(new Set());
-      });
-    return () => {
-      active = false;
-    };
-    // providerKey captures the provider-list identity (primitive, stable).
-  }, [providerKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Which providers have a stored key — from the cached keys store (no keychain
+  // reads, so opening the picker never triggers an OS prompt). `null` until the
+  // cache has loaded so the menu shows a brief "Loading…".
+  const present = useKeys((s) => s.present);
+  const keysLoaded = useKeys((s) => s.loaded);
+  const keyed = keysLoaded ? present : null;
 
   const options =
     keyed === null ? [] : buildModelOptions(providers, keyed, models, { provider, model });

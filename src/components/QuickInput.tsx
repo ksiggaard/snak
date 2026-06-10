@@ -15,6 +15,7 @@ import {
 } from "@/store/threads";
 import { usePlugins } from "@/store/plugins";
 import { useModels } from "@/store/models";
+import { useKeys } from "@/store/keys";
 import { PROVIDERS } from "@/lib/providers";
 import type { Provider } from "@/types/db";
 
@@ -42,6 +43,7 @@ export function QuickInput() {
     let active = true;
     void usePlugins.getState().load();
     void useModels.getState().load();
+    void useKeys.getState().load();
     void Promise.all([
       getSetting(DEFAULT_PROVIDER_KEY),
       getSetting(DEFAULT_MODEL_KEY),

@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Maximize2, Paperclip, Square, TerminalSquare, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Canvas } from "@/components/chat/Canvas";
 import { ModelPicker } from "@/components/chat/ModelPicker";
 import { prepareImage, type PreparedImage } from "@/lib/image";
-import { hasApiKey } from "@/lib/keys";
 import { useProviders } from "@/lib/providers";
 import { openInTerminal } from "@/lib/terminal";
 import {
@@ -17,6 +16,7 @@ import {
 } from "@/lib/slashCommands";
 import { selectRegistry, usePlugins } from "@/store/plugins";
 import { useThreads } from "@/store/threads";
+import { useKeys } from "@/store/keys";
 import type { Provider } from "@/types/db";
 
 interface ComposerProps {
@@ -83,25 +83,12 @@ export function Composer({
   const showPalette =
     paletteOpen && isSlashPrefix && !hasArgsYet && matches.length > 0;
 
-  // Whether the selected provider has a stored API key. The value is reset to
-  // `unknown` synchronously at render when the provider changes (the sanctioned
-  // render-time sync pattern), then resolved by an async keychain check; the
-  // cleanup flag drops a stale result if the provider switched again first.
-  const [keyReady, setKeyReady] = useState<boolean | null>(null);
-  const [checkedProvider, setCheckedProvider] = useState<Provider>(provider);
-  if (provider !== checkedProvider) {
-    setCheckedProvider(provider);
-    setKeyReady(null);
-  }
-  useEffect(() => {
-    let active = true;
-    void hasApiKey(provider).then((ok) => {
-      if (active) setKeyReady(ok);
-    });
-    return () => {
-      active = false;
-    };
-  }, [provider]);
+  // Whether the selected provider has a stored API key — from the cached keys
+  // store (no keychain prompt). `null` while the cache is still loading, which
+  // matches the previous "checking" state so Send isn't blocked before we know.
+  const keyPresent = useKeys((s) => s.present);
+  const keysLoaded = useKeys((s) => s.loaded);
+  const keyReady = keysLoaded ? keyPresent.has(provider) : null;
 
   async function addFiles(files: Iterable<File>) {
     const imageFiles = Array.from(files).filter((f) =>

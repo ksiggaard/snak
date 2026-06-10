@@ -26,6 +26,7 @@ import { useThreads } from "@/store/threads";
 import { useProjects } from "@/store/projects";
 import { usePlugins } from "@/store/plugins";
 import { useModels } from "@/store/models";
+import { useKeys } from "@/store/keys";
 import { useSearch } from "@/store/search";
 import { useTheme } from "@/store/theme";
 import { useView } from "@/store/view";
@@ -37,6 +38,7 @@ function App() {
   const loadPlugins = usePlugins((s) => s.load);
   const loadInstalledThemes = useTheme((s) => s.loadInstalled);
   const loadModels = useModels((s) => s.load);
+  const loadKeys = useKeys((s) => s.load);
   const openProjectId = useProjects((s) => s.openProjectId);
   const searchOpen = useSearch((s) => s.open);
   const view = useView((s) => s.view);
@@ -49,6 +51,10 @@ function App() {
   useEffect(() => {
     void init();
     void initProjects();
+    // Cached API-key presence (model picker / composer / API-key settings read
+    // it) — avoids reading the keychain at startup. Runs a one-time keychain
+    // backfill the first time, then never touches the keychain again.
+    void loadKeys();
     // Load the plugin registry app-wide (T18) so the active provider list is
     // correct on first paint — ModelPicker / ApiKeys / send-gating all read it.
     void loadPlugins();
@@ -57,7 +63,7 @@ function App() {
     // in the Themes settings card when it mounts.
     void loadInstalledThemes();
     void loadModels();
-  }, [init, initProjects, loadPlugins, loadInstalledThemes, loadModels]);
+  }, [init, initProjects, loadKeys, loadPlugins, loadInstalledThemes, loadModels]);
 
   // Apply the user's saved global shortcut (Rust registers the default already).
   useEffect(() => {
