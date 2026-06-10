@@ -38,16 +38,21 @@ export function QuickInput() {
   // This window doesn't run App's init, so load the data the model chooser needs
   // (enabled providers + models), and seed the selection from the persisted default.
   useEffect(() => {
+    let active = true;
     void usePlugins.getState().load();
     void useModels.getState().load();
     void Promise.all([
       getSetting(DEFAULT_PROVIDER_KEY),
       getSetting(DEFAULT_MODEL_KEY),
     ]).then(([dp, dm]) => {
+      if (!active) return;
       const def = resolveDefault(dp, dm);
       setProvider(def.provider);
       setModel(def.model);
     });
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Focus the field whenever the overlay gains focus (i.e. each time it's shown).
