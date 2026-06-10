@@ -603,20 +603,16 @@ export async function listModels(): Promise<Model[]> {
 /** Add a model for a provider (appended after that provider's current rows). */
 export async function addModel(input: {
   provider: Provider;
-  model_id: string;
+  modelId: string;
   label: string;
 }): Promise<void> {
   const db = await getDb();
-  const rows = await db.select<{ next: number }[]>(
-    `SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
-       FROM models WHERE provider = $1`,
-    [input.provider],
-  );
-  const sortOrder = rows[0]?.next ?? 0;
+  // Single statement so the sort_order computation and insert can't race.
   await db.execute(
     `INSERT INTO models (provider, model_id, label, sort_order)
-     VALUES ($1, $2, $3, $4)`,
-    [input.provider, input.model_id, input.label, sortOrder],
+     SELECT $1, $2, $3, COALESCE(MAX(sort_order), -1) + 1
+       FROM models WHERE provider = $4`,
+    [input.provider, input.modelId, input.label, input.provider],
   );
 }
 
