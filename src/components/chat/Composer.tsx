@@ -374,7 +374,7 @@ export function Composer({
           }
         }}
         placeholder="Type a message…  ( / for commands · Enter to send · Shift+Enter for newline )"
-        className="max-h-[260px] resize-none"
+        className="max-h-[260px] resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
         onKeyDown={(e) => {
           // Palette navigation takes priority over send/newline.
           if (showPalette) {

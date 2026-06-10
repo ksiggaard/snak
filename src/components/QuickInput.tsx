@@ -179,7 +179,7 @@ export function QuickInput() {
             }
           }}
           placeholder="Ask anything…  (Enter to start a chat, Esc to dismiss)"
-          className="max-h-[320px] resize-none border-0 shadow-none focus-visible:ring-0"
+          className="max-h-[320px] resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
           autoFocus
         />
 
