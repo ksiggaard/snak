@@ -354,6 +354,9 @@ export interface DailyUsage {
   /** Local "YYYY-MM-DD". */
   day: string;
   total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_tokens: number;
   responses: number;
 }
 
@@ -426,6 +429,9 @@ export async function dailyUsage(): Promise<DailyUsage[]> {
   const db = await getDb();
   return db.select<DailyUsage[]>(
     `SELECT date(created_at, 'localtime') AS day,
+            SUM(input_tokens)                              AS input_tokens,
+            SUM(output_tokens)                             AS output_tokens,
+            SUM(cache_creation_tokens + cache_read_tokens) AS cache_tokens,
             SUM(input_tokens + output_tokens
                 + cache_creation_tokens + cache_read_tokens) AS total_tokens,
             COUNT(*) AS responses
