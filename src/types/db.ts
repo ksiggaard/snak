@@ -34,6 +34,15 @@ export interface ProjectFile {
   created_at: string;
 }
 
+export interface Model {
+  id: number;
+  provider: Provider;
+  model_id: string;
+  /** Friendly display label, e.g. "Opus 4.8". */
+  label: string;
+  sort_order: number;
+}
+
 export interface Message {
   id: string;
   thread_id: string;

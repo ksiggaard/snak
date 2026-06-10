@@ -4,6 +4,7 @@ import type {
   Attachment,
   AttachmentKind,
   Message,
+  Model,
   Project,
   ProjectFile,
   Provider,
@@ -583,4 +584,44 @@ async function searchHistoryLike(
   );
 
   return [...titleHits, ...messageHits].slice(0, SEARCH_LIMIT);
+}
+
+// ---------------------------------------------------------------------------
+// Models (configurable per-provider model list)
+// ---------------------------------------------------------------------------
+
+/** All configured models, ordered by provider then sort_order. */
+export async function listModels(): Promise<Model[]> {
+  const db = await getDb();
+  return db.select<Model[]>(
+    `SELECT id, provider, model_id, label, sort_order
+       FROM models
+      ORDER BY provider, sort_order, label`,
+  );
+}
+
+/** Add a model for a provider (appended after that provider's current rows). */
+export async function addModel(input: {
+  provider: Provider;
+  model_id: string;
+  label: string;
+}): Promise<void> {
+  const db = await getDb();
+  const rows = await db.select<{ next: number }[]>(
+    `SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
+       FROM models WHERE provider = $1`,
+    [input.provider],
+  );
+  const sortOrder = rows[0]?.next ?? 0;
+  await db.execute(
+    `INSERT INTO models (provider, model_id, label, sort_order)
+     VALUES ($1, $2, $3, $4)`,
+    [input.provider, input.model_id, input.label, sortOrder],
+  );
+}
+
+/** Delete a model by id. */
+export async function deleteModel(id: number): Promise<void> {
+  const db = await getDb();
+  await db.execute(`DELETE FROM models WHERE id = $1`, [id]);
 }
