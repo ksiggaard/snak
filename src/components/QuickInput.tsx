@@ -15,6 +15,7 @@ export function QuickInput() {
   const [text, setText] = useState("");
   const [images, setImages] = useState<PreparedImage[]>([]);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Focus the field whenever the overlay gains focus (i.e. each time it's shown).
@@ -39,12 +40,15 @@ export function QuickInput() {
 
   async function screenshot() {
     setBusy(true);
+    setError(null);
     try {
       const base64 = await takeScreenshot();
       if (base64) {
         const img = await screenshotToImage(base64);
         setImages((prev) => [...prev, img]);
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
       textareaRef.current?.focus();
@@ -54,6 +58,7 @@ export function QuickInput() {
   function reset() {
     setText("");
     setImages([]);
+    setError(null);
   }
 
   async function submit() {
@@ -93,6 +98,10 @@ export function QuickInput() {
               </div>
             ))}
           </div>
+        )}
+
+        {error && (
+          <p className="text-destructive text-xs px-1">{error}</p>
         )}
 
         <Textarea
