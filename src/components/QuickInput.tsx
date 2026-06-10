@@ -3,6 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Camera, Paperclip, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { ModelChooser } from "@/components/chat/ModelChooser";
 import { prepareImage, type PreparedImage } from "@/lib/image";
 import { hideQuick, submitQuick, takeScreenshot, setQuickHeight } from "@/lib/quick";
@@ -125,7 +126,8 @@ export function QuickInput() {
   }
 
   return (
-    <div className="flex h-screen items-start justify-center p-2">
+    <TooltipProvider delayDuration={300}>
+      <div className="flex h-screen items-start justify-center p-2">
       <div
         ref={panelRef}
         className="bg-popover text-popover-foreground flex w-full flex-col gap-2 rounded-xl border p-3 shadow-2xl"
@@ -209,7 +211,8 @@ export function QuickInput() {
           </Button>
         </div>
       </div>
-    </div>
+      </div>
+    </TooltipProvider>
   );
 }
 
