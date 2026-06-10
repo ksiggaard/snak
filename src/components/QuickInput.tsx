@@ -19,7 +19,7 @@ import { PROVIDERS } from "@/lib/providers";
 import type { Provider } from "@/types/db";
 
 /** Overlay window minimum height (matches the Rust clamp floor). */
-const QUICK_MIN_HEIGHT = 160;
+const QUICK_MIN_HEIGHT = 120;
 
 async function screenshotToImage(base64Png: string): Promise<PreparedImage> {
   const res = await fetch(`data:image/png;base64,${base64Png}`);
