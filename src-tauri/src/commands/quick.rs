@@ -39,6 +39,7 @@ pub fn hide_quick(app: AppHandle) {
 /// the webview measures its content and calls this as the panel grows/shrinks.
 #[tauri::command]
 pub fn set_quick_height(app: AppHandle, height: f64) {
+    // WIDTH must match the "quick" window width declared in tauri.conf.json.
     const WIDTH: f64 = 640.0;
     const MIN: f64 = 160.0;
     const MAX: f64 = 480.0;
