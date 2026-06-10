@@ -219,7 +219,7 @@ export function Composer({
 
   return (
     <div
-      className="flex flex-col gap-2 border-t p-3"
+      className="bg-card flex flex-col gap-2 rounded-xl border p-3"
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
@@ -237,13 +237,7 @@ export function Composer({
           onClose={() => setCanvasOpen(false)}
         />
       )}
-      {/* Compact model picker relocated from the old header (T25) — kept right
-          above the input so the active model is one glance/click from sending.
-          Min height reserves space so the picker resolving from null→select
-          doesn't shift the composer. */}
-      <div className="flex min-h-9 items-center">
-        <ModelPicker />
-      </div>
+
       {!providerEnabled &&
         (anyProvider ? (
           <p className="text-muted-foreground text-xs">
@@ -351,20 +345,69 @@ export function Composer({
         </div>
       )}
 
-      <div className="flex items-end gap-2">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          hidden
-          onChange={(e) => {
-            if (e.target.files) void addFiles(e.target.files);
-            e.target.value = "";
-          }}
-        />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={(e) => {
+          if (e.target.files) void addFiles(e.target.files);
+          e.target.value = "";
+        }}
+      />
+      <Textarea
+        value={text}
+        onChange={(e) => {
+          const v = e.target.value;
+          setText(v);
+          // Open the palette when the user starts a slash command; reset the
+          // highlight to the top as the filter changes.
+          setPaletteOpen(v.startsWith("/") && !v.startsWith("//"));
+          setPaletteIndex(0);
+        }}
+        onPaste={(e) => {
+          const files = Array.from(e.clipboardData.files);
+          if (files.some((f) => f.type.startsWith("image/"))) {
+            e.preventDefault();
+            void addFiles(files);
+          }
+        }}
+        placeholder="Type a message…  ( / for commands · Enter to send · Shift+Enter for newline )"
+        className="max-h-[260px] resize-none"
+        onKeyDown={(e) => {
+          // Palette navigation takes priority over send/newline.
+          if (showPalette) {
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setPaletteIndex((i) => (i + 1) % matches.length);
+              return;
+            }
+            if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setPaletteIndex((i) => (i - 1 + matches.length) % matches.length);
+              return;
+            }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              setPaletteOpen(false);
+              return;
+            }
+            if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+              e.preventDefault();
+              pickCommand(matches[Math.min(paletteIndex, matches.length - 1)]);
+              return;
+            }
+          }
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            send();
+          }
+        }}
+      />
+      <div className="flex items-center gap-2">
         <Button
-          variant="outline"
+          variant="ghost"
           size="icon"
           aria-label="Attach image"
           disabled={composeDisabled}
@@ -373,7 +416,7 @@ export function Composer({
           <Paperclip className="size-4" />
         </Button>
         <Button
-          variant="outline"
+          variant="ghost"
           size="icon"
           aria-label="Open canvas"
           title="Open canvas — a larger editor with live Markdown preview"
@@ -382,56 +425,8 @@ export function Composer({
         >
           <Maximize2 className="size-4" />
         </Button>
-        <Textarea
-          value={text}
-          onChange={(e) => {
-            const v = e.target.value;
-            setText(v);
-            // Open the palette when the user starts a slash command; reset the
-            // highlight to the top as the filter changes.
-            setPaletteOpen(v.startsWith("/") && !v.startsWith("//"));
-            setPaletteIndex(0);
-          }}
-          onPaste={(e) => {
-            const files = Array.from(e.clipboardData.files);
-            if (files.some((f) => f.type.startsWith("image/"))) {
-              e.preventDefault();
-              void addFiles(files);
-            }
-          }}
-          placeholder="Type a message…  ( / for commands · Enter to send · Shift+Enter for newline )"
-          rows={2}
-          className="max-h-40 min-h-0 resize-none"
-          onKeyDown={(e) => {
-            // Palette navigation takes priority over send/newline.
-            if (showPalette) {
-              if (e.key === "ArrowDown") {
-                e.preventDefault();
-                setPaletteIndex((i) => (i + 1) % matches.length);
-                return;
-              }
-              if (e.key === "ArrowUp") {
-                e.preventDefault();
-                setPaletteIndex((i) => (i - 1 + matches.length) % matches.length);
-                return;
-              }
-              if (e.key === "Escape") {
-                e.preventDefault();
-                setPaletteOpen(false);
-                return;
-              }
-              if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
-                e.preventDefault();
-                pickCommand(matches[Math.min(paletteIndex, matches.length - 1)]);
-                return;
-              }
-            }
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              send();
-            }
-          }}
-        />
+        <div className="flex-1" />
+        <ModelPicker />
         {busy ? (
           <Button
             type="button"
