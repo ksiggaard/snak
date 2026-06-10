@@ -78,12 +78,17 @@ function App() {
 
   // Quick-input overlay submissions start a new thread in this (main) window.
   useEffect(() => {
-    const { startNewChat, send } = useThreads.getState();
+    const { startNewChat, send, setProviderModel } = useThreads.getState();
     const unlisten = listen<QuickPayload>("quick-submit", (e) => {
       useProjects.getState().close();
       useView.getState().showChat();
       setMobileOpen(false);
       startNewChat();
+      // Apply the model chosen in the overlay to the fresh draft (set
+      // synchronously when there's no current thread) so the new thread uses it.
+      if (e.payload.provider && e.payload.model) {
+        void setProviderModel(e.payload.provider, e.payload.model);
+      }
       void send(e.payload.text, e.payload.images);
     });
     return () => {
