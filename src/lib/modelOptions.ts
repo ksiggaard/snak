@@ -67,3 +67,21 @@ export function buildModelOptions(
   }
   return options;
 }
+
+/** The display strings for the currently-selected provider+model. Pure; resolves
+ *  synchronously from the models list + provider registry (no key lookup), so the
+ *  picker trigger can render immediately without a mount flash. Falls back to the
+ *  raw ids when the model/provider isn't found (e.g. a since-disabled provider). */
+export function currentModelLabel(
+  providers: ProviderMeta[],
+  models: Model[],
+  provider: Provider,
+  model: string,
+): { label: string; providerLabel: string } {
+  const m = models.find((x) => x.provider === provider && x.model_id === model);
+  const p = providers.find((x) => x.id === provider);
+  return {
+    label: m?.label ?? model,
+    providerLabel: p?.label ?? provider,
+  };
+}

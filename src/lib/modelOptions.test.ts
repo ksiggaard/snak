@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildModelOptions } from "@/lib/modelOptions";
+import { buildModelOptions, currentModelLabel } from "@/lib/modelOptions";
 import type { ProviderMeta } from "@/lib/providers";
 import type { Model, Provider } from "@/types/db";
 
@@ -75,5 +75,25 @@ describe("buildModelOptions", () => {
 
   it("returns [] when nothing qualifies and there is no current combo", () => {
     expect(buildModelOptions(providers, new Set(), models, null)).toEqual([]);
+  });
+});
+
+describe("currentModelLabel", () => {
+  it("returns the model's friendly label and provider label", () => {
+    expect(currentModelLabel(providers, models, "anthropic", "claude-opus-4-8")).toEqual({
+      label: "Opus 4.8",
+      providerLabel: "Anthropic",
+    });
+  });
+
+  it("falls back to the raw model id and provider id when not found", () => {
+    expect(currentModelLabel(providers, models, "anthropic", "claude-unknown")).toEqual({
+      label: "claude-unknown",
+      providerLabel: "Anthropic",
+    });
+    expect(currentModelLabel([], [], "mistral", "mistral-large-latest")).toEqual({
+      label: "mistral-large-latest",
+      providerLabel: "mistral",
+    });
   });
 });
