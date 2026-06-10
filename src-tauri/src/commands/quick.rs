@@ -3,13 +3,47 @@
 //! (which owns the chat/DB logic) via the `quick-submit` event.
 
 use base64::{engine::general_purpose::STANDARD, Engine};
-use tauri::{AppHandle, Emitter, LogicalSize, Manager};
+use std::sync::atomic::{AtomicBool, Ordering};
+use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewWindow};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
-/// Show + center + focus the quick-input overlay. Called by the shortcut handler.
+/// Whether the overlay has been placed yet this session. Once it has (on the
+/// first show), we leave it wherever it sits — so a user drag sticks until the
+/// app restarts, at which point it returns to the lower-middle default.
+static POSITIONED: AtomicBool = AtomicBool::new(false);
+
+/// Fraction of the monitor height at which the overlay's *bottom* edge sits by
+/// default ("lower-middle"). The panel grows upward from this anchor.
+const BOTTOM_ANCHOR_FRAC: f64 = 0.80;
+
+/// Place the overlay horizontally centered with its bottom edge at
+/// `BOTTOM_ANCHOR_FRAC` of the monitor height. Falls back to the OS center if
+/// monitor info is unavailable.
+fn position_lower_middle(w: &WebviewWindow) {
+    let Ok(Some(monitor)) = w.current_monitor() else {
+        let _ = w.center();
+        return;
+    };
+    let scale = monitor.scale_factor();
+    let msize = monitor.size().to_logical::<f64>(scale);
+    let mpos = monitor.position().to_logical::<f64>(scale);
+    let wsize = w
+        .outer_size()
+        .map(|s| s.to_logical::<f64>(scale))
+        .unwrap_or_else(|_| LogicalSize::new(640.0, 120.0));
+    let x = mpos.x + (msize.width - wsize.width) / 2.0;
+    let bottom = mpos.y + msize.height * BOTTOM_ANCHOR_FRAC;
+    let _ = w.set_position(LogicalPosition::new(x, bottom - wsize.height));
+}
+
+/// Show + focus the quick-input overlay. Called by the shortcut handler.
 pub fn show_quick(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("quick") {
-        let _ = w.center();
+        // Position to the lower-middle default only the first time it's shown this
+        // session; afterwards keep wherever it sits (including any user drag).
+        if !POSITIONED.swap(true, Ordering::Relaxed) {
+            position_lower_middle(&w);
+        }
         let _ = w.show();
         let _ = w.set_focus();
     }
@@ -44,7 +78,19 @@ pub fn set_quick_height(app: AppHandle, height: f64) {
     const MIN: f64 = 120.0;
     const MAX: f64 = 480.0;
     if let Some(w) = app.get_webview_window("quick") {
-        let _ = w.set_size(LogicalSize::new(WIDTH, height.clamp(MIN, MAX)));
+        let new_h = height.clamp(MIN, MAX);
+        // Grow/shrink from a fixed bottom edge (the lower-middle default, or
+        // wherever the user dragged it) so the panel expands upward and never
+        // runs off the bottom of the screen as it gets taller.
+        if let (Ok(scale), Ok(pos), Ok(size)) =
+            (w.scale_factor(), w.outer_position(), w.outer_size())
+        {
+            let p = pos.to_logical::<f64>(scale);
+            let s = size.to_logical::<f64>(scale);
+            let bottom = p.y + s.height;
+            let _ = w.set_position(LogicalPosition::new(p.x, bottom - new_h));
+        }
+        let _ = w.set_size(LogicalSize::new(WIDTH, new_h));
     }
 }
 

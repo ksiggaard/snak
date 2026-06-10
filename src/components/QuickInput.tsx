@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { type MouseEvent, useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Camera, Paperclip, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -125,12 +125,21 @@ export function QuickInput() {
     await hideQuick();
   }
 
+  // Drag the frameless overlay by pressing its empty background — the panel's
+  // own padding/gaps or the toolbar spacer (target === currentTarget), never
+  // the textarea, buttons, or image previews (which are nested children).
+  function startDrag(e: MouseEvent<HTMLDivElement>) {
+    if (e.button !== 0 || e.target !== e.currentTarget) return;
+    void getCurrentWindow().startDragging();
+  }
+
   return (
     <TooltipProvider delayDuration={300}>
       <div className="flex h-screen items-start justify-center p-2">
       <div
         ref={panelRef}
-        className="bg-popover text-popover-foreground flex w-full flex-col gap-2 rounded-xl border p-3 shadow-2xl"
+        onMouseDown={startDrag}
+        className="bg-popover text-popover-foreground flex w-full cursor-grab flex-col gap-2 rounded-xl border p-3 shadow-2xl active:cursor-grabbing"
       >
         {images.length > 0 && (
           <div className="flex flex-wrap gap-2">
@@ -194,7 +203,10 @@ export function QuickInput() {
           >
             <Camera className="size-4" />
           </Button>
-          <div className="flex-1" />
+          <div
+            className="flex-1 cursor-grab self-stretch active:cursor-grabbing"
+            onMouseDown={startDrag}
+          />
           <ModelChooser
             provider={provider}
             model={model}
