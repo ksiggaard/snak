@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Card,
   CardContent,
@@ -6,46 +5,33 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { useThreads } from "@/store/threads";
+import { useModels } from "@/store/models";
 import { useProviders } from "@/lib/providers";
-import type { Provider } from "@/types/db";
+import { buildModelOptions } from "@/lib/modelOptions";
 
 /**
- * Default-model settings: the provider+model new chats and the quick-input
- * overlay start from. Mirrors ModelPicker's UX (provider dropdown + free-text
- * model; switching provider prefills its defaultModel) but writes the persisted
- * default via `setDefaultModel` instead of the current thread/draft.
+ * Default-model settings: the provider+model new chats (and the quick-input
+ * overlay) start from. Picks from the configured model list (Settings →
+ * Models). Key-agnostic — you may set a default before adding the key — so it
+ * lists all configured models for enabled providers.
  */
 export function DefaultModel() {
   const provider = useThreads((s) => s.defaultProvider);
   const model = useThreads((s) => s.defaultModel);
   const setDefaultModel = useThreads((s) => s.setDefaultModel);
+  const models = useModels((s) => s.models);
   const providers = useProviders();
 
-  const providerEnabled = providers.some((p) => p.id === provider);
-  const allDisabled = providers.length === 0;
-
-  // Local model draft so typing doesn't persist on every keystroke; re-sync at
-  // render (not via effect) when the stored model changes.
-  const [modelDraft, setModelDraft] = useState(model);
-  const [syncedModel, setSyncedModel] = useState(model);
-  if (model !== syncedModel) {
-    setSyncedModel(model);
-    setModelDraft(model);
-  }
-
-  function onProviderChange(p: Provider) {
-    const meta = providers.find((x) => x.id === p);
-    if (!meta) return; // ignore the inert disabled-provider option
-    void setDefaultModel(p, meta.defaultModel);
-  }
-
-  function commitModel() {
-    const m = modelDraft.trim();
-    if (m && m !== model) void setDefaultModel(provider, m);
-    else setModelDraft(model);
-  }
+  // All enabled providers count as selectable here (not filtered by API key).
+  const allEnabled = new Set(providers.map((p) => p.id));
+  const options = buildModelOptions(providers, allEnabled, models, {
+    provider,
+    model,
+  });
+  const selectedIndex = options.findIndex(
+    (o) => o.provider === provider && o.modelId === model,
+  );
 
   return (
     <Card className="w-full max-w-lg">
@@ -53,46 +39,31 @@ export function DefaultModel() {
         <CardTitle>Default Model</CardTitle>
         <CardDescription>
           The provider and model new chats (and the quick-input overlay) start
-          with. You can still change the model per chat from the top bar.
+          with. You can still change it per chat from the top bar, and manage
+          the list in Settings → Models.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {allDisabled ? (
+        {options.length === 0 ? (
           <p className="text-muted-foreground text-sm">
-            No providers enabled — enable one in Settings → Plugins.
+            No models configured — add some in Settings → Models.
           </p>
         ) : (
-          <div className="flex items-center gap-2">
-            <select
-              value={provider}
-              onChange={(e) => onProviderChange(e.target.value as Provider)}
-              className="border-input bg-background h-9 rounded-md border px-2 text-sm"
-            >
-              {!providerEnabled && (
-                <option value={provider} disabled>
-                  {provider} (disabled)
-                </option>
-              )}
-              {providers.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-            <Input
-              value={modelDraft}
-              onChange={(e) => setModelDraft(e.target.value)}
-              onBlur={commitModel}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  commitModel();
-                }
-              }}
-              className="h-9 w-56 text-sm"
-              aria-label="Default model"
-            />
-          </div>
+          <select
+            value={selectedIndex >= 0 ? selectedIndex : 0}
+            onChange={(e) => {
+              const opt = options[Number(e.target.value)];
+              if (opt) void setDefaultModel(opt.provider, opt.modelId);
+            }}
+            className="border-input bg-background h-9 max-w-72 rounded-md border px-2 text-sm"
+            aria-label="Default model"
+          >
+            {options.map((o, i) => (
+              <option key={`${o.provider}:${o.modelId}`} value={i}>
+                {o.display}
+              </option>
+            ))}
+          </select>
         )}
       </CardContent>
     </Card>
