@@ -810,3 +810,162 @@ the project. (Conceptually like Claude/ChatGPT "Projects".)
   pane. DB helpers + types are additive. Verified: `npm run build`/`lint`/`test` (49 pass, 10
   new for `buildProjectSystemText`/`projectFilesSize`), `cargo build`/`clippy`/`fmt --check`/
   `test` all clean.
+
+---
+
+## T21 — Responsive layout (adapt the UI from narrow to wide)
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P1 (usability across window sizes; the app is meant to run small/quick too)
+- **Layer:** React (Tailwind)
+- **Depends on:** —
+
+The app chrome assumes a wide window: the sidebar (`src/components/sidebar/ThreadList.tsx`,
+fixed `w-64`), the header (`src/App.tsx`), the two-pane Settings (`src/components/settings/
+SettingsView.tsx`), and the composer. Make the layout adapt cleanly from narrow to wide so
+nothing clips or overflows. (The fixed-size quick-input overlay is out of scope.)
+
+**Acceptance criteria:**
+- At narrow widths the sidebar collapses or overlays instead of squeezing the chat column;
+  the Settings two-pane stacks (or its section nav collapses to a dropdown/scroller).
+- Header controls (title, `ModelPicker`, Usage/Settings buttons, `ThemeToggle`) wrap or
+  condense rather than overflowing.
+- No horizontal scrollbars or clipped controls between roughly 480px and 1400px wide.
+- Prefer Tailwind responsive utilities over JS resize listeners.
+
+**Notes:** Composes with T22 (resizable/toggleable sidebar) and T25 (moving chrome into the sidebar).
+
+---
+
+## T22 — Resizable sidebar + show/hide toggle
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P1 (reclaim space; pairs with T21)
+- **Layer:** React
+- **Depends on:** —
+
+The sidebar (`ThreadList.tsx`) is a fixed `w-64`. Make it user-resizable by dragging its
+edge, and add a button to toggle it hidden/shown.
+
+**Acceptance criteria:**
+- A drag handle on the sidebar's right edge resizes its width within a sensible min/max;
+  the chosen width persists (localStorage, mirroring the theme preference, or the `settings`
+  table).
+- A toggle button (header or sidebar) hides/shows the sidebar; the open/closed state persists.
+- The chat column reflows to fill the freed space; behaves well with T21 responsive rules.
+
+---
+
+## T23 — Favorite chats (Favorites section in the sidebar)
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P2
+- **Layer:** React + Rust (migration)
+- **Depends on:** —
+
+Let the user favorite a thread and surface a Favorites group at the top of the sidebar.
+
+**Acceptance criteria:**
+- A new numbered migration (next version after `006_models.sql`) adds a `favorite` flag to
+  `threads` (e.g. `favorite INTEGER NOT NULL DEFAULT 0`); register it in `lib.rs` — never
+  edit a shipped migration.
+- `Thread` type gains the field; a typed helper in `src/lib/db.ts` and a `store/threads.ts`
+  action toggle it.
+- `ThreadList` renders a Favorites group above the normal/grouped list, with a star toggle
+  per thread.
+- Existing threads default to not-favorited; list ordering stays stable.
+
+---
+
+## T24 — Sidebar mode shift: Chats vs Projects
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P2
+- **Layer:** React
+- **Depends on:** T20
+
+Projects (T20) take up too much sidebar space by default. Add a mode switch so the sidebar
+shows either Chats or Projects, not both at once.
+
+**Acceptance criteria:**
+- A segmented control / tabs at the top of `ThreadList` switches between "Chats" and
+  "Projects"; the selected mode persists.
+- Chats mode lists threads (including Favorites from T23 if present); Projects mode lists
+  projects, and opening one shows that project's threads.
+- Default mode is Chats; project-less threads remain reachable.
+
+---
+
+## T25 — Move app chrome into the sidebar (reclaim chat vertical space)
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P2
+- **Layer:** React
+- **Depends on:** —
+
+The chat's vertical space is wasted on the app title, model picker, Usage/Settings buttons,
+and color-scheme toggle in the header (`src/App.tsx`). Move these into sidebar sections or a
+menu (button/dropdown) so the chat area is taller.
+
+**Acceptance criteria:**
+- App title, `ThemeToggle`, and the Usage/Settings entry points relocate from the header
+  into the sidebar (e.g. a header/footer area of `ThreadList`) or a dropdown menu.
+- The `ModelPicker` moves to the sidebar or becomes a compact control near the composer —
+  pick one and keep it one click away.
+- The chat header is removed or minimized so `MessageList`/`Composer` gain the reclaimed
+  height.
+
+**Notes:** Touches `src/App.tsx` (header block), `ModelPicker`, `ThemeToggle`, and the
+`SettingsView` entry point. Composes with T21 (responsive) and T22 (sidebar toggle).
+
+---
+
+## T26 — Bug: screenshot capture fails on macOS ("Could not create image from rect")
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P1 (a headline feature is broken)
+- **Layer:** Rust (+ permissions/UX)
+- **Depends on:** —
+
+Taking a screenshot errors with "Could not create image from rect" on macOS (possibly
+elsewhere). The capture path is `take_screenshot` in `src-tauri/src/commands/quick.rs`
+(runs `screencapture -i`, returns base64 PNG; temp prefix `snak-shot-…`).
+
+**Acceptance criteria:**
+- Reproduce and root-cause it (likely macOS Screen Recording permission, an interactive-
+  capture cancel writing no file, or temp-path/rect handling). Use `superpowers:systematic-debugging`.
+- An interactive region capture returns a valid image; a user-cancelled capture returns
+  `null` cleanly without surfacing an error.
+- If the OS denies Screen Recording permission, surface a clear, actionable message telling
+  the user to grant it.
+- Verify on macOS; note Linux (`spectacle -r`) behavior.
+
+---
+
+## T27 — Token-spend activity graph: month labels, responsive, styled hover
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P3
+- **Layer:** React
+- **Depends on:** T16
+
+The GitHub-style activity graph in the usage view (`src/components/usage/UsageView.tsx`,
+from T16) needs month indicators, should be responsive to width, and its per-day hover
+popup should be styled.
+
+**Acceptance criteria:**
+- Month labels render above the columns, aligned to week boundaries.
+- The graph adapts to the available width (column count/size) without overflowing; works
+  with T21.
+- Hovering a day shows a styled tooltip (date + input/output/cache token counts) using the
+  app's popover tokens, not a raw `title` attribute.
+
+**Notes:** Builds on the existing usage view and the usage data layer (`src/lib/usage.ts`)
+from T16.
