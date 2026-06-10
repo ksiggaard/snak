@@ -1,9 +1,20 @@
 import { useEffect, useState } from "react";
+import { Check, ChevronsUpDown } from "lucide-react";
 import { useThreads } from "@/store/threads";
 import { useModels } from "@/store/models";
 import { useProviders } from "@/lib/providers";
-import { buildModelOptions } from "@/lib/modelOptions";
+import { buildModelOptions, currentModelLabel } from "@/lib/modelOptions";
 import { hasApiKey } from "@/lib/keys";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import type { Provider } from "@/types/db";
 
 export function ModelPicker() {
@@ -21,9 +32,12 @@ export function ModelPicker() {
   const provider = current?.provider ?? draftProvider;
   const model = current?.model ?? draftModel;
 
+  // Trigger label resolves synchronously (no `keyed` dependency) so the picker
+  // renders immediately with no mount flash.
+  const { label, providerLabel } = currentModelLabel(providers, models, provider, model);
+
   // Which enabled providers have a stored API key. Resolved async (like
-  // ApiKeys.tsx); recomputed when the provider list changes. Closing Settings
-  // remounts this picker, so a newly-added key is reflected on return to chat.
+  // ApiKeys.tsx); recomputed when the provider list changes.
   const [keyed, setKeyed] = useState<Set<Provider> | null>(null);
   const providerKey = providers.map((p) => p.id).join(",");
   useEffect(() => {
@@ -43,39 +57,68 @@ export function ModelPicker() {
     // providerKey captures the provider-list identity (primitive, stable).
   }, [providerKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Still resolving which providers have a key — render nothing to avoid a
-  // false "no models" flash on mount.
-  if (keyed === null) return null;
+  const options =
+    keyed === null ? [] : buildModelOptions(providers, keyed, models, { provider, model });
 
-  const options = buildModelOptions(providers, keyed, models, { provider, model });
-  const selectedIndex = options.findIndex(
-    (o) => o.provider === provider && o.modelId === model,
-  );
-
-  if (options.length === 0) {
-    return (
-      <span className="text-muted-foreground text-sm">
-        No models available — add an API key and models in Settings.
-      </span>
-    );
+  // Group options by provider for the chooser, preserving option order.
+  const groups: { providerLabel: string; items: typeof options }[] = [];
+  for (const o of options) {
+    const g = groups.find((x) => x.providerLabel === o.providerLabel);
+    if (g) g.items.push(o);
+    else groups.push({ providerLabel: o.providerLabel, items: [o] });
   }
 
   return (
-    <select
-      value={selectedIndex >= 0 ? selectedIndex : 0}
-      onChange={(e) => {
-        const opt = options[Number(e.target.value)];
-        if (opt) void setProviderModel(opt.provider, opt.modelId);
-      }}
-      className="border-input bg-background h-9 max-w-72 rounded-md border px-2 text-sm"
-      aria-label="Model"
-    >
-      {options.map((o, i) => (
-        <option key={`${o.provider}:${o.modelId}`} value={i}>
-          {o.display}
-          {o.active ? "" : " (unavailable)"}
-        </option>
-      ))}
-    </select>
+    <DropdownMenu>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label="Choose model"
+              className="text-muted-foreground hover:text-foreground hover:bg-accent flex items-center gap-1 rounded-md px-2 py-1 text-sm transition-colors"
+            >
+              <span className="text-foreground max-w-40 truncate">{label}</span>
+              <ChevronsUpDown className="size-3 shrink-0 opacity-60" />
+            </button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          {providerLabel} · {model}
+        </TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="end" className="max-h-80 overflow-y-auto">
+        {keyed === null ? (
+          <DropdownMenuItem disabled>Loading…</DropdownMenuItem>
+        ) : (
+          groups.map((g, gi) => (
+            <div key={g.providerLabel}>
+              {gi > 0 && <DropdownMenuSeparator />}
+              <DropdownMenuLabel className="text-muted-foreground text-xs">
+                {g.providerLabel}
+              </DropdownMenuLabel>
+              {g.items.map((o) => {
+                const selected = o.provider === provider && o.modelId === model;
+                return (
+                  <DropdownMenuItem
+                    key={`${o.provider}:${o.modelId}`}
+                    disabled={!o.active}
+                    onSelect={() => void setProviderModel(o.provider, o.modelId)}
+                  >
+                    <Check
+                      className={cn("size-4 shrink-0", selected ? "opacity-100" : "opacity-0")}
+                    />
+                    <span className="flex-1 truncate">{o.label}</span>
+                    {!o.active && (
+                      <span className="text-muted-foreground text-xs">unavailable</span>
+                    )}
+                  </DropdownMenuItem>
+                );
+              })}
+            </div>
+          ))
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
