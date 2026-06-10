@@ -101,6 +101,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/007_favorites.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 8,
+            description: "message duration: per-assistant-reply generation time in ms",
+            sql: include_str!("../migrations/008_message_duration.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

@@ -17,8 +17,17 @@ import {
   setThreadProviderModel,
   SYSTEM_PROMPT_ADDENDUM_KEY,
 } from "@/lib/db";
-import { cancelStream, chatStream, type ApiMessage } from "@/lib/chat";
-import { loadThreadMessages, type MessageView } from "@/lib/messages";
+import {
+  cancelStream,
+  chatStream,
+  type ApiMessage,
+  type StreamEvent,
+} from "@/lib/chat";
+import {
+  loadThreadMessages,
+  type MessageToolCall,
+  type MessageView,
+} from "@/lib/messages";
 import { buildProjectSystemText } from "@/lib/projects";
 import { buildSkillsSystemText } from "@/lib/skills";
 import { selectRegistry, usePlugins } from "@/store/plugins";
@@ -370,11 +379,19 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           images: [],
         });
 
-      // Stream the reply, appending a placeholder assistant bubble on the
-      // first delta and growing it as chunks arrive.
+      // Stream the reply, appending a placeholder assistant bubble on the first
+      // event and growing it as chunks arrive. Text arrives as content deltas;
+      // tool calls arrive as structured events and render as distinct chips.
       let acc = "";
-      const onDelta = (text: string) => {
-        acc += text;
+      const toolCalls: MessageToolCall[] = [];
+      const onDelta = (event: StreamEvent) => {
+        if (event.toolCall) {
+          toolCalls.push({
+            name: event.toolCall.name,
+            url: event.toolCall.url,
+          });
+        }
+        if (event.text) acc += event.text;
         set((s) => {
           const exists = s.messages.some((m) => m.id === STREAM_ID);
           const base = exists
@@ -386,13 +403,17 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                   thread_id: id!,
                   role: "assistant" as const,
                   content: "",
+                  duration_ms: null,
                   created_at: "",
                   images: [],
+                  toolCalls: [],
                 },
               ];
           return {
             messages: base.map((m) =>
-              m.id === STREAM_ID ? { ...m, content: acc } : m,
+              m.id === STREAM_ID
+                ? { ...m, content: acc, toolCalls: [...toolCalls] }
+                : m,
             ),
           };
         });
@@ -401,14 +422,27 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       // On cancellation this still resolves with the partial text accumulated
       // so far (the backend early-exits and returns Ok), so the same
       // persistence path preserves whatever was generated.
+      const started = Date.now();
       const result = await chatStream(provider, model, history, onDelta);
-      // Don't persist an empty assistant row (e.g. cancelled before any token).
-      if (result.content.length > 0) {
+      // Persist the assistant turn when it produced text or invoked a tool.
+      // (Skip a truly empty row, e.g. cancelled before any token or tool call.)
+      if (result.content.length > 0 || toolCalls.length > 0) {
         const assistantMsg = await addMessage({
           thread_id: id,
           role: "assistant",
           content: result.content,
+          duration_ms: Math.round(Date.now() - started),
         });
+        // Persist each tool call as a structured attachment so it survives
+        // reload and renders as a distinct chip — never as model-authored text.
+        for (const tc of toolCalls) {
+          await addAttachment({
+            message_id: assistantMsg.id,
+            kind: "tool_call",
+            media_type: "application/json",
+            data: JSON.stringify(tc),
+          });
+        }
         // Record token usage for this response. Attribute it to the model the
         // API actually used (`result.model`), falling back to the requested
         // model — so usage stays correct even if the thread's model changes

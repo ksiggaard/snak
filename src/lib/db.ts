@@ -155,13 +155,14 @@ export async function addMessage(input: {
   thread_id: string;
   role: Role;
   content: string;
+  duration_ms?: number | null;
 }): Promise<Message> {
   const db = await getDb();
   const id = newId();
   await db.execute(
-    `INSERT INTO messages (id, thread_id, role, content)
-     VALUES ($1, $2, $3, $4)`,
-    [id, input.thread_id, input.role, input.content],
+    `INSERT INTO messages (id, thread_id, role, content, duration_ms)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [id, input.thread_id, input.role, input.content, input.duration_ms ?? null],
   );
   await touchThread(input.thread_id);
   const rows = await db.select<Message[]>(

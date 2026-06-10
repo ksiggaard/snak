@@ -50,6 +50,8 @@ export interface Message {
   thread_id: string;
   role: Role;
   content: string;
+  /** Wall-clock generation time in ms for assistant replies; null otherwise. */
+  duration_ms: number | null;
   created_at: string;
 }
 
@@ -105,7 +107,7 @@ export interface ThreadSearchGroup {
   hits: SearchHit[];
 }
 
-export type AttachmentKind = "image";
+export type AttachmentKind = "image" | "tool_call";
 
 export interface Attachment {
   id: string;
