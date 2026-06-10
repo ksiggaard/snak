@@ -815,8 +815,8 @@ the project. (Conceptually like Claude/ChatGPT "Projects".)
 
 ## T21 — Responsive layout (adapt the UI from narrow to wide)
 
-- **Status:** todo
-- **Owner:** —
+- **Status:** done
+- **Owner:** WS-C
 - **Priority:** P1 (usability across window sizes; the app is meant to run small/quick too)
 - **Layer:** React (Tailwind)
 - **Depends on:** —
@@ -835,13 +835,21 @@ nothing clips or overflows. (The fixed-size quick-input overlay is out of scope.
 - Prefer Tailwind responsive utilities over JS resize listeners.
 
 **Notes:** Composes with T22 (resizable/toggleable sidebar) and T25 (moving chrome into the sidebar).
+- 2026-06-10 (WS-C): Done as part of the coherent sidebar/layout overhaul. `md` (768px)
+  is the inline⇄overlay boundary: at >= md the sidebar is an inline `<aside>`; below md it
+  renders as a left `Sheet` overlay opened by a hamburger in `main` (`App.tsx`). The
+  `SettingsView` two-pane now stacks (`flex-col md:flex-row`) with the section nav as a
+  horizontal `overflow-x-auto` strip on narrow / vertical `md:w-44` on wide. `main` is
+  `min-w-0` and uses `p-3 md:p-4`; no horizontal scrollbars ~480–1400px. Tailwind utilities
+  only (no JS resize listeners). The chat header was removed (T25) so there are no header
+  controls left to overflow.
 
 ---
 
 ## T22 — Resizable sidebar + show/hide toggle
 
-- **Status:** todo
-- **Owner:** —
+- **Status:** done
+- **Owner:** WS-C
 - **Priority:** P1 (reclaim space; pairs with T21)
 - **Layer:** React
 - **Depends on:** —
@@ -856,12 +864,22 @@ edge, and add a button to toggle it hidden/shown.
 - A toggle button (header or sidebar) hides/shows the sidebar; the open/closed state persists.
 - The chat column reflows to fill the freed space; behaves well with T21 responsive rules.
 
+- 2026-06-10 (WS-C): A custom `SidebarResizeHandle` (pointer events, rAF-coalesced) on the
+  aside's right edge resizes within `SIDEBAR_MIN..MAX` (200–480px, default 256 = old `w-64`),
+  applied as an inline `style={{ width }}` (Tailwind v4 can't class a runtime px). Width,
+  open/closed, and mode are pure-UI prefs in **localStorage** via `src/lib/layout.ts` +
+  `src/store/layout.ts` (mirrors `theme.ts`, seeded synchronously to avoid a flash;
+  `clampSidebarWidth` + persistence unit-tested in `layout.test.ts`). A collapse toggle in
+  `SidebarHeader` hides the inline sidebar; a slim in-flow toggle bar in `main` shows a reopen
+  button (desktop, when collapsed) / hamburger (narrow) so the user is never stranded. No
+  `react-resizable-panels` dependency. The handle is `hidden md:block` (moot when overlaying).
+
 ---
 
 ## T23 — Favorite chats (Favorites section in the sidebar)
 
-- **Status:** todo
-- **Owner:** —
+- **Status:** done
+- **Owner:** WS-C
 - **Priority:** P2
 - **Layer:** React + Rust (migration)
 - **Depends on:** —
@@ -878,12 +896,19 @@ Let the user favorite a thread and surface a Favorites group at the top of the s
   per thread.
 - Existing threads default to not-favorited; list ordering stays stable.
 
+- 2026-06-10 (WS-C): Migration **007_favorites.sql** (version 7, registered in `lib.rs`) adds
+  `threads.favorite INTEGER NOT NULL DEFAULT 0`. `Thread` gains `favorite: number`; `db.ts`
+  adds `setThreadFavorite` (does NOT bump `updated_at`, so favoriting doesn't reorder recents);
+  `store/threads.ts` adds a `toggleFavorite(id)` action. The Chats pane (`ChatsPane.tsx`, T24)
+  renders a **Favorites** group above the flat "All chats" list, with a star toggle per row
+  (`ThreadRow.tsx`). Groups are computed from the live thread list (stale-safe on delete).
+
 ---
 
 ## T24 — Sidebar mode shift: Chats vs Projects
 
-- **Status:** todo
-- **Owner:** —
+- **Status:** done
+- **Owner:** WS-C
 - **Priority:** P2
 - **Layer:** React
 - **Depends on:** T20
@@ -898,12 +923,19 @@ shows either Chats or Projects, not both at once.
   projects, and opening one shows that project's threads.
 - Default mode is Chats; project-less threads remain reachable.
 
+- 2026-06-10 (WS-C): A `ToggleGroup` mode switch (`SidebarModeSwitch.tsx`) at the top of the
+  sidebar flips between **Chats** (`ChatsPane` — favorites + a flat list of ALL threads, so
+  project-less ones are always reachable) and **Projects** (`ProjectsPane` — the project list;
+  opening one shows its detail view and reveals its threads). Mode persists in localStorage
+  (`useLayout.sidebarMode`, default `chats`). The mode-appropriate "New chat"/"New project"
+  action sits in the sidebar's action row.
+
 ---
 
 ## T25 — Move app chrome into the sidebar (reclaim chat vertical space)
 
-- **Status:** todo
-- **Owner:** —
+- **Status:** done
+- **Owner:** WS-C
 - **Priority:** P2
 - **Layer:** React
 - **Depends on:** —
@@ -922,6 +954,18 @@ menu (button/dropdown) so the chat area is taller.
 
 **Notes:** Touches `src/App.tsx` (header block), `ModelPicker`, `ThemeToggle`, and the
 `SettingsView` entry point. Composes with T21 (responsive) and T22 (sidebar toggle).
+
+- 2026-06-10 (WS-C): The chat `<header>` in `App.tsx` is **removed**. The app title, an
+  overflow `DropdownMenu` (Settings, Usage, and a Theme radio group replacing `ThemeToggle`),
+  and the collapse toggle now live in `SidebarHeader.tsx`. View routing moved to a small
+  `store/view.ts` (`chat | settings | usage`); project/search panes still come from their own
+  stores. Per the chosen design, the **ModelPicker moved to a compact control just above the
+  composer** (rendered at the top of `Composer.tsx`, height reserved to avoid a null→select
+  shift). `ThreadList.tsx` was split into `Sidebar`/`SidebarContent`/`SidebarHeader`/
+  `SidebarModeSwitch`/`ChatsPane`/`ProjectsPane`/`ThreadRow` and removed. New shadcn/ui
+  components added (against the unified `radix-ui` package): `dropdown-menu`, `tooltip`,
+  `sheet`, `toggle-group` (+ `toggle`). Verified: `npm run build`/`lint`/`test` (176) and
+  `cargo build`/`clippy`/`fmt`/`test` (41) all pass.
 
 ---
 
