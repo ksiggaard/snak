@@ -1,5 +1,6 @@
-import { BarChart3, MoreVertical, Settings2 } from "lucide-react";
+import { BarChart3, MoreVertical, PanelLeftClose, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,9 +15,11 @@ import { useView } from "@/store/view";
 import { useTheme } from "@/store/theme";
 import type { Theme } from "@/lib/theme";
 
-/** Sidebar top bar (T25): app title + an overflow menu housing the chrome that
- *  used to live in the chat header — Settings, Usage, and the theme switch. */
-export function SidebarHeader() {
+/** Sidebar top bar (T25): app title + a collapse/close toggle (T22) + an
+ *  overflow menu housing the chrome that used to live in the chat header —
+ *  Settings, Usage, and the theme switch. `onClose` collapses the inline
+ *  sidebar (desktop) or dismisses the overlay sheet (narrow). */
+export function SidebarHeader({ onClose }: { onClose: () => void }) {
   const setView = useView((s) => s.setView);
   const theme = useTheme((s) => s.theme);
   const setTheme = useTheme((s) => s.setTheme);
@@ -26,6 +29,19 @@ export function SidebarHeader() {
       <h1 className="min-w-0 flex-1 truncate text-base font-semibold tracking-tight">
         snak
       </h1>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Hide sidebar"
+            onClick={onClose}
+          >
+            <PanelLeftClose className="size-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Hide sidebar</TooltipContent>
+      </Tooltip>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" aria-label="Menu">

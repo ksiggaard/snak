@@ -39,15 +39,17 @@ export function SettingsView() {
   const Active = active.Component;
 
   return (
-    <div className="flex min-h-0 flex-1 gap-4">
-      <nav className="flex w-44 shrink-0 flex-col gap-0.5 overflow-y-auto">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 md:flex-row md:gap-4">
+      {/* Section nav: a horizontal scrollable strip on narrow widths, a fixed
+          vertical column at >= md (T21). */}
+      <nav className="flex shrink-0 gap-0.5 overflow-x-auto pb-1 md:w-44 md:flex-col md:overflow-x-visible md:overflow-y-auto md:pb-0">
         {SECTIONS.map((s) => (
           <button
             key={s.id}
             type="button"
             onClick={() => setActiveId(s.id)}
             className={cn(
-              "rounded-md px-3 py-2 text-left text-sm",
+              "shrink-0 rounded-md px-3 py-2 text-left text-sm whitespace-nowrap",
               s.id === activeId
                 ? "bg-accent text-accent-foreground font-medium"
                 : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
