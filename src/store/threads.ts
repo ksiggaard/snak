@@ -12,6 +12,7 @@ import {
   listUserMemory,
   renameThread,
   setSetting,
+  setThreadFavorite,
   setThreadProject,
   setThreadProviderModel,
   SYSTEM_PROMPT_ADDENDUM_KEY,
@@ -105,6 +106,8 @@ interface ThreadsState {
   /** Stop the in-flight stream; partial text is persisted via the normal path. */
   cancel: () => Promise<void>;
   rename: (id: string, title: string) => Promise<void>;
+  /** Pin/unpin a thread to the sidebar Favorites group (T23). */
+  toggleFavorite: (id: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
 }
 
@@ -477,6 +480,13 @@ export const useThreads = create<ThreadsState>((set, get) => ({
 
   rename: async (id, title) => {
     await renameThread(id, title.trim() || "Untitled");
+    await get().refreshThreads();
+  },
+
+  toggleFavorite: async (id) => {
+    const t = get().threads.find((x) => x.id === id);
+    if (!t) return;
+    await setThreadFavorite(id, !t.favorite);
     await get().refreshThreads();
   },
 

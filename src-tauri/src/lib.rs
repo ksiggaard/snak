@@ -95,6 +95,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/006_models.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 7,
+            description: "favorites: per-thread favorite flag for the sidebar Favorites group",
+            sql: include_str!("../migrations/007_favorites.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
