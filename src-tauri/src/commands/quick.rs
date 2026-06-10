@@ -92,20 +92,61 @@ fn read_and_encode(path: &std::path::Path) -> Result<Option<String>, String> {
     Ok(Some(STANDARD.encode(bytes)))
 }
 
+/// Actionable message surfaced when macOS Screen Recording permission is denied.
+const PERMISSION_MSG: &str = "Screenshot failed. Grant Screen Recording to snak in \
+    System Settings → Privacy & Security → Screen Recording, then quit and reopen the app.";
+
 #[cfg(target_os = "macos")]
 fn capture_interactive() -> Result<Option<String>, String> {
     let path = temp_png_path();
-    std::process::Command::new("screencapture")
-        .args(["-i", "-t", "png"])
+    // Use -x to silence the shutter sound while the overlay is hidden.
+    let out = std::process::Command::new("screencapture")
+        .args(["-x", "-t", "png", "-i"])
         .arg(&path)
-        .status()
+        .output()
         .map_err(|e| format!("failed to run screencapture: {e}"))?;
+
+    let success = out.status.success();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let file_absent_or_empty =
+        !path.exists() || path.metadata().map(|m| m.len() == 0).unwrap_or(true);
+
+    // Always clean up temp file on error paths.
+    if file_absent_or_empty {
+        let _ = std::fs::remove_file(&path);
+    }
+
+    if success && file_absent_or_empty && stderr.trim().is_empty() {
+        // Genuine user cancel: screencapture exited cleanly but wrote nothing.
+        return Ok(None);
+    }
+
+    if !success || file_absent_or_empty {
+        // Non-zero exit or no output file — check for known permission / rect errors.
+        let stderr_lower = stderr.to_ascii_lowercase();
+        if stderr_lower.contains("could not create image from rect")
+            || stderr_lower.contains("not authorized")
+            || stderr_lower.contains("permission")
+        {
+            return Err(PERMISSION_MSG.to_string());
+        }
+        // Other failure — surface trimmed stderr verbatim, or a generic fallback.
+        let msg = stderr.trim().to_string();
+        return Err(if msg.is_empty() {
+            format!("screencapture failed (exit {})", out.status)
+        } else {
+            msg
+        });
+    }
+
     read_and_encode(&path)
 }
 
 #[cfg(target_os = "linux")]
 fn capture_interactive() -> Result<Option<String>, String> {
     // KDE's Spectacle: region (-r), background (-b), no-notify (-n), output (-o).
+    // Spectacle's file-or-nothing behavior already maps correctly through read_and_encode:
+    // no file → clean Ok(None) cancel; file present → encode.
     let path = temp_png_path();
     std::process::Command::new("spectacle")
         .args(["-r", "-b", "-n", "-o"])

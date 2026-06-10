@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSScreenCaptureUsageDescription</key>
+  <string>snak needs Screen Recording access to capture a region of your screen and attach it to a chat message.</string>
+</dict>
+</plist>
