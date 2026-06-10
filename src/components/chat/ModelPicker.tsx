@@ -3,7 +3,7 @@ import { ModelChooser } from "@/components/chat/ModelChooser";
 
 /** Store-bound model picker for the chat composer: reads the current thread's
  *  (or the draft's) provider+model and persists a change via the threads store.
- *  The presentational chooser lives in `ModelChooser` (also used by the overlay). */
+ *  The controlled chooser lives in `ModelChooser` (also used by the overlay). */
 export function ModelPicker() {
   const currentId = useThreads((s) => s.currentThreadId);
   const threads = useThreads((s) => s.threads);
@@ -20,6 +20,7 @@ export function ModelPicker() {
       provider={provider}
       model={model}
       onSelect={(p, m) => void setProviderModel(p, m)}
+      align="end"
     />
   );
 }
