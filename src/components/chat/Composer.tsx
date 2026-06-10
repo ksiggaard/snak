@@ -3,6 +3,7 @@ import { Maximize2, Paperclip, Square, TerminalSquare, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Canvas } from "@/components/chat/Canvas";
+import { ModelPicker } from "@/components/chat/ModelPicker";
 import { prepareImage, type PreparedImage } from "@/lib/image";
 import { hasApiKey } from "@/lib/keys";
 import { useProviders } from "@/lib/providers";
@@ -236,6 +237,13 @@ export function Composer({
           onClose={() => setCanvasOpen(false)}
         />
       )}
+      {/* Compact model picker relocated from the old header (T25) — kept right
+          above the input so the active model is one glance/click from sending.
+          Min height reserves space so the picker resolving from null→select
+          doesn't shift the composer. */}
+      <div className="flex min-h-9 items-center">
+        <ModelPicker />
+      </div>
       {!providerEnabled &&
         (anyProvider ? (
           <p className="text-muted-foreground text-xs">

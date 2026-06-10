@@ -13,6 +13,8 @@ export interface Thread {
   model: string;
   /** Project this thread belongs to, or null for a project-less thread. */
   project_id: string | null;
+  /** 1 if pinned to the sidebar Favorites group, else 0 (T23). */
+  favorite: number;
   created_at: string;
   updated_at: string;
 }

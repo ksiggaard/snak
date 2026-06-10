@@ -110,6 +110,19 @@ export async function setThreadProject(
   );
 }
 
+/** Pin/unpin a thread to the sidebar Favorites group (T23). Does not bump
+ * updated_at — favoriting shouldn't reorder the recents list. */
+export async function setThreadFavorite(
+  id: string,
+  favorite: boolean,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(`UPDATE threads SET favorite = $1 WHERE id = $2`, [
+    favorite ? 1 : 0,
+    id,
+  ]);
+}
+
 /** Bump a thread's updated_at (e.g. after a new message). */
 export async function touchThread(id: string): Promise<void> {
   const db = await getDb();
