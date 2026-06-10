@@ -28,8 +28,8 @@ import type { PreparedImage } from "@/lib/image";
 import type { Provider, Thread } from "@/types/db";
 
 const LAST_THREAD_KEY = "last_thread_id";
-const DEFAULT_PROVIDER_KEY = "default_provider";
-const DEFAULT_MODEL_KEY = "default_model";
+export const DEFAULT_PROVIDER_KEY = "default_provider";
+export const DEFAULT_MODEL_KEY = "default_model";
 // Sentinel id for the in-progress assistant message shown while streaming;
 // replaced by the persisted DB row once the stream completes.
 const STREAM_ID = "__streaming__";

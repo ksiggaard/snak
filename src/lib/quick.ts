@@ -1,10 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { PreparedImage } from "@/lib/image";
+import type { Provider } from "@/types/db";
 
 /** Payload sent from the quick-input overlay to the main window. */
 export interface QuickPayload {
   text: string;
   images: PreparedImage[];
+  provider: Provider;
+  model: string;
 }
 
 /** Forward overlay input to the main window; backend also focuses main + hides overlay. */
