@@ -135,9 +135,7 @@ impl Provider for Gemini {
                     if let Some(t) = part.get("text").and_then(|t| t.as_str()) {
                         content.push_str(t);
                         channel
-                            .send(StreamDelta {
-                                text: t.to_string(),
-                            })
+                            .send(StreamDelta::text(t))
                             .map_err(|e| anyhow!("channel send failed: {e}"))?;
                     } else if let Some(fc) = part.get("functionCall") {
                         // Gemini emits a complete functionCall part (not streamed

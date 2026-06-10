@@ -112,10 +112,62 @@ pub struct ChatResponse {
     pub tool_calls: Vec<ToolCall>,
 }
 
-/// One streamed text chunk, pushed to the frontend over a Tauri channel.
+/// One streamed event pushed to the frontend over a Tauri channel: either a
+/// text chunk or a notice that the model invoked a tool this round. Tool calls
+/// are sent as their own structured event (not text) so the UI can render a
+/// distinct, non-spoofable indicator the model itself can't produce.
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StreamDelta {
+    /// Text chunk; empty (and omitted on the wire) for a tool-call event.
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub text: String,
+    /// Set when the model called a tool this round.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call: Option<ToolCallDelta>,
+}
+
+impl StreamDelta {
+    /// A plain text chunk (the common case all providers emit while streaming).
+    pub(crate) fn text(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            tool_call: None,
+        }
+    }
+
+    /// A tool-invocation notice (carries no text).
+    pub(crate) fn tool(call: &ToolCall) -> Self {
+        Self {
+            text: String::new(),
+            tool_call: Some(ToolCallDelta::new(call)),
+        }
+    }
+}
+
+/// A compact, display-oriented view of a tool call, streamed to the UI and
+/// persisted alongside the assistant message. `url` is populated for the
+/// built-in `web__fetch_url` tool so the UI can show what page was fetched.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolCallDelta {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+}
+
+impl ToolCallDelta {
+    fn new(call: &ToolCall) -> Self {
+        let url = call
+            .arguments
+            .get("url")
+            .and_then(|u| u.as_str())
+            .map(String::from);
+        Self {
+            name: call.name.clone(),
+            url,
+        }
+    }
 }
 
 /// Everything a provider needs for one completion. `tools` is empty for an
@@ -431,5 +483,36 @@ mod tests {
         assert_eq!(u.input_tokens, 7);
         assert_eq!(u.output_tokens, 8);
         assert_eq!(u.cache_read_tokens, 0);
+    }
+
+    fn fetch_call() -> ToolCall {
+        ToolCall {
+            id: "call_1".into(),
+            name: "web__fetch_url".into(),
+            arguments: serde_json::json!({ "url": "https://example.com" }),
+        }
+    }
+
+    #[test]
+    fn tool_call_delta_extracts_url() {
+        let d = ToolCallDelta::new(&fetch_call());
+        assert_eq!(d.name, "web__fetch_url");
+        assert_eq!(d.url.as_deref(), Some("https://example.com"));
+    }
+
+    #[test]
+    fn stream_delta_text_serializes_without_tool_call() {
+        let v = serde_json::to_value(StreamDelta::text("hi")).unwrap();
+        assert_eq!(v["text"], "hi");
+        assert!(v.get("toolCall").is_none());
+    }
+
+    #[test]
+    fn stream_delta_tool_serializes_camelcase_without_text() {
+        let v = serde_json::to_value(StreamDelta::tool(&fetch_call())).unwrap();
+        // No `text` key (skipped when empty); tool call carried under camelCase key.
+        assert!(v.get("text").is_none());
+        assert_eq!(v["toolCall"]["name"], "web__fetch_url");
+        assert_eq!(v["toolCall"]["url"], "https://example.com");
     }
 }

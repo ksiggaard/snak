@@ -197,9 +197,7 @@ pub(super) async fn chat_completions_stream(
         {
             content.push_str(t);
             channel
-                .send(StreamDelta {
-                    text: t.to_string(),
-                })
+                .send(StreamDelta::text(t))
                 .map_err(|e| anyhow!("channel send failed: {e}"))?;
         }
         if let Some(calls) = v

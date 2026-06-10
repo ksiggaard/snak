@@ -181,9 +181,7 @@ impl Provider for Anthropic {
                     if let Some(t) = v.pointer("/delta/text").and_then(|t| t.as_str()) {
                         content.push_str(t);
                         channel
-                            .send(StreamDelta {
-                                text: t.to_string(),
-                            })
+                            .send(StreamDelta::text(t))
                             .map_err(|e| anyhow!("channel send failed: {e}"))?;
                     } else if let Some(pj) =
                         v.pointer("/delta/partial_json").and_then(|t| t.as_str())

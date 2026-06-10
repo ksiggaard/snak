@@ -28,6 +28,23 @@ export interface ChatResult {
   usage: ChatUsage;
 }
 
+/** A tool the model invoked mid-stream (rendered as a distinct chip). */
+export interface ToolCallEvent {
+  name: string;
+  /** Populated for the built-in `web__fetch_url` tool. */
+  url?: string;
+}
+
+/**
+ * One streamed event from the backend: either a text chunk (`text`) or a notice
+ * that the model called a tool (`toolCall`). They are mutually exclusive on the
+ * wire (the Rust `StreamDelta` omits whichever is absent).
+ */
+export interface StreamEvent {
+  text?: string;
+  toolCall?: ToolCallEvent;
+}
+
 /**
  * Stream a completion from a provider. Text deltas arrive via `onDelta` as they
  * are generated; the promise resolves with the full accumulated response (the
@@ -46,10 +63,10 @@ export async function chatStream(
   provider: Provider,
   model: string,
   messages: ApiMessage[],
-  onDelta: (text: string) => void,
+  onDelta: (event: StreamEvent) => void,
 ): Promise<ChatResult> {
-  const channel = new Channel<{ text: string }>();
-  channel.onmessage = (msg) => onDelta(msg.text);
+  const channel = new Channel<StreamEvent>();
+  channel.onmessage = (msg) => onDelta(msg);
   const mcpServers = await enabledServersForChat();
   return invoke("chat_stream", {
     provider,

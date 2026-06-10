@@ -31,6 +31,17 @@ use crate::providers::{
 /// response (best-effort) (T13).
 const MAX_TOOL_ROUNDS: usize = 5;
 
+/// Injected as a leading `system` turn only when tools are exposed. Without it,
+/// conservative models (notably `mistral-large`) answer about web pages from
+/// memory instead of calling `web__fetch_url`, producing confident
+/// hallucinations. Nudges tool use and forbids fabricating fetched content.
+const TOOL_SYSTEM_PROMPT: &str = "You have tools available, including \
+`web__fetch_url`, which returns the readable text of a web page. When the user \
+shares a URL or asks about the contents of a specific web page, you MUST call \
+`web__fetch_url` to read it before answering — never summarize or describe a page \
+from memory. If a fetch fails or returns no usable content, say you couldn't read \
+the page rather than guessing.";
+
 /// Shared cancellation flag for the in-flight stream, held in Tauri managed
 /// state. Only one stream runs at a time from the chat UI.
 #[derive(Default)]
@@ -70,8 +81,17 @@ pub async fn chat_stream(
     };
 
     // Working history grows as the loop appends assistant tool-call turns and
-    // tool-result turns between provider rounds.
-    let mut history = messages;
+    // tool-result turns between provider rounds. When tools are exposed, a
+    // leading system prompt nudges the model to actually call them (some models
+    // otherwise answer from memory and hallucinate); the no-tools path is left
+    // untouched, so it stays byte-identical to before.
+    let mut history = with_tool_system_prompt(messages, !tools.is_empty());
+
+    // The full streamed transcript: text deltas across every round plus the
+    // tool-activity lines injected below. Returned as the authoritative content
+    // so the persisted message matches exactly what the user saw stream in.
+    // (Intermediate tool-call rounds usually carry no text of their own.)
+    let mut transcript = String::new();
 
     for _round in 0..MAX_TOOL_ROUNDS {
         let req = CompletionRequest {
@@ -84,16 +104,26 @@ pub async fn chat_stream(
         let resp = providers::stream(&client, &provider, &req, &on_delta, &flag)
             .await
             .map_err(|e| e.to_string())?;
+        transcript.push_str(&resp.content);
 
         // No tool calls → normal completion; return the authoritative response.
         // (Also the only path taken when `tools` is empty.)
         if resp.tool_calls.is_empty() || flag.load(Ordering::Relaxed) {
-            return Ok(resp);
+            return Ok(ChatResponse {
+                content: transcript,
+                ..resp
+            });
         }
 
-        // Execute every requested tool via MCP, then feed results back.
+        // Surface each requested tool call to the UI as a structured event (the
+        // frontend renders it as a distinct chip and persists it), then execute
+        // it via MCP and feed the results back.
         let mut results = Vec::with_capacity(resp.tool_calls.len());
         for call in &resp.tool_calls {
+            on_delta
+                .send(StreamDelta::tool(call))
+                .map_err(|e| format!("channel send failed: {e}"))?;
+
             let content = mcp::call_tool(&client, &servers, call).await;
             results.push(ToolResult {
                 tool_call_id: call.id.clone(),
@@ -128,9 +158,33 @@ pub async fn chat_stream(
         messages: &history,
         tools: &[],
     };
-    providers::stream(&client, &provider, &req, &on_delta, &flag)
+    let resp = providers::stream(&client, &provider, &req, &on_delta, &flag)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    transcript.push_str(&resp.content);
+    Ok(ChatResponse {
+        content: transcript,
+        ..resp
+    })
+}
+
+/// Prepend the tool-use system prompt when any tools are exposed; otherwise
+/// return the history unchanged (so the no-tools request stays byte-identical).
+/// Pure — unit-tested.
+fn with_tool_system_prompt(messages: Vec<ChatMessage>, has_tools: bool) -> Vec<ChatMessage> {
+    if !has_tools {
+        return messages;
+    }
+    let mut out = Vec::with_capacity(messages.len() + 1);
+    out.push(ChatMessage {
+        role: "system".into(),
+        content: TOOL_SYSTEM_PROMPT.into(),
+        images: Vec::new(),
+        tool_calls: Vec::new(),
+        tool_results: Vec::new(),
+    });
+    out.extend(messages);
+    out
 }
 
 /// Request cancellation of the in-flight stream. Sets the shared flag; the
@@ -139,4 +193,39 @@ pub async fn chat_stream(
 #[tauri::command]
 pub fn cancel_stream(cancel: State<'_, CancelFlag>) {
     cancel.0.store(true, Ordering::Relaxed);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn user(content: &str) -> ChatMessage {
+        ChatMessage {
+            role: "user".into(),
+            content: content.into(),
+            images: Vec::new(),
+            tool_calls: Vec::new(),
+            tool_results: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn no_tools_leaves_history_unchanged() {
+        let out = with_tool_system_prompt(vec![user("hi"), user("there")], false);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].role, "user");
+        assert_eq!(out[0].content, "hi");
+        assert_eq!(out[1].content, "there");
+    }
+
+    #[test]
+    fn tools_prepend_system_prompt() {
+        let out = with_tool_system_prompt(vec![user("hi")], true);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].role, "system");
+        assert!(!out[0].content.is_empty());
+        // Original turns follow, in order.
+        assert_eq!(out[1].role, "user");
+        assert_eq!(out[1].content, "hi");
+    }
 }

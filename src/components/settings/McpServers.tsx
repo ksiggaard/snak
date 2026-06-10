@@ -8,6 +8,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   listTools,
   loadServers,
@@ -129,14 +130,15 @@ export function McpServers() {
                   </span>
                 )}
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <Button
-                  size="sm"
-                  variant={s.enabled ? "default" : "outline"}
-                  onClick={() => toggle(s.id)}
-                >
-                  {s.enabled ? "Enabled" : "Disabled"}
-                </Button>
+              <div className="flex shrink-0 items-center gap-3">
+                <label className="text-muted-foreground flex cursor-pointer items-center gap-2 text-xs select-none">
+                  <Switch
+                    checked={s.enabled}
+                    onCheckedChange={() => toggle(s.id)}
+                    aria-label={`${s.label} ${s.enabled ? "enabled" : "disabled"}`}
+                  />
+                  <span className="w-12">{s.enabled ? "Enabled" : "Disabled"}</span>
+                </label>
                 {!s.builtin && (
                   <Button
                     size="sm"
