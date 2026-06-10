@@ -24,20 +24,28 @@ export function ModelPicker() {
   // Which enabled providers have a stored API key. Resolved async (like
   // ApiKeys.tsx); recomputed when the provider list changes. Leaving Settings
   // remounts ChatView, so a newly-added key is reflected on return to chat.
-  const [keyed, setKeyed] = useState<Set<Provider>>(new Set());
+  const [keyed, setKeyed] = useState<Set<Provider> | null>(null);
   const providerKey = providers.map((p) => p.id).join(",");
   useEffect(() => {
     let active = true;
     void Promise.all(
       providers.map((p) => hasApiKey(p.id).then((ok) => [p.id, ok] as const)),
-    ).then((pairs) => {
-      if (active) setKeyed(new Set(pairs.filter(([, ok]) => ok).map(([id]) => id)));
-    });
+    )
+      .then((pairs) => {
+        if (active) setKeyed(new Set(pairs.filter(([, ok]) => ok).map(([id]) => id)));
+      })
+      .catch(() => {
+        if (active) setKeyed(new Set());
+      });
     return () => {
       active = false;
     };
     // providerKey captures the provider-list identity (primitive, stable).
   }, [providerKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Still resolving which providers have a key — render nothing to avoid a
+  // false "no models" flash on mount.
+  if (keyed === null) return null;
 
   const options = buildModelOptions(providers, keyed, models, { provider, model });
   const selectedIndex = options.findIndex(
