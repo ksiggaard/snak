@@ -57,7 +57,7 @@ pub async fn call_tool(
 
     let resp = client
         .get(url)
-        .header("user-agent", "kde-llm-app/0.1 (+mcp web-browse)")
+        .header("user-agent", "snak/0.1 (+mcp web-browse)")
         .send()
         .await
         .context("web fetch request failed")?;

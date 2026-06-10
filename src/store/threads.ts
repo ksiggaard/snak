@@ -27,6 +27,8 @@ import type { PreparedImage } from "@/lib/image";
 import type { Provider, Thread } from "@/types/db";
 
 const LAST_THREAD_KEY = "last_thread_id";
+const DEFAULT_PROVIDER_KEY = "default_provider";
+const DEFAULT_MODEL_KEY = "default_model";
 // Sentinel id for the in-progress assistant message shown while streaming;
 // replaced by the persisted DB row once the stream completes.
 const STREAM_ID = "__streaming__";
@@ -39,6 +41,26 @@ export function deriveTitle(content: string): string {
     : oneLine || "New chat";
 }
 
+/** The default provider+model for new interactions. */
+export interface DefaultModel {
+  provider: Provider;
+  model: string;
+}
+
+/**
+ * Resolve the persisted default (the `default_provider` / `default_model`
+ * settings strings) into a concrete provider+model, falling back to the first
+ * built-in provider when unset. Pure. The two keys are always written together
+ * by `setDefaultModel`, so they are either both present or both absent.
+ */
+export function resolveDefault(
+  provider: string | null,
+  model: string | null,
+): DefaultModel {
+  if (provider && model) return { provider: provider as Provider, model };
+  return { provider: PROVIDERS[0].id, model: PROVIDERS[0].defaultModel };
+}
+
 interface ThreadsState {
   threads: Thread[];
   /** null = an unsaved draft chat (created in the DB on first message). */
@@ -46,6 +68,9 @@ interface ThreadsState {
   messages: MessageView[];
   draftProvider: Provider;
   draftModel: string;
+  /** Provider/model new interactions start from (persisted default). */
+  defaultProvider: Provider;
+  defaultModel: string;
   /** Project a new (draft) chat will be created in, or null for none. */
   draftProjectId: string | null;
   busy: boolean;
@@ -67,6 +92,8 @@ interface ThreadsState {
   ) => Promise<void>;
   /** Set provider+model for the current thread, or the draft if none. */
   setProviderModel: (provider: Provider, model: string) => Promise<void>;
+  /** Persist the default provider+model for new interactions. */
+  setDefaultModel: (provider: Provider, model: string) => Promise<void>;
   send: (content: string, images: PreparedImage[]) => Promise<void>;
   /**
    * Persist a synthetic assistant-role note into the current thread (creating a
@@ -137,6 +164,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   messages: [],
   draftProvider: PROVIDERS[0].id,
   draftModel: PROVIDERS[0].defaultModel,
+  defaultProvider: PROVIDERS[0].id,
+  defaultModel: PROVIDERS[0].defaultModel,
   draftProjectId: null,
   busy: false,
   cancelling: false,
@@ -147,6 +176,19 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     if (get().initialized) return;
     const threads = await listThreads();
     set({ threads, initialized: true });
+    // Load the persisted default and seed the draft from it before deciding
+    // which thread to open, so a fresh-draft launch starts on the default.
+    const [dp, dm] = await Promise.all([
+      getSetting(DEFAULT_PROVIDER_KEY),
+      getSetting(DEFAULT_MODEL_KEY),
+    ]);
+    const def = resolveDefault(dp, dm);
+    set({
+      defaultProvider: def.provider,
+      defaultModel: def.model,
+      draftProvider: def.provider,
+      draftModel: def.model,
+    });
     const lastId = await getSetting(LAST_THREAD_KEY);
     if (lastId && threads.some((t) => t.id === lastId)) {
       await get().selectThread(lastId);
@@ -173,6 +215,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       messages: [],
       error: null,
       draftProjectId: null,
+      draftProvider: get().defaultProvider,
+      draftModel: get().defaultModel,
     });
   },
 
@@ -182,6 +226,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       messages: [],
       error: null,
       draftProjectId: projectId,
+      draftProvider: get().defaultProvider,
+      draftModel: get().defaultModel,
     });
   },
 
@@ -198,6 +244,19 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     }
     await setThreadProviderModel(id, provider, model);
     await get().refreshThreads();
+  },
+
+  setDefaultModel: async (provider, model) => {
+    await setSetting(DEFAULT_PROVIDER_KEY, provider);
+    await setSetting(DEFAULT_MODEL_KEY, model);
+    // When the user is on an unsaved draft, reflect the change in the live
+    // draft immediately (so the model picker updates); otherwise just cache it.
+    const onDraft = get().currentThreadId === null;
+    set({
+      defaultProvider: provider,
+      defaultModel: model,
+      ...(onDraft ? { draftProvider: provider, draftModel: model } : {}),
+    });
   },
 
   send: async (content, images) => {

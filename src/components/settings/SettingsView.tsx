@@ -1,0 +1,64 @@
+import { useState, type ComponentType } from "react";
+import { ApiKeys } from "@/components/settings/ApiKeys";
+import { DefaultModel } from "@/components/settings/DefaultModel";
+import { Memory } from "@/components/settings/Memory";
+import { ShortcutSetting } from "@/components/settings/Shortcut";
+import { CloseToTraySetting } from "@/components/settings/CloseToTray";
+import { Themes } from "@/components/settings/Themes";
+import { McpServers } from "@/components/settings/McpServers";
+import { Skills } from "@/components/settings/Skills";
+import { Plugins } from "@/components/settings/Plugins";
+import { cn } from "@/lib/utils";
+
+interface Section {
+  id: string;
+  label: string;
+  Component: ComponentType;
+}
+
+// Each settings card becomes a navigable section. One is shown at a time, so a
+// card has the full width/height of the content pane instead of being stacked
+// and clipped — see the left-nav layout below.
+const SECTIONS: Section[] = [
+  { id: "api-keys", label: "API Keys", Component: ApiKeys },
+  { id: "default-model", label: "Default Model", Component: DefaultModel },
+  { id: "memory", label: "Memory", Component: Memory },
+  { id: "shortcut", label: "Shortcut", Component: ShortcutSetting },
+  { id: "tray", label: "Close to Tray", Component: CloseToTraySetting },
+  { id: "themes", label: "Themes", Component: Themes },
+  { id: "mcp", label: "MCP Servers", Component: McpServers },
+  { id: "skills", label: "Skills", Component: Skills },
+  { id: "plugins", label: "Plugins", Component: Plugins },
+];
+
+export function SettingsView() {
+  const [activeId, setActiveId] = useState(SECTIONS[0].id);
+  const active = SECTIONS.find((s) => s.id === activeId) ?? SECTIONS[0];
+  const Active = active.Component;
+
+  return (
+    <div className="flex min-h-0 flex-1 gap-4">
+      <nav className="flex w-44 shrink-0 flex-col gap-0.5 overflow-y-auto">
+        {SECTIONS.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => setActiveId(s.id)}
+            className={cn(
+              "rounded-md px-3 py-2 text-left text-sm",
+              s.id === activeId
+                ? "bg-accent text-accent-foreground font-medium"
+                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+            )}
+          >
+            {s.label}
+          </button>
+        ))}
+      </nav>
+
+      <div className="min-h-0 flex-1 overflow-y-auto py-1 [&>*]:shrink-0">
+        <Active />
+      </div>
+    </div>
+  );
+}

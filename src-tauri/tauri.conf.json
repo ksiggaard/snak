@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "KDE LLM",
+  "productName": "snak",
   "version": "0.1.0",
-  "identifier": "com.kdellm.app",
+  "identifier": "com.snak.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "KDE LLM",
+        "title": "snak",
         "width": 1000,
         "height": 700,
         "minWidth": 640,
@@ -23,7 +23,7 @@
       },
       {
         "label": "quick",
-        "title": "KDE LLM — Quick input",
+        "title": "snak — Quick input",
         "width": 640,
         "height": 260,
         "resizable": false,

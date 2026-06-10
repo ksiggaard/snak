@@ -2219,25 +2219,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "kde-llm-app"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64 0.22.1",
- "futures-util",
- "keyring",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-opener",
- "tauri-plugin-sql",
- "tokio",
-]
-
-[[package]]
 name = "keyboard-types"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4095,6 +4076,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "snak"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "futures-util",
+ "keyring",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-opener",
+ "tauri-plugin-sql",
+ "tokio",
 ]
 
 [[package]]

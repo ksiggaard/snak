@@ -269,7 +269,7 @@ async fn stdio_roundtrip(
         json!({
             "protocolVersion": "2024-11-05",
             "capabilities": {},
-            "clientInfo": { "name": "kde-llm-app", "version": "0.1" }
+            "clientInfo": { "name": "snak", "version": "0.1" }
         }),
     );
     let req = rpc_request(2, method, params);

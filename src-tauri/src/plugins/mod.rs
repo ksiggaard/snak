@@ -328,7 +328,7 @@ mod tests {
         assert!(
             builtins
                 .iter()
-                .any(|m| m.category == "slash-command" && m.id == "com.kdellm.terminal"),
+                .any(|m| m.category == "slash-command" && m.id == "com.snak.terminal"),
             "expected the built-in /terminal slash-command plugin",
         );
     }

@@ -1,11 +1,11 @@
 {
-  "id": "com.kdellm.mistral",
+  "id": "com.snak.mistral",
   "name": "Mistral",
   "version": "1.0.0",
   "category": "provider",
   "apiVersion": 1,
   "description": "Mistral models (OpenAI-compatible API).",
-  "author": "KDE LLM",
+  "author": "snak",
   "enabledByDefault": true,
   "contributes": {
     "id": "mistral",

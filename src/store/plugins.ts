@@ -60,7 +60,21 @@ export const usePlugins = create<PluginsState>((set, get) => ({
  * The host registry derived from the *enabled* plugins. Later waves
  * (T18/T11/T15/T14) read their category off this seam instead of touching
  * plugin internals.
+ *
+ * Memoized on the `plugins` array identity: this runs as a Zustand selector on
+ * every render, and `useSyncExternalStore` compares snapshots with `Object.is`.
+ * Returning a fresh object each call would make the snapshot look changed every
+ * render → infinite re-render ("Maximum update depth exceeded"). The `plugins`
+ * reference only changes when `load()` replaces it, so caching on it keeps the
+ * registry (and its category arrays) referentially stable across renders.
  */
+let cachedPlugins: PluginInfo[] | null = null;
+let cachedRegistry: HostRegistry | null = null;
+
 export function selectRegistry(s: PluginsState): HostRegistry {
-  return buildRegistry(s.plugins);
+  if (cachedRegistry === null || s.plugins !== cachedPlugins) {
+    cachedPlugins = s.plugins;
+    cachedRegistry = buildRegistry(s.plugins);
+  }
+  return cachedRegistry;
 }

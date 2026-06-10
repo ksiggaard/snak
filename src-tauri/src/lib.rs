@@ -55,7 +55,7 @@ const DEFAULT_SHORTCUT: &str = "Alt+Space";
 
 /// SQLite database URL, shared by the migration runner (backend) and
 /// `Database.load(...)` (frontend). Keep these in sync.
-const DB_URL: &str = "sqlite:kde-llm.db";
+const DB_URL: &str = "sqlite:snak.db";
 
 fn migrations() -> Vec<Migration> {
     vec![

@@ -30,7 +30,7 @@ Packaging: `npm run tauri build` (AppImage/.deb for KDE — wired up in a later 
 
 ## Data layer (Stage 1)
 
-- **SQLite via `tauri-plugin-sql`.** DB URL is `sqlite:kde-llm.db` — defined as `DB_URL` in `src-tauri/src/lib.rs` and duplicated in `src/lib/db.ts`; keep them in sync.
+- **SQLite via `tauri-plugin-sql`.** DB URL is `sqlite:snak.db` — defined as `DB_URL` in `src-tauri/src/lib.rs` and duplicated in `src/lib/db.ts`; keep them in sync.
 - **Migrations** are Rust-registered (`migrations()` in `lib.rs`, SQL in `src-tauri/migrations/NNN_*.sql`, embedded via `include_str!`). They run on app startup. Add a new numbered file + a `Migration` entry with the next `version`; never edit a shipped migration.
 - **Frontend access** goes through typed helpers in `src/lib/db.ts` (one connection via `getDb()`); domain types in `src/types/db.ts`. Don't call `Database.load` elsewhere.
 - FK `ON DELETE CASCADE` is **not** relied upon (the plugin connection may not have `PRAGMA foreign_keys = ON`); `deleteThread` removes children explicitly.
@@ -38,7 +38,7 @@ Packaging: `npm run tauri build` (AppImage/.deb for KDE — wired up in a later 
 
 ## Secrets / API keys (Stage 2)
 
-- Provider API keys live in the **OS keychain** via the `keyring` crate (backend selected per-platform in `Cargo.toml`: macOS Keychain / Windows Cred Manager / Linux Secret Service). Service name `com.kdellm.app`, account = provider id.
+- Provider API keys live in the **OS keychain** via the `keyring` crate (backend selected per-platform in `Cargo.toml`: macOS Keychain / Windows Cred Manager / Linux Secret Service). Service name `com.snak.app`, account = provider id.
 - Commands in `src-tauri/src/commands/keys.rs`: `set_api_key`, `has_api_key`, `delete_api_key`. **`has_api_key` returns only a bool — the key is never returned to the webview.** Frontend wrappers in `src/lib/keys.ts`; settings UI in `src/components/settings/ApiKeys.tsx`.
 - Tauri commands live under `src-tauri/src/commands/` (module `commands` in `lib.rs`) and must be registered in the `invoke_handler!` list.
 - The provider registry (ids, labels, default models) is `src/lib/providers.ts` — the single source of truth for the provider list across settings and chat.

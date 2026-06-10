@@ -16,7 +16,7 @@ import type {
 
 // Must match `DB_URL` in src-tauri/src/lib.rs. Migrations are run by the
 // backend on startup; here we just connect.
-const DB_URL = "sqlite:kde-llm.db";
+const DB_URL = "sqlite:snak.db";
 
 let dbPromise: Promise<Database> | null = null;
 

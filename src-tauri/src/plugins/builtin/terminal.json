@@ -1,11 +1,11 @@
 {
-  "id": "com.kdellm.terminal",
+  "id": "com.snak.terminal",
   "name": "Terminal command",
   "version": "1.0.0",
   "category": "slash-command",
   "apiVersion": 1,
   "description": "Adds the /terminal slash command — stage a shell command in your terminal for review (never auto-run).",
-  "author": "KDE LLM",
+  "author": "snak",
   "enabledByDefault": true,
   "contributes": {
     "command": "/terminal",

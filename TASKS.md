@@ -1,6 +1,6 @@
 # TASKS
 
-Work queue for subagents implementing the remaining features of the KDE LLM app.
+Work queue for subagents implementing the remaining features of the snak app.
 Read `CLAUDE.md` first for architecture, conventions, and the frontend/backend boundary.
 
 ## How to use this file
