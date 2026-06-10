@@ -8,6 +8,7 @@ import { hasApiKey } from "@/lib/keys";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -34,7 +35,7 @@ export function ModelPicker() {
 
   // Trigger label resolves synchronously (no `keyed` dependency) so the picker
   // renders immediately with no mount flash.
-  const { label, providerLabel } = currentModelLabel(providers, models, provider, model);
+  const { label, providerLabel: currentProviderLabel } = currentModelLabel(providers, models, provider, model);
 
   // Which enabled providers have a stored API key. Resolved async (like
   // ApiKeys.tsx); recomputed when the provider list changes.
@@ -84,15 +85,15 @@ export function ModelPicker() {
           </DropdownMenuTrigger>
         </TooltipTrigger>
         <TooltipContent side="top">
-          {providerLabel} · {model}
+          {currentProviderLabel} · {model}
         </TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align="end" className="max-h-80 overflow-y-auto">
+      <DropdownMenuContent align="end">
         {keyed === null ? (
           <DropdownMenuItem disabled>Loading…</DropdownMenuItem>
         ) : (
           groups.map((g, gi) => (
-            <div key={g.providerLabel}>
+            <DropdownMenuGroup key={g.providerLabel}>
               {gi > 0 && <DropdownMenuSeparator />}
               <DropdownMenuLabel className="text-muted-foreground text-xs">
                 {g.providerLabel}
@@ -115,7 +116,7 @@ export function ModelPicker() {
                   </DropdownMenuItem>
                 );
               })}
-            </div>
+            </DropdownMenuGroup>
           ))
         )}
       </DropdownMenuContent>
