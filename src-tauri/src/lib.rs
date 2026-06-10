@@ -183,6 +183,7 @@ pub fn run() {
             commands::quick::hide_quick,
             commands::quick::set_global_shortcut,
             commands::quick::take_screenshot,
+            commands::quick::set_quick_height,
             commands::terminal::open_in_terminal,
             commands::themes::list_themes,
             commands::themes::themes_directory,

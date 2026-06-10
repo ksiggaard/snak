@@ -3,7 +3,7 @@
 //! (which owns the chat/DB logic) via the `quick-submit` event.
 
 use base64::{engine::general_purpose::STANDARD, Engine};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, LogicalSize, Manager};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 /// Show + center + focus the quick-input overlay. Called by the shortcut handler.
@@ -32,6 +32,19 @@ fn focus_main_inner(app: &AppHandle) {
 #[tauri::command]
 pub fn hide_quick(app: AppHandle) {
     hide_quick_inner(&app);
+}
+
+/// Resize the quick-input overlay to fit its content height (width is fixed).
+/// Clamped so the overlay never collapses or grows past a sensible maximum;
+/// the webview measures its content and calls this as the panel grows/shrinks.
+#[tauri::command]
+pub fn set_quick_height(app: AppHandle, height: f64) {
+    const WIDTH: f64 = 640.0;
+    const MIN: f64 = 160.0;
+    const MAX: f64 = 480.0;
+    if let Some(w) = app.get_webview_window("quick") {
+        let _ = w.set_size(LogicalSize::new(WIDTH, height.clamp(MIN, MAX)));
+    }
 }
 
 /// Forward the overlay's input to the main window and bring it to the front.

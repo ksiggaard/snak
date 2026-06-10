@@ -13,6 +13,10 @@ export const submitQuick = (payload: QuickPayload): Promise<void> =>
 
 export const hideQuick = (): Promise<void> => invoke("hide_quick");
 
+/** Resize the overlay window to fit `height` px of content (Rust clamps it). */
+export const setQuickHeight = (height: number): Promise<void> =>
+  invoke("set_quick_height", { height });
+
 export const setGlobalShortcut = (accelerator: string): Promise<void> =>
   invoke("set_global_shortcut", { accelerator });
 
