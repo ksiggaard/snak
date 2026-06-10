@@ -27,3 +27,6 @@ dist-ssr
 
 # Affinity Designer lock files
 *~lock~
+
+# Superpowers brainstorming companion (local mockups)
+.superpowers/
