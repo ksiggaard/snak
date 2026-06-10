@@ -950,11 +950,12 @@ elsewhere). The capture path is `take_screenshot` in `src-tauri/src/commands/qui
 
 ## T27 — Token-spend activity graph: month labels, responsive, styled hover
 
-- **Status:** todo
-- **Owner:** —
+- **Status:** done
+- **Owner:** WS-B
 - **Priority:** P3
 - **Layer:** React
 - **Depends on:** T16
+- **Notes (2026-06-10):** Added `monthLabelColumns` pure helper (TDD, unit-tested); responsive `ActivityHeatmap` via `ResizeObserver` callback ref that trims visible columns to fit container width; replaced `title` attribute with `DayTooltip` (fixed-position, popover/design-token styled) showing date + input/output/cache breakdown. Extended `DailyUsage` and `HeatmapCell` types with token breakdown fields.
 
 The GitHub-style activity graph in the usage view (`src/components/usage/UsageView.tsx`,
 from T16) needs month indicators, should be responsive to width, and its per-day hover

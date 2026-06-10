@@ -8,6 +8,9 @@ export interface HeatmapCell {
   /** Local "YYYY-MM-DD". */
   day: string;
   total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_tokens: number;
   responses: number;
   /** 0 (no activity) … 4 (most), for the 5-step GitHub color scale. */
   level: 0 | 1 | 2 | 3 | 4;
@@ -74,6 +77,9 @@ export function buildHeatmap(
       week.push({
         day: key,
         total_tokens: total,
+        input_tokens: row?.input_tokens ?? 0,
+        output_tokens: row?.output_tokens ?? 0,
+        cache_tokens: row?.cache_tokens ?? 0,
         responses: row?.responses ?? 0,
         level: heatLevel(total, max),
       });
@@ -100,6 +106,45 @@ export function heatLevel(total: number, max: number): 0 | 1 | 2 | 3 | 4 {
   if (frac > 0.5) return 3;
   if (frac > 0.25) return 2;
   return 1;
+}
+
+/** Short month name abbreviations indexed by JS month (0 = Jan). */
+const SHORT_MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+] as const;
+
+/**
+ * Compute month labels for a GitHub-style heatmap, aligned to column (week)
+ * boundaries — just like GitHub's contribution graph.
+ *
+ * For each column in `weeks`, the "representative day" is the first non-null
+ * cell. When that day's month differs from the previous column's month, we emit
+ * a label entry `{ label, colIndex }`. The label is a 3-letter month
+ * abbreviation ("Jan"…"Dec"). Columns where every cell is null (padding) are
+ * skipped.
+ *
+ * Returns an array ordered by ascending `colIndex`.
+ */
+export function monthLabelColumns(
+  weeks: HeatmapWeek[],
+): { label: string; colIndex: number }[] {
+  const result: { label: string; colIndex: number }[] = [];
+  let lastMonth = -1;
+
+  for (let wi = 0; wi < weeks.length; wi++) {
+    // Find the first real (non-null) cell in this column.
+    const firstCell = weeks[wi].find((c) => c !== null);
+    if (!firstCell) continue; // all-null padding column — skip
+
+    const month = Number(firstCell.day.slice(5, 7)) - 1; // 0-indexed
+    if (month !== lastMonth) {
+      result.push({ label: SHORT_MONTHS[month], colIndex: wi });
+      lastMonth = month;
+    }
+  }
+
+  return result;
 }
 
 /** Compact token count: 1234 → "1.2K", 1_500_000 → "1.5M". */

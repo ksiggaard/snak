@@ -1,8 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { dailyUsage, usageByModel, type UsageByModel } from "@/lib/db";
-import { buildHeatmap, formatTokens, type HeatmapWeek } from "@/lib/usage";
+import {
+  buildHeatmap,
+  formatTokens,
+  monthLabelColumns,
+  type HeatmapCell,
+  type HeatmapWeek,
+} from "@/lib/usage";
 import { PROVIDERS } from "@/lib/providers";
 
 type SortKey = "model" | "total_tokens" | "last_used";
@@ -20,10 +26,191 @@ const LEVEL_BG = [
   "bg-primary",
 ] as const;
 
+// Cell size in px (matches Tailwind `size-3` = 12px) plus gap (4px = gap-1).
+const CELL_SIZE = 12;
+const CELL_GAP = 4;
+const COL_STRIDE = CELL_SIZE + CELL_GAP;
+
+/** Heatmap that adapts to its container width via ResizeObserver. */
+function ActivityHeatmap({ allWeeks }: { allWeeks: HeatmapWeek[] }) {
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  // Callback ref: wires up/tears down a ResizeObserver whenever the element
+  // mounts or unmounts, so column count stays in sync with container width.
+  const observe = useCallback((el: HTMLDivElement | null) => {
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      setContainerWidth(entry.contentRect.width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Compute how many columns fit in the available width.
+  const maxCols = containerWidth > 0
+    ? Math.max(1, Math.floor((containerWidth + CELL_GAP) / COL_STRIDE))
+    : allWeeks.length;
+
+  // Take only the last maxCols weeks (most recent).
+  const weeks = allWeeks.slice(-maxCols);
+  const labels = useMemo(() => monthLabelColumns(weeks), [weeks]);
+
+  // Build a lookup: colIndex → label, using the slice-adjusted index.
+  const labelMap = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const { colIndex, label } of labels) m.set(colIndex, label);
+    return m;
+  }, [labels]);
+
+  return (
+    <div ref={observe} className="w-full overflow-hidden">
+      {/* Month label row */}
+      <div className="relative mb-1 flex" style={{ height: "1rem" }}>
+        {weeks.map((_, wi) => {
+          const lbl = labelMap.get(wi);
+          if (!lbl) return null;
+          return (
+            <div
+              key={wi}
+              className="text-muted-foreground absolute text-[10px] leading-none"
+              style={{ left: wi * COL_STRIDE }}
+            >
+              {lbl}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Week columns */}
+      <div className="flex gap-1">
+        {weeks.map((week, wi) => (
+          <div key={wi} className="flex flex-col gap-1">
+            {week.map((cell, di) =>
+              cell === null ? (
+                <div key={di} className="size-3" />
+              ) : (
+                <DayCell key={di} cell={cell} />
+              ),
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** A single day cell with a styled tooltip. */
+function DayCell({ cell }: { cell: HeatmapCell }) {
+  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+
+  function handleMouseEnter(e: React.MouseEvent<HTMLDivElement>) {
+    setAnchorRect(e.currentTarget.getBoundingClientRect());
+  }
+
+  function handleMouseLeave() {
+    setAnchorRect(null);
+  }
+
+  return (
+    <>
+      <div
+        className={`size-3 cursor-default rounded-sm ${LEVEL_BG[cell.level]}`}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      />
+      {anchorRect && <DayTooltip cell={cell} anchorRect={anchorRect} />}
+    </>
+  );
+}
+
+/** Absolutely-positioned tooltip using popover/design tokens. */
+function DayTooltip({
+  cell,
+  anchorRect,
+}: {
+  cell: HeatmapCell;
+  anchorRect: DOMRect;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [style, setStyle] = useState<React.CSSProperties>({
+    visibility: "hidden",
+  });
+
+  useEffect(() => {
+    if (!ref.current) return;
+    const tip = ref.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    // Prefer above the cell; fall back to below.
+    const GAP = 6;
+    const CELL_H = 12;
+    let top = anchorRect.top - tip.height - GAP;
+    if (top < 4) top = anchorRect.top + CELL_H + GAP;
+
+    // Keep horizontally in viewport.
+    let left = anchorRect.left + CELL_H / 2 - tip.width / 2;
+    if (left + tip.width > vw - 4) left = vw - tip.width - 4;
+    if (left < 4) left = 4;
+
+    // Keep vertically in viewport.
+    if (top + tip.height > vh - 4) top = vh - tip.height - 4;
+
+    setStyle({ position: "fixed", top, left, visibility: "visible" });
+  }, [anchorRect]);
+
+  const hasBreakdown =
+    cell.input_tokens > 0 || cell.output_tokens > 0 || cell.cache_tokens > 0;
+
+  return (
+    <div
+      ref={ref}
+      className="bg-popover text-popover-foreground border-border z-50 min-w-[10rem] rounded-md border px-3 py-2 shadow-md"
+      style={style}
+      role="tooltip"
+    >
+      <p className="mb-1 text-xs font-semibold">{cell.day}</p>
+      {hasBreakdown ? (
+        <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs">
+          <dt className="text-muted-foreground">Input</dt>
+          <dd className="text-right tabular-nums">
+            {formatTokens(cell.input_tokens)}
+          </dd>
+          <dt className="text-muted-foreground">Output</dt>
+          <dd className="text-right tabular-nums">
+            {formatTokens(cell.output_tokens)}
+          </dd>
+          {cell.cache_tokens > 0 && (
+            <>
+              <dt className="text-muted-foreground">Cache</dt>
+              <dd className="text-right tabular-nums">
+                {formatTokens(cell.cache_tokens)}
+              </dd>
+            </>
+          )}
+          <dt className="text-muted-foreground border-border mt-1 border-t pt-1">
+            Total
+          </dt>
+          <dd className="border-border mt-1 border-t pt-1 text-right font-medium tabular-nums">
+            {formatTokens(cell.total_tokens)}
+          </dd>
+        </dl>
+      ) : (
+        <p className="text-muted-foreground text-xs">No activity</p>
+      )}
+      {cell.responses > 0 && (
+        <p className="text-muted-foreground mt-1 text-xs">
+          {cell.responses} response{cell.responses !== 1 ? "s" : ""}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** The token-usage view (T16): a sortable per-model table + activity heatmap. */
 export function UsageView() {
   const [rows, setRows] = useState<UsageByModel[]>([]);
-  const [weeks, setWeeks] = useState<HeatmapWeek[]>([]);
+  const [allWeeks, setAllWeeks] = useState<HeatmapWeek[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("total_tokens");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -37,7 +224,7 @@ export function UsageView() {
       ]);
       if (!alive) return;
       setRows(byModel);
-      setWeeks(buildHeatmap(daily, 365).weeks);
+      setAllWeeks(buildHeatmap(daily, 365).weeks);
       setLoading(false);
     })();
     return () => {
@@ -123,26 +310,8 @@ export function UsageView() {
       {/* Activity heatmap */}
       <Card className="px-4">
         <h2 className="text-sm font-semibold">Activity (last 12 months)</h2>
-        <div className="overflow-x-auto pb-1">
-          <div className="flex gap-1">
-            {weeks.map((week, wi) => (
-              <div key={wi} className="flex flex-col gap-1">
-                {week.map((cell, di) =>
-                  cell === null ? (
-                    <div key={di} className="size-3" />
-                  ) : (
-                    <div
-                      key={di}
-                      className={`size-3 rounded-sm ${LEVEL_BG[cell.level]}`}
-                      title={`${cell.day}: ${formatTokens(cell.total_tokens)} tokens, ${cell.responses} responses`}
-                    />
-                  ),
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="text-muted-foreground flex items-center gap-1 text-xs">
+        <ActivityHeatmap allWeeks={allWeeks} />
+        <div className="text-muted-foreground mt-2 flex items-center gap-1 text-xs">
           <span>Less</span>
           {LEVEL_BG.map((bg, i) => (
             <div key={i} className={`size-3 rounded-sm ${bg}`} />
