@@ -1,7 +1,9 @@
-import { useState } from "react";
-import { Input } from "@/components/ui/input";
+import { useEffect, useState } from "react";
 import { useThreads } from "@/store/threads";
+import { useModels } from "@/store/models";
 import { useProviders } from "@/lib/providers";
+import { buildModelOptions } from "@/lib/modelOptions";
+import { hasApiKey } from "@/lib/keys";
 import type { Provider } from "@/types/db";
 
 export function ModelPicker() {
@@ -10,84 +12,62 @@ export function ModelPicker() {
   const draftProvider = useThreads((s) => s.draftProvider);
   const draftModel = useThreads((s) => s.draftModel);
   const setProviderModel = useThreads((s) => s.setProviderModel);
+  const models = useModels((s) => s.models);
 
-  // Active providers come from the enabled provider plugins (T18). Empty = all
-  // providers disabled.
+  // Active providers come from the enabled provider plugins (T18).
   const providers = useProviders();
 
   const current = threads.find((t) => t.id === currentId);
   const provider = current?.provider ?? draftProvider;
   const model = current?.model ?? draftModel;
 
-  // The thread's provider may reference one that's since been disabled. Keep it
-  // visible as an inert option so the value still renders (no crash) and the
-  // user can re-enable it; otherwise the <select> would silently show option[0].
-  const providerEnabled = providers.some((p) => p.id === provider);
-  const allDisabled = providers.length === 0;
+  // Which enabled providers have a stored API key. Resolved async (like
+  // ApiKeys.tsx); recomputed when the provider list changes. Leaving Settings
+  // remounts ChatView, so a newly-added key is reflected on return to chat.
+  const [keyed, setKeyed] = useState<Set<Provider>>(new Set());
+  const providerKey = providers.map((p) => p.id).join(",");
+  useEffect(() => {
+    let active = true;
+    void Promise.all(
+      providers.map((p) => hasApiKey(p.id).then((ok) => [p.id, ok] as const)),
+    ).then((pairs) => {
+      if (active) setKeyed(new Set(pairs.filter(([, ok]) => ok).map(([id]) => id)));
+    });
+    return () => {
+      active = false;
+    };
+    // providerKey captures the provider-list identity (primitive, stable).
+  }, [providerKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Local model draft so typing doesn't write to the DB on every keystroke.
-  // Re-sync during render (not via an effect) when the active model changes,
-  // e.g. after switching threads or providers.
-  const [modelDraft, setModelDraft] = useState(model);
-  const [syncedModel, setSyncedModel] = useState(model);
-  if (model !== syncedModel) {
-    setSyncedModel(model);
-    setModelDraft(model);
-  }
+  const options = buildModelOptions(providers, keyed, models, { provider, model });
+  const selectedIndex = options.findIndex(
+    (o) => o.provider === provider && o.modelId === model,
+  );
 
-  function onProviderChange(p: Provider) {
-    const meta = providers.find((x) => x.id === p);
-    if (!meta) return; // ignore the inert disabled-provider option
-    void setProviderModel(p, meta.defaultModel);
-  }
-
-  function commitModel() {
-    const m = modelDraft.trim();
-    if (m && m !== model) void setProviderModel(provider, m);
-    else setModelDraft(model);
-  }
-
-  if (allDisabled) {
+  if (options.length === 0) {
     return (
       <span className="text-muted-foreground text-sm">
-        No providers enabled — enable one in Settings → Plugins.
+        No models available — add an API key and models in Settings.
       </span>
     );
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <select
-        value={provider}
-        onChange={(e) => onProviderChange(e.target.value as Provider)}
-        className="border-input bg-background h-9 rounded-md border px-2 text-sm"
-      >
-        {/* Stored provider that's now disabled: show it (disabled) so the value
-            renders and the user sees what the thread is set to. */}
-        {!providerEnabled && (
-          <option value={provider} disabled>
-            {provider} (disabled)
-          </option>
-        )}
-        {providers.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.label}
-          </option>
-        ))}
-      </select>
-      <Input
-        value={modelDraft}
-        onChange={(e) => setModelDraft(e.target.value)}
-        onBlur={commitModel}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            commitModel();
-          }
-        }}
-        className="h-9 w-56 text-sm"
-        aria-label="Model"
-      />
-    </div>
+    <select
+      value={selectedIndex >= 0 ? selectedIndex : 0}
+      onChange={(e) => {
+        const opt = options[Number(e.target.value)];
+        if (opt) void setProviderModel(opt.provider, opt.modelId);
+      }}
+      className="border-input bg-background h-9 max-w-72 rounded-md border px-2 text-sm"
+      aria-label="Model"
+    >
+      {options.map((o, i) => (
+        <option key={`${o.provider}:${o.modelId}`} value={i}>
+          {o.display}
+          {o.active ? "" : " (unavailable)"}
+        </option>
+      ))}
+    </select>
   );
 }
