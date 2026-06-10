@@ -32,11 +32,9 @@ export function ChatView() {
   const pending = busy && (!last || last.role === "user");
 
   return (
-    <div className="bg-card flex flex-1 flex-col overflow-hidden rounded-lg border">
+    <div className="flex flex-1 flex-col gap-3 overflow-hidden">
       <MessageList messages={messages} pending={pending} />
-      {error && (
-        <p className="text-destructive border-t px-4 py-2 text-sm">{error}</p>
-      )}
+      {error && <p className="text-destructive px-1 text-sm">{error}</p>}
       <Composer
         onSend={(text, images) => void send(text, images)}
         onCancel={() => void cancel()}
