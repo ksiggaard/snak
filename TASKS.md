@@ -181,8 +181,8 @@ test tooling and seed it with meaningful unit tests on pure logic. Follow
 
 ## T5 — KDE/Linux packaging + app branding
 
-- **Status:** todo
-- **Owner:** —
+- **Status:** blocked
+- **Owner:** WS-A (macOS slice)
 - **Priority:** P2
 - **Layer:** Tooling / config (Rust bundle) + assets
 - **Depends on:** —
@@ -201,6 +201,13 @@ Tauri placeholders.
 **Notes:**
 - This requires a Linux/KDE environment; the dev machine is macOS. Mark `blocked` if no
   KDE target is available and note that.
+- 2026-06-10 (WS-A): **macOS slice done** alongside T26 — `src-tauri/Info.plist` (new) carries
+  `NSScreenCaptureUsageDescription`, wired via `bundle.macOS.infoPlist` in `tauri.conf.json`,
+  so packaged builds can be granted Screen Recording. Confirmed `src-tauri/icons/` are real
+  `snak` branding (not Tauri placeholders) and `productName`/`com.snak.app` are correct.
+  **Still BLOCKED:** producing/verifying the AppImage + `.deb` and confirming the tray, global
+  shortcut, and `spectacle -r` on a real KDE session — needs a Linux/KDE machine (dev box is
+  macOS). Pick this up on a KDE target.
 
 ---
 
