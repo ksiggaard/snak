@@ -3,14 +3,8 @@ import { Star, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useThreads } from "@/store/threads";
 import { confirmDialog } from "@/store/confirm";
-import { PROVIDERS } from "@/lib/providers";
 import { cn } from "@/lib/utils";
-import type { Provider, Thread } from "@/types/db";
-
-// A thread's provider label for the row subtitle. Uses the static registry
-// (all four providers) so the label resolves even for a since-disabled provider.
-const providerLabel = (p: Provider) =>
-  PROVIDERS.find((x) => x.id === p)?.label ?? p;
+import type { Thread } from "@/types/db";
 
 interface ThreadRowProps {
   thread: Thread;
@@ -69,9 +63,6 @@ export function ThreadRow({ thread, active, onSelect }: ThreadRowProps) {
           title="Double-click to rename"
         >
           <div className="truncate text-sm">{thread.title}</div>
-          <div className="text-muted-foreground truncate text-xs">
-            {providerLabel(thread.provider)}
-          </div>
         </button>
       )}
       <button
