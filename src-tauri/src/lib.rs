@@ -89,6 +89,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/005_user_memory.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 6,
+            description: "models: configurable per-provider model list (seeded)",
+            sql: include_str!("../migrations/006_models.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

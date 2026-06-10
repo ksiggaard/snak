@@ -18,6 +18,7 @@ import { setGlobalShortcut, type QuickPayload } from "@/lib/quick";
 import { useThreads } from "@/store/threads";
 import { useProjects } from "@/store/projects";
 import { usePlugins } from "@/store/plugins";
+import { useModels } from "@/store/models";
 import { useSearch } from "@/store/search";
 import { useTheme } from "@/store/theme";
 
@@ -26,6 +27,7 @@ function App() {
   const initProjects = useProjects((s) => s.init);
   const loadPlugins = usePlugins((s) => s.load);
   const loadInstalledThemes = useTheme((s) => s.loadInstalled);
+  const loadModels = useModels((s) => s.load);
   const openProjectId = useProjects((s) => s.openProjectId);
   const closeProject = useProjects((s) => s.close);
   const searchOpen = useSearch((s) => s.open);
@@ -42,7 +44,8 @@ function App() {
     // is the authoritative source here; plugin-contributed themes are composed
     // in the Themes settings card when it mounts.
     void loadInstalledThemes();
-  }, [init, initProjects, loadPlugins, loadInstalledThemes]);
+    void loadModels();
+  }, [init, initProjects, loadPlugins, loadInstalledThemes, loadModels]);
 
   // Apply the user's saved global shortcut (Rust registers the default already).
   useEffect(() => {
