@@ -61,6 +61,7 @@ export function DefaultModel() {
             {options.map((o, i) => (
               <option key={`${o.provider}:${o.modelId}`} value={i}>
                 {o.display}
+                {o.active ? "" : " (unavailable)"}
               </option>
             ))}
           </select>

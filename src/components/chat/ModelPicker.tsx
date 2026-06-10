@@ -22,8 +22,8 @@ export function ModelPicker() {
   const model = current?.model ?? draftModel;
 
   // Which enabled providers have a stored API key. Resolved async (like
-  // ApiKeys.tsx); recomputed when the provider list changes. Leaving Settings
-  // remounts ChatView, so a newly-added key is reflected on return to chat.
+  // ApiKeys.tsx); recomputed when the provider list changes. Closing Settings
+  // remounts this picker, so a newly-added key is reflected on return to chat.
   const [keyed, setKeyed] = useState<Set<Provider> | null>(null);
   const providerKey = providers.map((p) => p.id).join(",");
   useEffect(() => {

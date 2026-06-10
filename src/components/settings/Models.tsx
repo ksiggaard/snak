@@ -22,6 +22,7 @@ export function Models() {
   const models = useModels((s) => s.models);
   const add = useModels((s) => s.add);
   const remove = useModels((s) => s.remove);
+  const error = useModels((s) => s.error);
 
   // Per-provider draft inputs for the add row, keyed by provider id.
   const [labelDraft, setLabelDraft] = useState<Record<string, string>>({});
@@ -46,6 +47,7 @@ export function Models() {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
+        {error && <p className="text-destructive text-sm">{error}</p>}
         {providers.length === 0 && (
           <p className="text-muted-foreground text-sm">
             No providers enabled — enable one in Settings → Plugins.
