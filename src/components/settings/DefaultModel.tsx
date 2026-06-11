@@ -9,6 +9,7 @@ import { useThreads } from "@/store/threads";
 import { useModels } from "@/store/models";
 import { useProviders } from "@/lib/providers";
 import { buildModelOptions } from "@/lib/modelOptions";
+import { ModelChooser } from "@/components/chat/ModelChooser";
 
 /**
  * Default-model settings: the provider+model new chats (and the quick-input
@@ -25,16 +26,10 @@ export function DefaultModel() {
 
   // All enabled providers count as selectable here (not filtered by API key).
   const allEnabled = new Set(providers.map((p) => p.id));
-  const options = buildModelOptions(providers, allEnabled, models, {
-    provider,
-    model,
-  });
-  const selectedIndex = options.findIndex(
-    (o) => o.provider === provider && o.modelId === model,
-  );
+  const options = buildModelOptions(providers, allEnabled, models, { provider, model });
 
   return (
-    <Card className="w-full max-w-lg">
+    <Card className="w-full max-w-lg overflow-visible">
       <CardHeader>
         <CardTitle>Default Model</CardTitle>
         <CardDescription>
@@ -49,22 +44,13 @@ export function DefaultModel() {
             No models configured — add some in Settings → Models.
           </p>
         ) : (
-          <select
-            value={selectedIndex >= 0 ? selectedIndex : 0}
-            onChange={(e) => {
-              const opt = options[Number(e.target.value)];
-              if (opt) void setDefaultModel(opt.provider, opt.modelId);
-            }}
-            className="border-input bg-background h-9 max-w-72 rounded-md border px-2 text-sm"
-            aria-label="Default model"
-          >
-            {options.map((o, i) => (
-              <option key={`${o.provider}:${o.modelId}`} value={i}>
-                {o.display}
-                {o.active ? "" : " (unavailable)"}
-              </option>
-            ))}
-          </select>
+          <ModelChooser
+            provider={provider}
+            model={model}
+            onSelect={(p, m) => void setDefaultModel(p, m)}
+            keyed={allEnabled}
+            align="start"
+          />
         )}
       </CardContent>
     </Card>

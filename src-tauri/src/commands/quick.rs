@@ -152,12 +152,10 @@ fn read_and_encode(path: &std::path::Path) -> Result<Option<String>, String> {
     Ok(Some(STANDARD.encode(bytes)))
 }
 
-/// Actionable message surfaced when macOS Screen Recording permission is denied.
-const PERMISSION_MSG: &str = "Screenshot failed. Grant Screen Recording to snak in \
-    System Settings → Privacy & Security → Screen Recording, then quit and reopen the app.";
-
 #[cfg(target_os = "macos")]
 fn capture_interactive() -> Result<Option<String>, String> {
+    const PERMISSION_MSG: &str = "Screenshot failed. Grant Screen Recording to snak in \
+        System Settings → Privacy & Security → Screen Recording, then quit and reopen the app.";
     let path = temp_png_path();
     // Use -x to silence the shutter sound while the overlay is hidden.
     let out = std::process::Command::new("screencapture")

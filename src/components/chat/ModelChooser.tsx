@@ -1,17 +1,9 @@
+import { useEffect, useRef, useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { useModels } from "@/store/models";
 import { useKeys } from "@/store/keys";
 import { useProviders } from "@/lib/providers";
 import { buildModelOptions, currentModelLabel } from "@/lib/modelOptions";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { Provider } from "@/types/db";
@@ -22,6 +14,10 @@ interface ModelChooserProps {
   onSelect: (provider: Provider, model: string) => void;
   align?: "start" | "end";
   className?: string;
+  /** Override the set of provider IDs considered "keyed". Pass a set of all
+   *  enabled provider IDs to show all models regardless of saved API keys
+   *  (used by the Default Model settings card). */
+  keyed?: Set<string>;
 }
 
 export function ModelChooser({
@@ -30,14 +26,10 @@ export function ModelChooser({
   onSelect,
   align = "end",
   className,
+  keyed: keyedProp,
 }: ModelChooserProps) {
   const models = useModels((s) => s.models);
-
-  // Active providers come from the enabled provider plugins (T18).
   const providers = useProviders();
-
-  // Trigger label resolves synchronously (no `keyed` dependency) so the picker
-  // renders immediately with no mount flash.
   const { label, providerLabel: currentProviderLabel } = currentModelLabel(
     providers,
     models,
@@ -45,17 +37,13 @@ export function ModelChooser({
     model,
   );
 
-  // Which providers have a stored key — from the cached keys store (no keychain
-  // reads, so opening the picker never triggers an OS prompt). `null` until the
-  // cache has loaded so the menu shows a brief "Loading…".
   const present = useKeys((s) => s.present);
   const keysLoaded = useKeys((s) => s.loaded);
-  const keyed = keysLoaded ? present : null;
+  const keyed = keyedProp ?? (keysLoaded ? present : null);
 
   const options =
     keyed === null ? [] : buildModelOptions(providers, keyed, models, { provider, model });
 
-  // Group options by provider for the chooser, preserving option order.
   const groups: { providerLabel: string; items: typeof options }[] = [];
   for (const o of options) {
     const g = groups.find((x) => x.providerLabel === o.providerLabel);
@@ -63,60 +51,104 @@ export function ModelChooser({
     else groups.push({ providerLabel: o.providerLabel, items: [o] });
   }
 
+  const [open, setOpen] = useState(false);
+  const [openAbove, setOpenAbove] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleToggle = () => {
+    if (!open && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      setOpenAbove(rect.top > window.innerHeight - rect.bottom);
+    }
+    setOpen((v) => !v);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: PointerEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [open]);
+
   return (
-    <DropdownMenu>
+    <div ref={containerRef} className="relative">
       <Tooltip>
         <TooltipTrigger asChild>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              aria-label="Choose model"
-              className={cn(
-                "text-muted-foreground hover:text-foreground hover:bg-accent flex items-center gap-1 rounded-md px-2 py-1 text-sm transition-colors",
-                className,
-              )}
-            >
-              <span className="text-foreground max-w-40 truncate">{label}</span>
-              <ChevronsUpDown className="size-3 shrink-0 opacity-60" />
-            </button>
-          </DropdownMenuTrigger>
+          <button
+            type="button"
+            aria-label="Choose model"
+            aria-expanded={open}
+            aria-haspopup="listbox"
+            onClick={handleToggle}
+            className={cn(
+              "text-muted-foreground hover:text-foreground hover:bg-accent flex items-center gap-1 rounded-md px-2 py-1 text-sm transition-colors",
+              className,
+            )}
+          >
+            <span className="text-foreground max-w-40 truncate">{label}</span>
+            <ChevronsUpDown className="size-3 shrink-0 opacity-60" />
+          </button>
         </TooltipTrigger>
         <TooltipContent side="top">
           {currentProviderLabel} · {model}
         </TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align={align}>
-        {keyed === null ? (
-          <DropdownMenuItem disabled>Loading…</DropdownMenuItem>
-        ) : (
-          groups.map((g, gi) => (
-            <DropdownMenuGroup key={g.providerLabel}>
-              {gi > 0 && <DropdownMenuSeparator />}
-              <DropdownMenuLabel className="text-muted-foreground text-xs">
-                {g.providerLabel}
-              </DropdownMenuLabel>
-              {g.items.map((o) => {
-                const selected = o.provider === provider && o.modelId === model;
-                return (
-                  <DropdownMenuItem
-                    key={`${o.provider}:${o.modelId}`}
-                    disabled={!o.active}
-                    onSelect={() => onSelect(o.provider, o.modelId)}
-                  >
-                    <Check
-                      className={cn("size-4 shrink-0", selected ? "opacity-100" : "opacity-0")}
-                    />
-                    <span className="flex-1 truncate">{o.label}</span>
-                    {!o.active && (
-                      <span className="text-muted-foreground text-xs">unavailable</span>
-                    )}
-                  </DropdownMenuItem>
-                );
-              })}
-            </DropdownMenuGroup>
-          ))
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+
+      {open && (
+        <div
+          role="listbox"
+          aria-label="Model"
+          className={cn(
+            "bg-popover text-popover-foreground absolute z-50 min-w-48 rounded-lg p-1 shadow-md ring-1 ring-foreground/10",
+            openAbove ? "bottom-full mb-1" : "mt-1",
+            align === "end" ? "right-0" : "left-0",
+          )}
+        >
+          {keyed === null ? (
+            <div className="text-muted-foreground px-2 py-1.5 text-sm">Loading…</div>
+          ) : (
+            groups.map((g, gi) => (
+              <div key={g.providerLabel}>
+                {gi > 0 && <div className="bg-border -mx-1 my-1 h-px" />}
+                <div className="text-muted-foreground px-1.5 py-1 text-xs font-medium">
+                  {g.providerLabel}
+                </div>
+                {g.items.map((o) => {
+                  const selected = o.provider === provider && o.modelId === model;
+                  return (
+                    <button
+                      key={`${o.provider}:${o.modelId}`}
+                      role="option"
+                      aria-selected={selected}
+                      type="button"
+                      disabled={!o.active}
+                      onClick={() => {
+                        onSelect(o.provider, o.modelId);
+                        setOpen(false);
+                      }}
+                      className={cn(
+                        "hover:bg-accent hover:text-accent-foreground flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-sm disabled:pointer-events-none disabled:opacity-50",
+                      )}
+                    >
+                      <Check
+                        className={cn("size-4 shrink-0", selected ? "opacity-100" : "opacity-0")}
+                      />
+                      <span className="flex-1 truncate text-left">{o.label}</span>
+                      {!o.active && (
+                        <span className="text-muted-foreground text-xs">unavailable</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
   );
 }
