@@ -112,6 +112,16 @@ fn migrations() -> Vec<Migration> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // WebKitGTK (Linux) paints elements promoted to their own compositing layer
+    // — e.g. Radix popovers/dropdowns, which are positioned with a `transform` —
+    // with washed-out colors on some GPU/driver combos, while the normally
+    // painted page renders fine. Forcing off the DMABuf renderer routes those
+    // layers through a path that paints them correctly. Must be set before the
+    // webview (and thus WebKitGTK) initializes; respect an explicit override.
+    if cfg!(target_os = "linux") && std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+
     tauri::Builder::default()
         .manage(CloseToTray::default())
         .manage(commands::chat::CancelFlag::default())
