@@ -145,12 +145,23 @@ pub fn run() {
             // user's saved accelerator (if any) once it loads.
             let _ = app.global_shortcut().register(DEFAULT_SHORTCUT);
 
+            // Remove the OS title bar on all platforms so the app renders its
+            // own compact one.
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.set_decorations(false);
+            }
+
             // System tray: icon + menu (Show/Hide, Quit) and click-to-toggle.
             let show_hide = MenuItem::with_id(app, "show_hide", "Show / Hide", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_hide, &quit])?;
 
-            let mut tray = TrayIconBuilder::new()
+            // Embed the icon at compile time so it's always available on Linux
+            // (default_window_icon() can return None in dev mode on Linux).
+            TrayIconBuilder::new()
+                .icon(tauri::include_image!("icons/32x32.png"))
+                .icon_as_template(false)
+                .tooltip("snak")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id().as_ref() {
@@ -167,11 +178,8 @@ pub fn run() {
                     {
                         toggle_main(tray.app_handle());
                     }
-                });
-            if let Some(icon) = app.default_window_icon().cloned() {
-                tray = tray.icon(icon);
-            }
-            tray.build(app)?;
+                })
+                .build(app)?;
 
             Ok(())
         })

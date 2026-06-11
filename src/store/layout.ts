@@ -13,6 +13,9 @@ import {
 interface LayoutState {
   /** Whether the sidebar is shown (inline at >= md; as a Sheet below md). */
   sidebarOpen: boolean;
+  /** Whether the narrow-width overlay Sheet is open (controlled here so
+   *  TitleBar can open it without prop-drilling). */
+  mobileOpen: boolean;
   /** Persisted sidebar width in px (applied inline; clamped to MIN..MAX). */
   sidebarWidth: number;
   /** Which list the sidebar shows: chats or projects (T24). */
@@ -20,6 +23,7 @@ interface LayoutState {
 
   setSidebarOpen: (open: boolean) => void;
   toggleSidebar: () => void;
+  setMobileOpen: (open: boolean) => void;
   setSidebarWidth: (px: number) => void;
   setSidebarMode: (mode: SidebarMode) => void;
 }
@@ -28,6 +32,7 @@ interface LayoutState {
 // sidebar renders at its saved width/mode on first paint with no flash.
 export const useLayout = create<LayoutState>((set, get) => ({
   sidebarOpen: getStoredSidebarOpen(),
+  mobileOpen: false,
   sidebarWidth: getStoredSidebarWidth(),
   sidebarMode: getStoredSidebarMode(),
 
@@ -41,6 +46,8 @@ export const useLayout = create<LayoutState>((set, get) => ({
     storeSidebarOpen(open);
     set({ sidebarOpen: open });
   },
+
+  setMobileOpen: (open) => set({ mobileOpen: open }),
 
   setSidebarWidth: (px) => {
     const width = clampSidebarWidth(px);

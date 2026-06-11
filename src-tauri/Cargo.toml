@@ -51,3 +51,10 @@ keyring = { version = "3", features = ["windows-native"] }
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
 
+# Use a local patched tray-icon that passes the file stem (not the full path)
+# as the SNI IconName. KDE Plasma's StatusNotifier host requires a freedesktop
+# icon name (no slashes) so it can resolve the icon relative to IconThemePath.
+# Upstream bug: set_icon_full is called with the absolute path, which KDE ignores.
+[patch.crates-io]
+tray-icon = { path = "vendor/tray-icon" }
+
