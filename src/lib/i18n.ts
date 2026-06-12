@@ -126,6 +126,12 @@ export const en = {
   "chat.empty": "Send a message to start the conversation.",
   "chat.thinking": "Thinking…",
   "chat.incognitoHint": "Incognito — this chat is deleted when the app exits.",
+  "chat.incognitoHeader": "Incognito chat",
+  "chat.incognitoExplainerTitle": "This is an incognito chat",
+  "chat.incognitoExplainerIs":
+    "It exists only for this session — the conversation is deleted when the app fully exits, and it is never restored as your last chat.",
+  "chat.incognitoExplainerIsnt":
+    "It does not protect your privacy from the model's provider: your messages are still sent to the provider you are chatting with.",
   "chat.compacted":
     "Conversation compacted — older messages above are summarized for the model",
   "chat.you": "you",

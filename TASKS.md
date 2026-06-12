@@ -1592,8 +1592,8 @@ title-only; offer richer variants for users who want more context per row.
 
 ## T36 — Incognito mode: explainer + unmistakable visual identity
 
-- **Status:** todo
-- **Owner:** —
+- **Status:** done
+- **Owner:** Claude (T36–T39 wave)
 - **Priority:** P2
 - **Layer:** Frontend
 - **Depends on:** — (builds on T29, done)
@@ -1625,6 +1625,18 @@ does not protect.
 - Files: `src/components/chat/ChatView.tsx`, `src/components/sidebar/ThreadRow.tsx`,
   `src/index.css` (if a reusable incognito tint helps), `src/locales/*.json`.
 - The quick overlay has no incognito path (T29 left it out) — out of scope here too.
+- 2026-06-12 (Claude): Implemented in `ChatView.tsx` + `ThreadRow.tsx`, tokens only.
+  **Explainer:** an `IncognitoExplainer` card replaces the message list while an
+  incognito draft/thread has no messages — Ghost icon, what it IS (session-only,
+  purged on full exit, never restored as last chat) and what it ISN'T (messages
+  still go to the model's provider; wording provider-generic). **Chat surface:**
+  the chat column gets a dashed border + `bg-muted/20` tint and a labeled header
+  strip (Ghost + "Incognito chat" + the old hint text on ≥sm); the old one-line
+  hint under the list was folded into the strip. **Sidebar:** ephemeral rows get
+  a dashed `border-l-2` edge + `bg-muted/40` tint (suppressed when active so the
+  selection highlight wins), composing with all T35 row styles. Four new i18n
+  keys (`chat.incognitoHeader`, `chat.incognitoExplainer{Title,Is,Isnt}`)
+  translated in all five packs. Verified: npm build/lint/test (308) green.
 
 ---
 
