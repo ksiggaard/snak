@@ -1839,3 +1839,75 @@ messages and project files. Documents need to be parsed to text the model can re
   into `project_files.content`. FTS: attachment text intentionally unindexed (noted in
   the migration header). 9 i18n keys in all five packs. Verified: npm build/lint/test
   (353) + cargo build/clippy/fmt/test (64) green; CLAUDE.md gained a T39 section.
+
+---
+
+## T40 — Personas: rebrand bots + profile fields, self-managed memory, mood
+
+- **Status:** in-progress
+- **Owner:** Claude (T40 wave)
+- **Priority:** P2
+- **Layer:** DB (migration) + Frontend
+- **Depends on:** T38
+
+(Kasper, 2026-06-12.) Evolve T38 bots into **Personas** — it should feel like a
+relationship with a person. Rebrand the UI (code/tables keep the `bots` naming);
+split the profile into predefined fields; let the persona administer its own
+memory; give it a persistent mood; both behaviors per-persona toggleable.
+
+**Acceptance criteria:**
+- **Rebrand:** every user-facing "Bot(s)" string becomes "Persona(s)" across all six
+  languages. Internal identifiers/tables stay `bots` (no schema-rename churn).
+- **Profile fields** (migration, additive): **Personality** (existing
+  `instructions` column, relabeled), **Modus operandi**, **Tone of voice** — each an
+  editor textarea and a labeled section in the persona system text.
+- **Self-administered memory:** after each completed exchange in a persona thread
+  (skipped for incognito threads), a follow-up call to the thread's model reviews the
+  exchange against the persona's current memories and returns strict JSON ops
+  (add/update/delete, hard caps); ops apply to the existing `bot_memory` table.
+  Auto-added entries are visibly badged in the editor ("added by {name}") and remain
+  fully user-editable/deletable. Failures are silent (never disturb the chat); usage
+  is recorded (T16).
+- **Mood:** a persistent short mood on the persona, updated by the same call when
+  warranted ("a little hurt — the user snapped"), injected into the system prompt so
+  it colors replies, shown in the editor with a clear/reset control.
+- **Toggles:** per-persona "Let {name} manage their own memory" and "Mood", both
+  default ON; the follow-up call only runs when at least one is enabled, and each
+  result is applied only per its own flag.
+
+**Notes:**
+- Memory ops must round-trip through the frontend (frontend owns the DB — Stage 1);
+  no Rust tool-use path. The extraction call reuses `chatStream` non-streamed.
+
+---
+
+## T41 — Ollama: richer daemon controls (IDEAS 13)
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P3
+- **Layer:** Rust + Frontend
+- **Depends on:** T37
+
+(IDEAS 13.) More built-in controls for starting/stopping Ollama beyond T37's status
+probe: start/stop the daemon from the settings card (platform service vs spawned
+process — decide and document), richer status (loaded models, versions), and
+first-class Hugging Face model install help (`ollama pull hf.co/<repo>` flows with
+curated suggestions). T37 already ships status detection + staged pulls — this is
+the next increment.
+
+---
+
+## T42 — Mermaid chart rendering (bundled plugin, IDEAS 14)
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P3
+- **Layer:** Frontend + plugin manifest
+- **Depends on:** T8, T12
+
+(IDEAS 14.) A prebundled, enabled-by-default plugin that renders ` ```mermaid `
+fenced blocks in assistant messages as diagrams (T8 Markdown pipeline). Ship the
+renderer in-app (no remote code per the T12 declarative security model); plugin
+enablement toggles it. Mind streaming (partial mermaid source must not crash) and
+the model needs no special prompting — just render the syntax when it appears.

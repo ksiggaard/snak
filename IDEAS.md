@@ -17,3 +17,7 @@ into tasks when they firm up.
 11. "Bots" — named personas with avatars, personality, and per-bot editable memory → **T38**
 12. Document attachments (pdf, docx, odt/ods/odp, xlsx, ppt, plain-text/code) parsed into chats + projects → **T39**
 
+13. Richer Ollama daemon controls (start/stop, status, HF model install help) → **T41**
+14. Mermaid chart rendering in chats (prebundled plugin, enabled by default) → **T42**
+15. Personas: bots rebrand + profile fields, self-managed memory, mood (from chat, 2026-06-12) → **T40**
+

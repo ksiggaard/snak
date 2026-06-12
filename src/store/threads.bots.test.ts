@@ -45,6 +45,12 @@ vi.mock("@/lib/chat", () => ({
   cancelStream: vi.fn(async () => {}),
 }));
 
+// The T40 memory-review runner is fire-and-forget from send(); mock it so
+// these tests only assert whether (and with what) it was invoked.
+vi.mock("@/lib/personaMemory", () => ({
+  runPersonaMemoryUpdate: vi.fn(async () => {}),
+}));
+
 import { useThreads } from "@/store/threads";
 import {
   createThread,
@@ -54,6 +60,7 @@ import {
   listBotMemory,
 } from "@/lib/db";
 import { chatStream, type ApiMessage } from "@/lib/chat";
+import { runPersonaMemoryUpdate } from "@/lib/personaMemory";
 import { PROVIDERS } from "@/lib/providers";
 import type { Bot, Thread } from "@/types/db";
 
@@ -62,6 +69,11 @@ const bot = (over: Partial<Bot>): Bot => ({
   name: "John",
   tagline: "",
   instructions: "Challenge the architecture.",
+  modus_operandi: "",
+  tone_of_voice: "",
+  auto_memory: 1,
+  mood_enabled: 1,
+  mood: "",
   avatar_media_type: null,
   avatar_data: null,
   default_provider: null,
@@ -207,6 +219,7 @@ describe("send() with a bot (T38)", () => {
         id: "bm1",
         bot_id: "b1",
         content: "Prefers TypeScript",
+        source: "user",
         created_at: "",
         updated_at: "",
       },
@@ -243,5 +256,89 @@ describe("send() with a bot (T38)", () => {
     await useThreads.getState().send("hello", []);
     expect(getBot).not.toHaveBeenCalled();
     expect(useThreads.getState().error).toBe(null);
+  });
+});
+
+describe("send() persona memory review (T40)", () => {
+  // A reply with text — the review only runs on a completed exchange.
+  const reply = {
+    content: "Hi there!",
+    model: "m",
+    usage: {
+      input_tokens: 1,
+      output_tokens: 1,
+      cache_creation_tokens: 0,
+      cache_read_tokens: 0,
+    },
+  };
+
+  it("fires the memory review for a bot thread", async () => {
+    useThreads.setState({
+      threads: [thread({ id: "t1", bot_id: "b1", provider: "openai" })],
+      currentThreadId: "t1",
+    });
+    const b = bot({});
+    vi.mocked(getBot).mockResolvedValue(b);
+    vi.mocked(chatStream).mockResolvedValue(reply);
+
+    await useThreads.getState().send("hello", []);
+    expect(useThreads.getState().error).toBe(null);
+    expect(runPersonaMemoryUpdate).toHaveBeenCalledTimes(1);
+    expect(runPersonaMemoryUpdate).toHaveBeenCalledWith(
+      b,
+      "hello",
+      "Hi there!",
+      "openai",
+      "m",
+    );
+  });
+
+  it("never fires for an incognito thread", async () => {
+    useThreads.setState({
+      threads: [thread({ id: "t1", bot_id: "b1", ephemeral: 1 })],
+      currentThreadId: "t1",
+    });
+    vi.mocked(getBot).mockResolvedValue(bot({}));
+    vi.mocked(chatStream).mockResolvedValue(reply);
+
+    await useThreads.getState().send("hello", []);
+    expect(useThreads.getState().error).toBe(null);
+    expect(runPersonaMemoryUpdate).not.toHaveBeenCalled();
+  });
+
+  it("never fires for an incognito draft", async () => {
+    useThreads.setState({ draftBotId: "b1", draftIncognito: true });
+    vi.mocked(getBot).mockResolvedValue(bot({}));
+    vi.mocked(chatStream).mockResolvedValue(reply);
+
+    await useThreads.getState().send("hello", []);
+    expect(useThreads.getState().error).toBe(null);
+    expect(runPersonaMemoryUpdate).not.toHaveBeenCalled();
+  });
+
+  it("does not fire when both auto_memory and mood_enabled are off", async () => {
+    useThreads.setState({
+      threads: [thread({ id: "t1", bot_id: "b1" })],
+      currentThreadId: "t1",
+    });
+    vi.mocked(getBot).mockResolvedValue(
+      bot({ auto_memory: 0, mood_enabled: 0 }),
+    );
+    vi.mocked(chatStream).mockResolvedValue(reply);
+
+    await useThreads.getState().send("hello", []);
+    expect(useThreads.getState().error).toBe(null);
+    expect(runPersonaMemoryUpdate).not.toHaveBeenCalled();
+  });
+
+  it("does not fire for a thread without a bot", async () => {
+    useThreads.setState({
+      threads: [thread({ id: "t1" })],
+      currentThreadId: "t1",
+    });
+    vi.mocked(chatStream).mockResolvedValue(reply);
+
+    await useThreads.getState().send("hello", []);
+    expect(runPersonaMemoryUpdate).not.toHaveBeenCalled();
   });
 });

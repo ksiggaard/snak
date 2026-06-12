@@ -725,6 +725,66 @@ export async function setBotTagline(
   );
 }
 
+export async function setBotModusOperandi(
+  id: string,
+  modusOperandi: string,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE bots SET modus_operandi = $1, updated_at = datetime('now')
+     WHERE id = $2`,
+    [modusOperandi, id],
+  );
+}
+
+export async function setBotToneOfVoice(
+  id: string,
+  toneOfVoice: string,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE bots SET tone_of_voice = $1, updated_at = datetime('now')
+     WHERE id = $2`,
+    [toneOfVoice, id],
+  );
+}
+
+/** Toggle whether the persona manages its own memory rows (T40). */
+export async function setBotAutoMemory(
+  id: string,
+  enabled: boolean,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE bots SET auto_memory = $1, updated_at = datetime('now')
+     WHERE id = $2`,
+    [enabled ? 1 : 0, id],
+  );
+}
+
+/** Toggle whether the persona carries a persistent mood (T40). */
+export async function setBotMoodEnabled(
+  id: string,
+  enabled: boolean,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE bots SET mood_enabled = $1, updated_at = datetime('now')
+     WHERE id = $2`,
+    [enabled ? 1 : 0, id],
+  );
+}
+
+/** Set the persona's current mood ("" = neutral / reset) (T40). */
+export async function setBotMood(id: string, mood: string): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE bots SET mood = $1, updated_at = datetime('now')
+     WHERE id = $2`,
+    [mood, id],
+  );
+}
+
 /** Set (or clear, with nulls) a bot's uploaded avatar. `data` is base64
  * without a data: prefix; both fields are set or cleared together. */
 export async function setBotAvatar(
@@ -785,12 +845,14 @@ export async function listBotMemory(botId: string): Promise<BotMemory[]> {
 export async function addBotMemory(
   botId: string,
   content: string,
+  source: BotMemory["source"] = "user",
 ): Promise<BotMemory> {
   const db = await getDb();
   const id = newId();
   await db.execute(
-    `INSERT INTO bot_memory (id, bot_id, content) VALUES ($1, $2, $3)`,
-    [id, botId, content],
+    `INSERT INTO bot_memory (id, bot_id, content, source)
+     VALUES ($1, $2, $3, $4)`,
+    [id, botId, content, source],
   );
   const rows = await db.select<BotMemory[]>(
     `SELECT * FROM bot_memory WHERE id = $1`,

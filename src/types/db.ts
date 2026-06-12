@@ -36,6 +36,16 @@ export interface Bot {
   tagline: string;
   /** Personality/instructions injected into every chat with this bot. */
   instructions: string;
+  /** How the persona approaches problems and structures answers (T40). */
+  modus_operandi: string;
+  /** How the persona sounds — register, warmth, directness (T40). */
+  tone_of_voice: string;
+  /** 1 = the persona manages its own memory rows after each exchange (T40). */
+  auto_memory: number;
+  /** 1 = the persona carries a persistent mood between conversations (T40). */
+  mood_enabled: number;
+  /** Current mood, set by the persona's follow-up call; "" = neutral (T40). */
+  mood: string;
   /** Uploaded avatar MIME type; null (with avatar_data) = monogram fallback. */
   avatar_media_type: string | null;
   /** Uploaded avatar, base64 (no data: prefix); null = monogram fallback. */
@@ -54,6 +64,8 @@ export interface BotMemory {
   id: string;
   bot_id: string;
   content: string;
+  /** Who created the row: the user (editor) or the persona itself (T40). */
+  source: "user" | "auto";
   created_at: string;
   updated_at: string;
 }

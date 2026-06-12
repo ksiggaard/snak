@@ -109,19 +109,19 @@ export const en = {
   "sidebar.deleteProjectTitle": 'Delete project "{name}"?',
   "sidebar.deleteProjectDescription":
     "Its chats are kept (moved out of the project).",
-  "sidebar.bots": "Bots",
-  "sidebar.newBot": "New bot",
-  "sidebar.noBots": "No bots yet. Create one to chat with a persona.",
+  "sidebar.bots": "Personas",
+  "sidebar.newBot": "New persona",
+  "sidebar.noBots": "No personas yet. Create one to start chatting.",
   "sidebar.newChatWithBot": "New chat with {name}",
-  "sidebar.editBot": "Edit bot",
-  "sidebar.deleteBot": "Delete bot",
+  "sidebar.editBot": "Edit persona",
+  "sidebar.deleteBot": "Delete persona",
   "sidebar.deleteBotTitle": 'Delete "{name}"?',
   "sidebar.deleteBotDescription":
     "Its chats are kept and become regular chats.",
-  "sidebar.expandBot": "Expand bot",
-  "sidebar.collapseBot": "Collapse bot",
+  "sidebar.expandBot": "Expand persona",
+  "sidebar.collapseBot": "Collapse persona",
   "sidebar.noChatsWithBot": "No chats yet",
-  "sidebar.botBadge": "Bot: {name}",
+  "sidebar.botBadge": "Persona: {name}",
   "sidebar.renameHint": "Double-click to rename",
   "sidebar.incognitoRenameHint":
     "Incognito — deleted when the app exits. Double-click to rename",
@@ -300,7 +300,7 @@ export const en = {
   "settings.nav.mcp": "MCP Servers",
   "settings.nav.skills": "Skills",
   "settings.nav.plugins": "Plugins",
-  "settings.nav.bots": "Bots",
+  "settings.nav.bots": "Personas",
 
   // --- Settings: API keys -------------------------------------------------------------------
   "apiKeys.title": "API keys",
@@ -521,21 +521,29 @@ export const en = {
   "project.truncated": '"{name}" was truncated to {n} characters.',
   "project.readError": 'Couldn\'t read "{name}" as text.',
 
-  // --- Bots (T38) -------------------------------------------------------------------------------------------------------------------------------------
-  "bots.title": "Bots",
+  // --- Bots / personas (T38, T40) ---------------------------------------------------------------------------------------------------------------------
+  "bots.title": "Personas",
   "bots.description":
-    "Personas with their own personality, avatar, and memory. Start a chat with one from the sidebar's Bots tab.",
-  "bots.empty": "No bots yet.",
-  "bots.notFound": "This bot no longer exists.",
-  "bots.create": "Create bot",
+    "Personas with their own personality, avatar, and memory. Start a chat with one from the sidebar's Personas tab.",
+  "bots.empty": "No personas yet.",
+  "bots.notFound": "This persona no longer exists.",
+  "bots.create": "Create persona",
   "bots.name": "Name",
   "bots.instructions": "Personality",
   "bots.instructionsHint":
-    "Who is this bot? Tone, expertise, quirks — injected into every chat with it.",
+    "Who this persona is — character, expertise, quirks — injected into every chat with it.",
   "bots.instructionsPlaceholder":
     "e.g. John is a very professional senior software engineer who always challenges your architecture.",
   "bots.tagline": "Subtitle",
   "bots.taglinePlaceholder": "e.g. The IT architect",
+  "bots.modusOperandi": "Modus operandi",
+  "bots.modusOperandiHint":
+    "How {name} approaches problems and structures answers.",
+  "bots.modusOperandiPlaceholder":
+    "e.g. Asks clarifying questions first, then answers step by step.",
+  "bots.toneOfVoice": "Tone of voice",
+  "bots.toneOfVoiceHint": "How {name} sounds — register, warmth, directness.",
+  "bots.toneOfVoicePlaceholder": "e.g. Warm but direct, with dry humor.",
   "bots.avatar": "Avatar",
   "bots.uploadAvatar": "Upload image",
   "bots.removeAvatar": "Remove",
@@ -545,15 +553,25 @@ export const en = {
     "Use an image from the clipboard — Ctrl+V over the editor works too",
   "bots.avatarPasteError": "No image found in the clipboard.",
   "bots.defaultModel": "Default model",
-  "bots.defaultModelHint": "New chats with this bot start on this model.",
+  "bots.defaultModelHint": "New chats with this persona start on this model.",
   "bots.useAppDefault": "Use app default",
   "bots.appDefault": "App default",
   "bots.memory": "Memory",
   "bots.memoryHint":
-    "Notes this bot keeps across conversations — injected into its chats. Edit freely; nothing is added automatically.",
+    "Notes this persona keeps across conversations — injected into its chats. You can review, edit, or remove anything here.",
   "bots.memoryAdd": "Add memory",
   "bots.memoryPlaceholder": "e.g. The user prefers concise answers.",
   "bots.memoryRemove": "Remove memory",
+  "bots.memoryAuto": "added by {name}",
+  "bots.autoMemory": "Let {name} manage their own memory",
+  "bots.autoMemoryHint":
+    "After each exchange, {name} may save, update, or remove memories about you. You can always review and edit them here.",
+  "bots.moodEnabled": "Mood",
+  "bots.moodEnabledHint":
+    "{name} carries a mood between conversations, shaped by how your chats go.",
+  "bots.currentMood": "Current mood",
+  "bots.noMood": "Neutral",
+  "bots.clearMood": "Reset mood",
   "bots.newChat": "New chat with {name}",
 
   // --- Thread titles created by the store -------------------------------------------------------------------------------------------------------------

@@ -4,10 +4,15 @@ import {
   deleteBot,
   listBots,
   renameBot,
+  setBotAutoMemory,
   setBotAvatar,
   setBotDefaultModel,
   setBotInstructions,
+  setBotModusOperandi,
+  setBotMood,
+  setBotMoodEnabled,
   setBotTagline,
+  setBotToneOfVoice,
 } from "@/lib/db";
 import { useThreads } from "@/store/threads";
 import type { Bot, Provider } from "@/types/db";
@@ -27,6 +32,14 @@ interface BotsState {
   rename: (id: string, name: string) => Promise<void>;
   setInstructions: (id: string, instructions: string) => Promise<void>;
   setTagline: (id: string, tagline: string) => Promise<void>;
+  setModusOperandi: (id: string, modusOperandi: string) => Promise<void>;
+  setToneOfVoice: (id: string, toneOfVoice: string) => Promise<void>;
+  /** Toggle the persona managing its own memory after each exchange (T40). */
+  setAutoMemory: (id: string, enabled: boolean) => Promise<void>;
+  /** Toggle the persona's persistent mood (T40). */
+  setMoodEnabled: (id: string, enabled: boolean) => Promise<void>;
+  /** Set the persona's current mood ("" resets to neutral) (T40). */
+  setMood: (id: string, mood: string) => Promise<void>;
   setAvatar: (
     id: string,
     mediaType: string | null,
@@ -76,6 +89,31 @@ export const useBots = create<BotsState>((set, get) => ({
 
   setTagline: async (id, tagline) => {
     await setBotTagline(id, tagline.trim());
+    await get().refresh();
+  },
+
+  setModusOperandi: async (id, modusOperandi) => {
+    await setBotModusOperandi(id, modusOperandi);
+    await get().refresh();
+  },
+
+  setToneOfVoice: async (id, toneOfVoice) => {
+    await setBotToneOfVoice(id, toneOfVoice);
+    await get().refresh();
+  },
+
+  setAutoMemory: async (id, enabled) => {
+    await setBotAutoMemory(id, enabled);
+    await get().refresh();
+  },
+
+  setMoodEnabled: async (id, enabled) => {
+    await setBotMoodEnabled(id, enabled);
+    await get().refresh();
+  },
+
+  setMood: async (id, mood) => {
+    await setBotMood(id, mood);
     await get().refresh();
   },
 

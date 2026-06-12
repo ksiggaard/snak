@@ -3,6 +3,7 @@ import { ClipboardPaste, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { BotAvatar } from "@/components/bots/BotAvatar";
 import { ModelChooser } from "@/components/chat/ModelChooser";
@@ -35,6 +36,11 @@ export function BotEditor({ bot }: { bot: Bot }) {
   const rename = useBots((s) => s.rename);
   const setTagline = useBots((s) => s.setTagline);
   const setInstructions = useBots((s) => s.setInstructions);
+  const setModusOperandi = useBots((s) => s.setModusOperandi);
+  const setToneOfVoice = useBots((s) => s.setToneOfVoice);
+  const setAutoMemory = useBots((s) => s.setAutoMemory);
+  const setMoodEnabled = useBots((s) => s.setMoodEnabled);
+  const setMood = useBots((s) => s.setMood);
   const setAvatar = useBots((s) => s.setAvatar);
   const setDefaultModel = useBots((s) => s.setDefaultModel);
 
@@ -56,19 +62,25 @@ export function BotEditor({ bot }: { bot: Bot }) {
   const [nameDraft, setNameDraft] = useState(bot.name);
   const [taglineDraft, setTaglineDraft] = useState(bot.tagline);
   const [instrDraft, setInstrDraft] = useState(bot.instructions);
+  const [modusDraft, setModusDraft] = useState(bot.modus_operandi);
+  const [toneDraft, setToneDraft] = useState(bot.tone_of_voice);
   const [syncedId, setSyncedId] = useState(bot.id);
   if (bot.id !== syncedId) {
     setSyncedId(bot.id);
     setNameDraft(bot.name);
     setTaglineDraft(bot.tagline);
     setInstrDraft(bot.instructions);
+    setModusDraft(bot.modus_operandi);
+    setToneDraft(bot.tone_of_voice);
     setAvatarError(null);
     setNewMemory("");
     setMemories([]);
   }
 
   // Memory loads async per bot (async setState in an effect is fine — only the
-  // sync form is banned).
+  // sync form is banned). Loaded once per bot — entries auto-added by a live
+  // chat (T40 memory engine) won't appear until the editor remounts; no
+  // live-sync needed in v1.
   useEffect(() => {
     let cancelled = false;
     void listBotMemory(bot.id).then((rows) => {
@@ -258,6 +270,42 @@ export function BotEditor({ bot }: { bot: Bot }) {
       </div>
 
       <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`bot-modus-${bot.id}`}>{t("bots.modusOperandi")}</Label>
+        <p className="text-muted-foreground text-xs">
+          {t("bots.modusOperandiHint", { name: bot.name })}
+        </p>
+        <Textarea
+          id={`bot-modus-${bot.id}`}
+          value={modusDraft}
+          onChange={(e) => setModusDraft(e.target.value)}
+          onBlur={() => {
+            if (modusDraft !== bot.modus_operandi)
+              void setModusOperandi(bot.id, modusDraft);
+          }}
+          rows={4}
+          placeholder={t("bots.modusOperandiPlaceholder")}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`bot-tone-${bot.id}`}>{t("bots.toneOfVoice")}</Label>
+        <p className="text-muted-foreground text-xs">
+          {t("bots.toneOfVoiceHint", { name: bot.name })}
+        </p>
+        <Textarea
+          id={`bot-tone-${bot.id}`}
+          value={toneDraft}
+          onChange={(e) => setToneDraft(e.target.value)}
+          onBlur={() => {
+            if (toneDraft !== bot.tone_of_voice)
+              void setToneOfVoice(bot.id, toneDraft);
+          }}
+          rows={3}
+          placeholder={t("bots.toneOfVoicePlaceholder")}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
         <Label>{t("bots.defaultModel")}</Label>
         <p className="text-muted-foreground text-xs">
           {t("bots.defaultModelHint")}
@@ -292,6 +340,63 @@ export function BotEditor({ bot }: { bot: Bot }) {
         )}
       </div>
 
+      <div className="flex flex-col gap-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <Label htmlFor={`bot-auto-memory-${bot.id}`}>
+              {t("bots.autoMemory", { name: bot.name })}
+            </Label>
+            <p className="text-muted-foreground text-xs">
+              {t("bots.autoMemoryHint", { name: bot.name })}
+            </p>
+          </div>
+          <Switch
+            id={`bot-auto-memory-${bot.id}`}
+            checked={bot.auto_memory === 1}
+            onCheckedChange={() => void setAutoMemory(bot.id, !bot.auto_memory)}
+          />
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor={`bot-mood-${bot.id}`}>
+                {t("bots.moodEnabled")}
+              </Label>
+              <p className="text-muted-foreground text-xs">
+                {t("bots.moodEnabledHint", { name: bot.name })}
+              </p>
+            </div>
+            <Switch
+              id={`bot-mood-${bot.id}`}
+              checked={bot.mood_enabled === 1}
+              onCheckedChange={() =>
+                void setMoodEnabled(bot.id, !bot.mood_enabled)
+              }
+            />
+          </div>
+          {bot.mood_enabled === 1 && (
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground text-sm">
+                {t("bots.currentMood")}:{" "}
+                <span className="italic">
+                  {bot.mood !== "" ? bot.mood : t("bots.noMood")}
+                </span>
+              </span>
+              {bot.mood !== "" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void setMood(bot.id, "")}
+                >
+                  {t("bots.clearMood")}
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="flex flex-col gap-3">
         <div className="flex flex-col gap-1">
           <Label>{t("bots.memory")}</Label>
@@ -302,11 +407,18 @@ export function BotEditor({ bot }: { bot: Bot }) {
 
         {memories.map((m) => (
           <div key={m.id} className="flex gap-2">
-            <Textarea
-              rows={2}
-              defaultValue={m.content}
-              onBlur={(e) => void updateBotMemory(m.id, e.target.value)}
-            />
+            <div className="flex flex-1 flex-col gap-1">
+              {m.source === "auto" && (
+                <span className="text-muted-foreground self-start rounded border px-1 text-[10px]">
+                  {t("bots.memoryAuto", { name: bot.name })}
+                </span>
+              )}
+              <Textarea
+                rows={2}
+                defaultValue={m.content}
+                onBlur={(e) => void updateBotMemory(m.id, e.target.value)}
+              />
+            </div>
             <Button variant="outline" onClick={() => void removeMemory(m.id)}>
               {t("bots.memoryRemove")}
             </Button>

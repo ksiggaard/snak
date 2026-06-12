@@ -35,6 +35,7 @@ import {
 } from "@/lib/messages";
 import { buildCompactionRequest, compactHistory } from "@/lib/compaction";
 import { buildBotSystemText } from "@/lib/bots";
+import { runPersonaMemoryUpdate } from "@/lib/personaMemory";
 import { buildProjectSystemText } from "@/lib/projects";
 import { buildSkillsSystemText } from "@/lib/skills";
 import { selectRegistry, usePlugins } from "@/store/plugins";
@@ -370,13 +371,14 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       let model: string;
       let projectId: string | null;
       let botId: string | null;
+      let ephemeral: boolean;
 
       if (!id) {
         provider = get().draftProvider;
         model = get().draftModel;
         projectId = get().draftProjectId;
         botId = get().draftBotId;
-        const ephemeral = get().draftIncognito;
+        ephemeral = get().draftIncognito;
         const thread = await createThread({
           provider,
           model,
@@ -401,6 +403,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         model = t.model;
         projectId = t.project_id;
         botId = t.bot_id;
+        ephemeral = t.ephemeral !== 0;
       }
 
       const userMsg = await addMessage({
@@ -468,9 +471,11 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       // Bot persona (T38): the bot's identity header, personality
       // instructions, and memory entries — unshifted after the project block
       // so it sits ahead of it (the persona frames the whole conversation,
-      // project context stays nearest the history).
+      // project context stays nearest the history). The loaded bot is kept
+      // around for the T40 memory-review call after the reply completes.
+      let bot: Bot | null = null;
       if (botId) {
-        const bot = await getBot(botId);
+        bot = await getBot(botId);
         if (bot) {
           const botText = buildBotSystemText(bot, await listBotMemory(botId));
           if (botText) {
@@ -606,6 +611,26 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       set({ messages: await loadThreadMessages(id) });
       // updated_at changed → reorder sidebar.
       await get().refreshThreads();
+
+      // Persona self-managed memory + mood (T40): review the exchange
+      // off-path. Fire-and-forget — runPersonaMemoryUpdate never throws, so
+      // it can neither delay nor fail the send path. NEVER runs for incognito
+      // threads (session-only chats must leave no trace in the persona's
+      // memory or mood), and only when the reply produced text to review.
+      if (
+        bot &&
+        !ephemeral &&
+        (bot.auto_memory || bot.mood_enabled) &&
+        result.content.length > 0
+      ) {
+        void runPersonaMemoryUpdate(
+          bot,
+          content,
+          result.content,
+          provider,
+          model,
+        );
+      }
     } catch (e) {
       set({ error: friendlyError(e) });
       const id = get().currentThreadId;
