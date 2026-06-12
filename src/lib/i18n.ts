@@ -538,6 +538,10 @@ export const en = {
   "bots.uploadAvatar": "Upload image",
   "bots.removeAvatar": "Remove",
   "bots.avatarError": "Couldn't use that image.",
+  "bots.pasteAvatar": "Paste",
+  "bots.pasteAvatarHint":
+    "Use an image from the clipboard — Ctrl+V over the editor works too",
+  "bots.avatarPasteError": "No image found in the clipboard.",
   "bots.defaultModel": "Default model",
   "bots.defaultModelHint": "New chats with this bot start on this model.",
   "bots.useAppDefault": "Use app default",

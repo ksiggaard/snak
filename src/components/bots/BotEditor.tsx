@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Upload } from "lucide-react";
+import { ClipboardPaste, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,7 +43,9 @@ export function BotEditor({ bot }: { bot: Bot }) {
   const providers = useProviders();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [avatarError, setAvatarError] = useState(false);
+  const [avatarError, setAvatarError] = useState<"invalid" | "paste" | null>(
+    null,
+  );
   const [newMemory, setNewMemory] = useState("");
   const [memories, setMemories] = useState<BotMemory[]>([]);
 
@@ -57,7 +59,7 @@ export function BotEditor({ bot }: { bot: Bot }) {
     setSyncedId(bot.id);
     setNameDraft(bot.name);
     setInstrDraft(bot.instructions);
-    setAvatarError(false);
+    setAvatarError(null);
     setNewMemory("");
     setMemories([]);
   }
@@ -74,18 +76,40 @@ export function BotEditor({ bot }: { bot: Bot }) {
     };
   }, [bot.id]);
 
+  async function applyAvatar(image: Blob) {
+    setAvatarError(null);
+    try {
+      const img = await prepareImage(image, AVATAR_MAX_DIM);
+      await setAvatar(bot.id, img.mediaType, img.base64);
+    } catch {
+      setAvatarError("invalid");
+    }
+  }
+
   async function onPickAvatar(list: FileList | null) {
     const file = list?.[0];
-    if (file) {
-      setAvatarError(false);
-      try {
-        const img = await prepareImage(file, AVATAR_MAX_DIM);
-        await setAvatar(bot.id, img.mediaType, img.base64);
-      } catch {
-        setAvatarError(true);
-      }
-    }
+    if (file) await applyAvatar(file);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  /** "Paste" button: read an image off the async clipboard API. WebKitGTK
+   *  support varies — any failure (no API, no permission, no image) lands on
+   *  the same gentle error; Ctrl+V over the editor (onPaste below) is the
+   *  always-working path. */
+  async function pasteAvatar() {
+    setAvatarError(null);
+    try {
+      for (const item of await navigator.clipboard.read()) {
+        const type = item.types.find((x) => x.startsWith("image/"));
+        if (type) {
+          await applyAvatar(await item.getType(type));
+          return;
+        }
+      }
+      setAvatarError("paste");
+    } catch {
+      setAvatarError("paste");
+    }
   }
 
   async function addMemory() {
@@ -117,7 +141,21 @@ export function BotEditor({ bot }: { bot: Bot }) {
   });
 
   return (
-    <div className="flex flex-col gap-5">
+    <div
+      className="flex flex-col gap-5"
+      onPaste={(e) => {
+        // A pasted *image* anywhere in the editor becomes the avatar (mirrors
+        // the Composer's pasted-files flow). Text pastes carry no files and
+        // pass through to the focused field untouched.
+        const image = Array.from(e.clipboardData.files).find((f) =>
+          f.type.startsWith("image/"),
+        );
+        if (image) {
+          e.preventDefault();
+          void applyAvatar(image);
+        }
+      }}
+    >
       <div className="flex flex-col gap-1.5">
         <Label htmlFor={`bot-name-${bot.id}`}>{t("bots.name")}</Label>
         <Input
@@ -144,6 +182,15 @@ export function BotEditor({ bot }: { bot: Bot }) {
             <Upload className="size-4" />
             {t("bots.uploadAvatar")}
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            title={t("bots.pasteAvatarHint")}
+            onClick={() => void pasteAvatar()}
+          >
+            <ClipboardPaste className="size-4" />
+            {t("bots.pasteAvatar")}
+          </Button>
           {bot.avatar_data !== null && (
             <Button
               variant="outline"
@@ -161,8 +208,14 @@ export function BotEditor({ bot }: { bot: Bot }) {
             onChange={(e) => void onPickAvatar(e.target.files)}
           />
         </div>
-        {avatarError && (
-          <p className="text-destructive text-sm">{t("bots.avatarError")}</p>
+        {avatarError !== null && (
+          <p className="text-destructive text-sm">
+            {t(
+              avatarError === "paste"
+                ? "bots.avatarPasteError"
+                : "bots.avatarError",
+            )}
+          </p>
         )}
       </div>
 
