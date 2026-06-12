@@ -6,8 +6,10 @@ import {
   createThread,
   deleteArchivedThreads,
   deleteThread,
+  getBot,
   getProject,
   getSetting,
+  listBotMemory,
   listProjectFiles,
   listThreads,
   listUserMemory,
@@ -32,6 +34,7 @@ import {
   type MessageView,
 } from "@/lib/messages";
 import { buildCompactionRequest, compactHistory } from "@/lib/compaction";
+import { buildBotSystemText } from "@/lib/bots";
 import { buildProjectSystemText } from "@/lib/projects";
 import { buildSkillsSystemText } from "@/lib/skills";
 import { selectRegistry, usePlugins } from "@/store/plugins";
@@ -40,7 +43,7 @@ import { t } from "@/store/i18n";
 import { PROVIDERS } from "@/lib/providers";
 import type { PreparedImage } from "@/lib/image";
 import type { PendingDocument } from "@/lib/documents";
-import type { Provider, Thread } from "@/types/db";
+import type { Bot, Provider, Thread } from "@/types/db";
 
 const LAST_THREAD_KEY = "last_thread_id";
 export const DEFAULT_PROVIDER_KEY = "default_provider";
@@ -104,6 +107,8 @@ interface ThreadsState {
   draftProjectId: string | null;
   /** Incognito draft (T29): the first send creates the thread `ephemeral`. */
   draftIncognito: boolean;
+  /** Bot (T38) a new (draft) chat will belong to, or null for none. */
+  draftBotId: string | null;
   busy: boolean;
   /** A compaction summarization call is in flight (T28; busy is also set). */
   compacting: boolean;
@@ -119,6 +124,9 @@ interface ThreadsState {
   startNewChat: (opts?: { incognito?: boolean }) => void;
   /** Start a new draft chat that will be created inside the given project. */
   startNewChatInProject: (projectId: string) => void;
+  /** Start a new draft chat with a bot (T38). The draft seeds its provider/
+   * model from the bot's default when set, else the app default. */
+  startNewChatWithBot: (bot: Bot) => void;
   /** Move an existing thread into a project (or null to remove it). */
   assignThreadProject: (
     threadId: string,
@@ -220,6 +228,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   defaultModel: PROVIDERS[0].defaultModel,
   draftProjectId: null,
   draftIncognito: false,
+  draftBotId: null,
   busy: false,
   compacting: false,
   cancelling: false,
@@ -284,6 +293,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       error: null,
       draftProjectId: null,
       draftIncognito: opts?.incognito ?? false,
+      draftBotId: null,
       draftProvider: get().defaultProvider,
       draftModel: get().defaultModel,
     });
@@ -296,8 +306,27 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       error: null,
       draftProjectId: projectId,
       draftIncognito: false,
+      draftBotId: null,
       draftProvider: get().defaultProvider,
       draftModel: get().defaultModel,
+    });
+  },
+
+  startNewChatWithBot: (bot) => {
+    // The bot's default provider+model is only used when BOTH are set (the DB
+    // helper enforces both-or-neither, but stay defensive); otherwise the
+    // draft starts on the app default, like any new chat.
+    const hasDefault =
+      bot.default_provider !== null && bot.default_model !== null;
+    set({
+      currentThreadId: null,
+      messages: [],
+      error: null,
+      draftProjectId: null,
+      draftIncognito: false,
+      draftBotId: bot.id,
+      draftProvider: hasDefault ? bot.default_provider! : get().defaultProvider,
+      draftModel: hasDefault ? bot.default_model! : get().defaultModel,
     });
   },
 
@@ -340,11 +369,13 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       let provider: Provider;
       let model: string;
       let projectId: string | null;
+      let botId: string | null;
 
       if (!id) {
         provider = get().draftProvider;
         model = get().draftModel;
         projectId = get().draftProjectId;
+        botId = get().draftBotId;
         const ephemeral = get().draftIncognito;
         const thread = await createThread({
           provider,
@@ -357,6 +388,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           ),
           projectId,
           ephemeral,
+          botId,
         });
         id = thread.id;
         set({ currentThreadId: id });
@@ -368,6 +400,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         provider = t.provider;
         model = t.model;
         projectId = t.project_id;
+        botId = t.bot_id;
       }
 
       const userMsg = await addMessage({
@@ -404,9 +437,12 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       const history: ApiMessage[] = compactHistory(afterUser);
 
       // Leading system context, assembled at the message layer (not in the
-      // Rust providers). Precedence is global → project → thread; since we
-      // prepend, the project message is unshifted first and the global one
-      // second, so the array ends up ordered [global, project, ...history].
+      // Rust providers). Precedence is skills → global → bot → project →
+      // history: the bot (T38) is the assistant's *identity* and spans
+      // projects, so it sits ahead of the project context, which stays
+      // closest to the history it scopes. Since we prepend, the blocks are
+      // unshifted in reverse (project, then bot, then global, then skills),
+      // so the array ends up [skills, global, bot, project, ...history].
       // Each provider concatenates consecutive role:"system" messages in array
       // order (Anthropic/Gemini join with "\n\n"; OpenAI/Mistral pass them
       // through), so this realizes the documented precedence without any
@@ -429,9 +465,27 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         }
       }
 
+      // Bot persona (T38): the bot's identity header, personality
+      // instructions, and memory entries — unshifted after the project block
+      // so it sits ahead of it (the persona frames the whole conversation,
+      // project context stays nearest the history).
+      if (botId) {
+        const bot = await getBot(botId);
+        if (bot) {
+          const botText = buildBotSystemText(bot, await listBotMemory(botId));
+          if (botText) {
+            history.unshift({
+              role: "system",
+              content: botText,
+              images: [],
+            });
+          }
+        }
+      }
+
       // Global system context (T10): the custom system-prompt addendum + the
       // user's memory entries. Global (applies to every thread/provider).
-      // Unshifted last so it sits first — ahead of the project message.
+      // Unshifted after the bot block so it sits ahead of it.
       const [addendum, memory] = await Promise.all([
         getSetting(SYSTEM_PROMPT_ADDENDUM_KEY),
         listUserMemory(),
@@ -572,6 +626,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         title: deriveTitle(content, t("thread.newChat")),
         projectId: get().draftProjectId,
         ephemeral,
+        botId: get().draftBotId,
       });
       id = thread.id;
       set({ currentThreadId: id });

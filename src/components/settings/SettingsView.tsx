@@ -4,6 +4,7 @@ import { DefaultModel } from "@/components/settings/DefaultModel";
 import { Models } from "@/components/settings/Models";
 import { OllamaSettings } from "@/components/settings/OllamaSettings";
 import { Memory } from "@/components/settings/Memory";
+import { Bots } from "@/components/settings/Bots";
 import { ShortcutSetting } from "@/components/settings/Shortcut";
 import { CloseToTraySetting } from "@/components/settings/CloseToTray";
 import { Appearance } from "@/components/settings/Appearance";
@@ -34,6 +35,7 @@ const SECTIONS: Section[] = [
   { id: "models", label: "settings.nav.models", Component: Models },
   { id: "ollama", label: "settings.nav.ollama", Component: OllamaSettings },
   { id: "memory", label: "settings.nav.memory", Component: Memory },
+  { id: "bots", label: "settings.nav.bots", Component: Bots },
   {
     id: "shortcut",
     label: "settings.nav.shortcut",

@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import { useThreads } from "@/store/threads";
 import { confirmDialog } from "@/store/confirm";
 import { useProjects } from "@/store/projects";
+import { useBots } from "@/store/bots";
 import { useSearch } from "@/store/search";
 import { useView } from "@/store/view";
 import { useAppearance } from "@/store/appearance";
@@ -20,6 +21,7 @@ export function ChatsPane() {
   const selectThread = useThreads((s) => s.selectThread);
   const clearArchive = useThreads((s) => s.clearArchive);
   const closeProject = useProjects((s) => s.close);
+  const closeBot = useBots((s) => s.close);
   const clearSearch = useSearch((s) => s.clear);
   const showChat = useView((s) => s.showChat);
   const listStyle = useAppearance((s) => s.chatListStyle);
@@ -29,10 +31,11 @@ export function ChatsPane() {
   const [archiveOpen, setArchiveOpen] = useState(false);
 
   // Selecting a chat returns the main pane to the chat view (clear search,
-  // close any open project, leave settings/usage).
+  // close any open project/bot editor, leave settings/usage).
   const select = (id: string) => {
     clearSearch();
     closeProject();
+    closeBot();
     showChat();
     void selectThread(id);
   };

@@ -133,6 +133,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/012_document_attachments.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 13,
+            description: "bots: bots, bot_memory, threads.bot_id (T38 personas)",
+            sql: include_str!("../migrations/013_bots.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

@@ -109,6 +109,19 @@ export const en = {
   "sidebar.deleteProjectTitle": 'Delete project "{name}"?',
   "sidebar.deleteProjectDescription":
     "Its chats are kept (moved out of the project).",
+  "sidebar.bots": "Bots",
+  "sidebar.newBot": "New bot",
+  "sidebar.noBots": "No bots yet. Create one to chat with a persona.",
+  "sidebar.newChatWithBot": "New chat with {name}",
+  "sidebar.editBot": "Edit bot",
+  "sidebar.deleteBot": "Delete bot",
+  "sidebar.deleteBotTitle": 'Delete "{name}"?',
+  "sidebar.deleteBotDescription":
+    "Its chats are kept and become regular chats.",
+  "sidebar.expandBot": "Expand bot",
+  "sidebar.collapseBot": "Collapse bot",
+  "sidebar.noChatsWithBot": "No chats yet",
+  "sidebar.botBadge": "Bot: {name}",
   "sidebar.renameHint": "Double-click to rename",
   "sidebar.incognitoRenameHint":
     "Incognito — deleted when the app exits. Double-click to rename",
@@ -144,6 +157,7 @@ export const en = {
   "chat.openInTerminal": "Open in terminal",
   "chat.openInTerminalTitle":
     "Open in terminal (staged, not run — review and press Enter)",
+  "chat.botEmptyHint": "Say hi — {name} is ready.",
 
   // --- Chat: right-side panel ------------------------------------------------------------------------------------------
   "panel.open": "Open chat panel",
@@ -286,6 +300,7 @@ export const en = {
   "settings.nav.mcp": "MCP Servers",
   "settings.nav.skills": "Skills",
   "settings.nav.plugins": "Plugins",
+  "settings.nav.bots": "Bots",
 
   // --- Settings: API keys -------------------------------------------------------------------
   "apiKeys.title": "API keys",
@@ -505,6 +520,35 @@ export const en = {
   "project.removeFile": "Remove {name}",
   "project.truncated": '"{name}" was truncated to {n} characters.',
   "project.readError": 'Couldn\'t read "{name}" as text.',
+
+  // --- Bots (T38) -------------------------------------------------------------------------------------------------------------------------------------
+  "bots.title": "Bots",
+  "bots.description":
+    "Personas with their own personality, avatar, and memory. Start a chat with one from the sidebar's Bots tab.",
+  "bots.empty": "No bots yet.",
+  "bots.notFound": "This bot no longer exists.",
+  "bots.create": "Create bot",
+  "bots.name": "Name",
+  "bots.instructions": "Personality",
+  "bots.instructionsHint":
+    "Who is this bot? Tone, expertise, quirks — injected into every chat with it.",
+  "bots.instructionsPlaceholder":
+    "e.g. John is a very professional senior software engineer who always challenges your architecture.",
+  "bots.avatar": "Avatar",
+  "bots.uploadAvatar": "Upload image",
+  "bots.removeAvatar": "Remove",
+  "bots.avatarError": "Couldn't use that image.",
+  "bots.defaultModel": "Default model",
+  "bots.defaultModelHint": "New chats with this bot start on this model.",
+  "bots.useAppDefault": "Use app default",
+  "bots.appDefault": "App default",
+  "bots.memory": "Memory",
+  "bots.memoryHint":
+    "Notes this bot keeps across conversations — injected into its chats. Edit freely; nothing is added automatically.",
+  "bots.memoryAdd": "Add memory",
+  "bots.memoryPlaceholder": "e.g. The user prefers concise answers.",
+  "bots.memoryRemove": "Remove memory",
+  "bots.newChat": "New chat with {name}",
 
   // --- Thread titles created by the store -------------------------------------------------------------------------------------------------------------
   "thread.newChat": "New chat",

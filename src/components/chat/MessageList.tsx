@@ -14,6 +14,7 @@ import {
 } from "@/lib/messages";
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/components/chat/Markdown";
+import { BotAvatar } from "@/components/bots/BotAvatar";
 import { useSearch } from "@/store/search";
 import { useAppearance } from "@/store/appearance";
 import { timeLabels, useIntlLocale, useT } from "@/store/i18n";
@@ -23,10 +24,14 @@ import {
   type ChatStyle,
 } from "@/lib/appearance";
 import { formatDuration, parseDbTime, relativeTime } from "@/lib/time";
+import type { Bot } from "@/types/db";
 
 interface MessageListProps {
   messages: MessageView[];
   pending?: boolean;
+  /** Bot persona of this thread (T38) — assistant messages render its avatar
+   *  + name. null/undefined (no bot) leaves rendering unchanged. */
+  bot?: Bot | null;
 }
 
 /**
@@ -119,15 +124,20 @@ function ChatMessage({
   flashed,
   now,
   innerRef,
+  bot,
 }: {
   m: MessageView;
   chatStyle: ChatStyle;
   flashed: boolean;
   now: number;
   innerRef: (el: HTMLDivElement | null) => void;
+  bot?: Bot | null;
 }) {
   const t = useT();
   const isUser = m.role === "user";
+  // Bot persona (T38): assistant messages in a bot thread show the bot's
+  // avatar + name instead of the generic "ai" label; null otherwise.
+  const asBot = m.role === "assistant" ? (bot ?? null) : null;
 
   const images = m.images.length > 0 && (
     <div className="flex flex-wrap gap-2">
@@ -189,6 +199,14 @@ function ChatMessage({
     />
   );
   const flashRing = flashed && "ring-primary rounded-lg ring-2 ring-offset-2";
+  // Small avatar + name byline above a bot's reply, for the styles without
+  // their own name/gutter treatment (default, bubbles, document, cards, zebra).
+  const byline = asBot && (
+    <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold">
+      <BotAvatar bot={asBot} className="size-5" />
+      {asBot.name}
+    </span>
+  );
 
   if (chatStyle === "compact") {
     // Dense IRC-like row: a fixed-width role gutter, then the text. Markdown
@@ -208,9 +226,16 @@ function ChatMessage({
               "w-10 shrink-0 text-right text-xs leading-5 font-semibold select-none",
               isUser ? "text-primary" : "text-muted-foreground",
             )}
+            title={asBot ? asBot.name : undefined}
             aria-hidden
           >
-            {isUser ? t("chat.you") : t("chat.ai")}
+            {asBot ? (
+              <BotAvatar bot={asBot} className="ml-auto size-5" />
+            ) : isUser ? (
+              t("chat.you")
+            ) : (
+              t("chat.ai")
+            )}
           </span>
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             {images}
@@ -229,17 +254,21 @@ function ChatMessage({
     // each message, everything left-aligned.
     return (
       <div ref={innerRef} data-mid={m.id} className="flex scroll-mt-4 gap-2.5">
-        <span
-          className={cn(
-            "grid size-7 shrink-0 place-items-center rounded-full text-[10px] font-bold uppercase select-none",
-            isUser
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground",
-          )}
-          aria-hidden
-        >
-          {(isUser ? t("chat.you") : t("chat.ai")).slice(0, 1)}
-        </span>
+        {asBot ? (
+          <BotAvatar bot={asBot} className="size-7 shrink-0" />
+        ) : (
+          <span
+            className={cn(
+              "grid size-7 shrink-0 place-items-center rounded-full text-[10px] font-bold uppercase select-none",
+              isUser
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground",
+            )}
+            aria-hidden
+          >
+            {(isUser ? t("chat.you") : t("chat.ai")).slice(0, 1)}
+          </span>
+        )}
         <div
           className={cn(
             "chat-content flex min-w-0 flex-1 flex-col gap-1 text-sm",
@@ -248,12 +277,13 @@ function ChatMessage({
         >
           <span
             className={cn(
-              "text-xs leading-7 font-semibold capitalize",
+              "text-xs leading-7 font-semibold",
+              !asBot && "capitalize",
               isUser ? "text-primary" : "text-muted-foreground",
             )}
             aria-hidden
           >
-            {isUser ? t("chat.you") : t("chat.ai")}
+            {asBot ? asBot.name : isUser ? t("chat.you") : t("chat.ai")}
           </span>
           {images}
           {docs}
@@ -284,6 +314,16 @@ function ChatMessage({
               ❯
             </span>
           )}
+          {/* Bot persona (T38): a dim name marker before the output, where
+              the ❯ prompt sits for user lines. */}
+          {asBot && (
+            <span
+              className="text-muted-foreground shrink-0 font-bold select-none"
+              aria-hidden
+            >
+              {asBot.name}
+            </span>
+          )}
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             {images}
             {docs}
@@ -308,6 +348,7 @@ function ChatMessage({
           flashRing,
         )}
       >
+        {byline}
         {images}
         {docs}
         {tools}
@@ -318,7 +359,7 @@ function ChatMessage({
   );
 }
 
-export function MessageList({ messages, pending }: MessageListProps) {
+export function MessageList({ messages, pending, bot }: MessageListProps) {
   const t = useT();
   const bottomRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -366,7 +407,17 @@ export function MessageList({ messages, pending }: MessageListProps) {
   if (messages.length === 0 && !pending) {
     return (
       <div className="text-muted-foreground flex flex-1 items-center justify-center text-sm">
-        {t("chat.empty")}
+        {bot ? (
+          // Empty bot chat (T38): the persona greets instead of the generic
+          // empty-state text.
+          <div className="flex flex-col items-center gap-2">
+            <BotAvatar bot={bot} className="size-12 text-xl" />
+            <span className="text-foreground font-semibold">{bot.name}</span>
+            <span>{t("chat.botEmptyHint", { name: bot.name })}</span>
+          </div>
+        ) : (
+          t("chat.empty")
+        )}
       </div>
     );
   }
@@ -422,6 +473,7 @@ export function MessageList({ messages, pending }: MessageListProps) {
             chatStyle={chatStyle}
             flashed={flashId === m.id}
             now={now}
+            bot={bot}
             innerRef={(el) => {
               if (el) messageRefs.current.set(m.id, el);
               else messageRefs.current.delete(m.id);

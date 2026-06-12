@@ -7,6 +7,7 @@ import { CLOSE_TO_TRAY_KEY } from "@/components/settings/CloseToTray";
 import { SettingsView } from "@/components/settings/SettingsView";
 import { ChatView } from "@/components/chat/ChatView";
 import { ProjectView } from "@/components/projects/ProjectView";
+import { BotView } from "@/components/bots/BotView";
 import { UsageView } from "@/components/usage/UsageView";
 import { SearchOverlay } from "@/components/search/SearchOverlay";
 import { Sidebar, SidebarContent } from "@/components/sidebar/Sidebar";
@@ -29,6 +30,7 @@ import {
 } from "@/lib/quickDestinations";
 import { useThreads } from "@/store/threads";
 import { useProjects } from "@/store/projects";
+import { useBots } from "@/store/bots";
 import { usePlugins } from "@/store/plugins";
 import { useI18n, useT } from "@/store/i18n";
 import { useModels } from "@/store/models";
@@ -45,12 +47,14 @@ function App() {
   const t = useT();
   const init = useThreads((s) => s.init);
   const initProjects = useProjects((s) => s.init);
+  const initBots = useBots((s) => s.init);
   const loadPlugins = usePlugins((s) => s.load);
   const loadModels = useModels((s) => s.load);
   const loadKeys = useKeys((s) => s.load);
   const refreshOllama = useOllama((s) => s.refresh);
   const loadUserLanguagePacks = useI18n((s) => s.loadUserPacks);
   const openProjectId = useProjects((s) => s.openProjectId);
+  const openBotId = useBots((s) => s.openBotId);
   const view = useView((s) => s.view);
   const sidebarOpen = useLayout((s) => s.sidebarOpen);
   const mobileOpen = useLayout((s) => s.mobileOpen);
@@ -76,6 +80,7 @@ function App() {
   useEffect(() => {
     void init();
     void initProjects();
+    void initBots();
     void loadKeys();
     void loadPlugins();
     void loadModels();
@@ -88,6 +93,7 @@ function App() {
   }, [
     init,
     initProjects,
+    initBots,
     loadKeys,
     loadPlugins,
     loadModels,
@@ -141,6 +147,7 @@ function App() {
   useEffect(() => {
     const unlisten = listen<QuickPayload>("quick-submit", (e) => {
       useProjects.getState().close();
+      useBots.getState().close();
       useView.getState().showChat();
       useLayout.getState().setMobileOpen(false);
       // Read the store at event time so the threads list is fresh (T31: the
@@ -236,6 +243,8 @@ function App() {
               <SettingsView />
             ) : view === "usage" ? (
               <UsageView />
+            ) : openBotId ? (
+              <BotView />
             ) : openProjectId ? (
               <ProjectView />
             ) : (
