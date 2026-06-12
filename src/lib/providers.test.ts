@@ -2,16 +2,25 @@ import { describe, it, expect } from "vitest";
 import {
   PROVIDERS,
   FALLBACK_PROVIDERS,
+  isKeylessProvider,
   providersFromContributions,
   selectActiveProviders,
+  withKeylessProviders,
+  type ProviderMeta,
 } from "@/lib/providers";
 import type { ProviderContribution } from "@/types/plugins";
 import type { Provider } from "@/types/db";
 
-const EXPECTED_IDS: Provider[] = ["anthropic", "openai", "mistral", "gemini"];
+const EXPECTED_IDS: Provider[] = [
+  "anthropic",
+  "openai",
+  "mistral",
+  "gemini",
+  "ollama",
+];
 
 describe("PROVIDERS registry", () => {
-  it("lists exactly the four supported providers, in order", () => {
+  it("lists exactly the supported providers, in order (ollama last)", () => {
     expect(PROVIDERS.map((p) => p.id)).toEqual(EXPECTED_IDS);
   });
 
@@ -20,11 +29,12 @@ describe("PROVIDERS registry", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("gives every provider a non-empty label, defaultModel and keyHint", () => {
+  it("gives every provider a non-empty label and defaultModel, and every keyed provider a keyHint", () => {
     for (const p of PROVIDERS) {
       expect(p.label.trim()).not.toBe("");
       expect(p.defaultModel.trim()).not.toBe("");
-      expect(p.keyHint.trim()).not.toBe("");
+      // Keyless providers (ollama) have no key input, so no hint.
+      if (!isKeylessProvider(p.id)) expect(p.keyHint.trim()).not.toBe("");
     }
   });
 
@@ -100,5 +110,40 @@ describe("selectActiveProviders (load-state + fallback)", () => {
 
   it("returns [] (all-disabled) when loaded with no enabled providers", () => {
     expect(selectActiveProviders(true, [])).toEqual([]);
+  });
+});
+
+describe("keyless providers (T37)", () => {
+  const meta = (id: Provider): ProviderMeta => ({
+    id,
+    label: id,
+    defaultModel: "m",
+    keyHint: "",
+  });
+
+  it("isKeylessProvider knows ollama and nothing else", () => {
+    expect(isKeylessProvider("ollama")).toBe(true);
+    for (const id of ["anthropic", "openai", "mistral", "gemini", "nope"]) {
+      expect(isKeylessProvider(id)).toBe(false);
+    }
+  });
+
+  it("withKeylessProviders unions enabled keyless ids into the presence set", () => {
+    const present = new Set<Provider>(["anthropic"]);
+    const out = withKeylessProviders(present, [
+      meta("anthropic"),
+      meta("ollama"),
+    ]);
+    expect([...out].sort()).toEqual(["anthropic", "ollama"]);
+    // Pure: the input set is untouched.
+    expect([...present]).toEqual(["anthropic"]);
+  });
+
+  it("withKeylessProviders adds nothing when no keyless provider is enabled", () => {
+    const out = withKeylessProviders(new Set<Provider>(["openai"]), [
+      meta("openai"),
+      meta("gemini"),
+    ]);
+    expect([...out]).toEqual(["openai"]);
   });
 });

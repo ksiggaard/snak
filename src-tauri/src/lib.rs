@@ -239,6 +239,8 @@ pub fn run() {
             commands::terminal::open_in_terminal,
             commands::languages::list_languages,
             commands::languages::languages_directory,
+            commands::ollama::ollama_status,
+            commands::ollama::ollama_list_models,
             set_close_to_tray,
             menu::set_menu_visible,
             menu::quit_app,

@@ -64,8 +64,14 @@ pub async fn chat_stream(
         return Err("No model selected. Pick a model before sending.".into());
     }
 
-    let api_key = keys::get_api_key(&provider)?
-        .ok_or_else(|| format!("No API key set for {provider}. Add one in Settings."))?;
+    // Keyless providers (local Ollama) skip the keychain: the daemon ignores
+    // Authorization, so an empty key is passed through.
+    let api_key = if providers::is_keyless(&provider) {
+        String::new()
+    } else {
+        keys::get_api_key(&provider)?
+            .ok_or_else(|| format!("No API key set for {provider}. Add one in Settings."))?
+    };
 
     let client = reqwest::Client::new();
 

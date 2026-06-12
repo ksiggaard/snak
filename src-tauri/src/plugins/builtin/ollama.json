@@ -1,0 +1,16 @@
+{
+  "id": "com.snak.ollama",
+  "name": "Local (Ollama)",
+  "version": "1.0.0",
+  "category": "provider",
+  "apiVersion": 1,
+  "description": "Run models locally via the Ollama daemon at http://localhost:11434. No API key required.",
+  "author": "snak",
+  "enabledByDefault": true,
+  "contributes": {
+    "id": "ollama",
+    "label": "Local (Ollama)",
+    "defaultModel": "llama3.2:1b",
+    "keyHint": ""
+  }
+}

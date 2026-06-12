@@ -6,6 +6,7 @@
 pub mod anthropic;
 pub mod gemini;
 pub mod mistral;
+pub mod ollama;
 pub mod openai;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -219,8 +220,15 @@ pub async fn stream(
         "openai" => openai::OpenAi.stream(client, req, channel, cancel).await,
         "mistral" => mistral::Mistral.stream(client, req, channel, cancel).await,
         "gemini" => gemini::Gemini.stream(client, req, channel, cancel).await,
+        "ollama" => ollama::Ollama.stream(client, req, channel, cancel).await,
         other => anyhow::bail!("unknown provider: {other}"),
     }
+}
+
+/// True for providers that need no API key (local daemons). `chat_stream` skips
+/// the keychain fetch for these. Pure / unit-tested.
+pub fn is_keyless(provider: &str) -> bool {
+    provider == "ollama"
 }
 
 /// Map `ToolDef`s to the Anthropic `tools` array shape
@@ -368,6 +376,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_ollama_is_keyless() {
+        assert!(is_keyless("ollama"));
+        for keyed in ["anthropic", "openai", "mistral", "gemini", "nonsense"] {
+            assert!(!is_keyless(keyed), "{keyed} should require a key");
+        }
+    }
 
     #[test]
     fn anthropic_usage_merges_across_two_events() {

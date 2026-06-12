@@ -3,7 +3,7 @@ import { Check, ChevronsUpDown } from "lucide-react";
 import { useModels } from "@/store/models";
 import { useKeys } from "@/store/keys";
 import { useT } from "@/store/i18n";
-import { useProviders } from "@/lib/providers";
+import { useProviders, withKeylessProviders } from "@/lib/providers";
 import { buildModelOptions, currentModelLabel } from "@/lib/modelOptions";
 import {
   Tooltip,
@@ -45,7 +45,10 @@ export function ModelChooser({
 
   const present = useKeys((s) => s.present);
   const keysLoaded = useKeys((s) => s.loaded);
-  const keyed = keyedProp ?? (keysLoaded ? present : null);
+  // Keyless providers (local Ollama, T37) never have a stored key — union them
+  // in so their models always list.
+  const keyed =
+    keyedProp ?? (keysLoaded ? withKeylessProviders(present, providers) : null);
 
   const options =
     keyed === null
