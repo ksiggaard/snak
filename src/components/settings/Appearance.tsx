@@ -23,6 +23,7 @@ import {
   CHAT_STYLES,
   CONTRAST,
   DEFAULT_PICKER_COLORS,
+  RADIUS,
   FONT_OPTIONS,
   UI_SIZE,
   type ChatListStyle,
@@ -49,6 +50,7 @@ export function Appearance() {
       <TitleBarCard />
       <Themes />
       <ColorsCard />
+      <CornersCard />
       <TypographyCard />
       <ChatStyleCard />
       <ChatListCard />
@@ -325,6 +327,34 @@ function ColorRow({
         </Button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Corner roundness: one slider driving the `--radius` token that every
+ * rounded-* size is a calc() multiple of, so cards, buttons, inputs, and
+ * popovers re-round together (0 = sharp).
+ */
+function CornersCard() {
+  const t = useT();
+  const radius = useAppearance((s) => s.radius);
+  const setRadius = useAppearance((s) => s.setRadius);
+
+  return (
+    <Card className="w-full max-w-lg">
+      <CardHeader>
+        <CardTitle>{t("corners.title")}</CardTitle>
+        <CardDescription>{t("corners.description")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <SizeRow
+          label={t("corners.label")}
+          value={radius}
+          range={RADIUS}
+          onChange={setRadius}
+        />
+      </CardContent>
+    </Card>
   );
 }
 

@@ -336,6 +336,12 @@ export const en = {
   "colors.contrast": "Surface contrast",
   "colors.resetAll": "Reset all colors",
 
+  // --- Settings: appearance — corners card ------------------------------------------------------------------------------
+  "corners.title": "Corners",
+  "corners.description":
+    "How rounded the window chrome and controls are — cards, buttons, inputs, and popovers all follow. 0 is fully square.",
+  "corners.label": "Corner radius",
+
   // --- Settings: appearance — typography card ------------------------------------------------------------------------------
   "typography.title": "Typography",
   "typography.description":

@@ -58,11 +58,16 @@ export interface SizeRange {
 export const UI_SIZE: SizeRange = { min: 13, max: 18, fallback: 16 };
 /** Chat content font-size bounds (px). Default chat text is text-sm = 14px. */
 export const CHAT_SIZE: SizeRange = { min: 14, max: 20, fallback: 14 };
+/** Corner-radius bounds (px) for the `--radius` token every rounded-* size
+ * derives from. Default is the built-in 0.625rem = 10px; 0 = sharp corners. */
+export const RADIUS: SizeRange = { min: 0, max: 20, fallback: 10 };
 
 const COLORS_KEY = "custom-colors";
 const TYPOGRAPHY_KEY = "custom-typography";
+const RADIUS_KEY = "custom-radius";
 const COLORS_STYLE_ID = "custom-colors";
 const TYPOGRAPHY_STYLE_ID = "custom-typography";
+const RADIUS_STYLE_ID = "custom-radius";
 
 // ── Chat layout style (T34) & chat-list row style (T35) ─────────────────────
 //
@@ -210,6 +215,18 @@ export function getStoredTypography(): TypographyPrefs {
   } catch {
     return { ...EMPTY_TYPOGRAPHY };
   }
+}
+
+export function getStoredRadius(): number | null {
+  const raw = localStorage.getItem(RADIUS_KEY);
+  if (raw === null) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? clampSize(n, RADIUS) : null;
+}
+
+export function storeRadius(v: number | null): void {
+  if (v === null) localStorage.removeItem(RADIUS_KEY);
+  else localStorage.setItem(RADIUS_KEY, String(clampSize(v, RADIUS)));
 }
 
 export function storeTypography(t: TypographyPrefs): void {
@@ -505,4 +522,17 @@ export function applyCustomColors(colors: CustomColors): void {
 
 export function applyCustomTypography(t: TypographyPrefs): void {
   injectStyle(TYPOGRAPHY_STYLE_ID, buildTypographyCss(t));
+}
+
+/**
+ * Corner radius: every `rounded-*` utility derives from the `--radius` token
+ * (the `--radius-sm…4xl` sizes are calc() multiples of it), so one override
+ * re-rounds the whole UI — cards, buttons, inputs, popovers.
+ */
+export function buildRadiusCss(v: number | null): string {
+  return v === null ? "" : `:root { --radius: ${clampSize(v, RADIUS)}px; }`;
+}
+
+export function applyCustomRadius(v: number | null): void {
+  injectStyle(RADIUS_STYLE_ID, buildRadiusCss(v));
 }

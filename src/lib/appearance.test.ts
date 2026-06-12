@@ -11,13 +11,17 @@ import {
   getStoredChatListStyle,
   getStoredChatStyle,
   getStoredCustomColors,
+  getStoredRadius,
   getStoredTypography,
   isHexColor,
   mixHex,
   relativeLuminance,
   storeChatListStyle,
   storeChatStyle,
+  buildRadiusCss,
+  RADIUS,
   storeCustomColors,
+  storeRadius,
   storeTypography,
   tintedBackground,
   CHAT_SIZE,
@@ -218,6 +222,25 @@ describe("mixHex / derivedSurfaceDecls", () => {
       `--background: ${mixHex("#ffffff", "#3b0764", 0.05)};`,
     );
     expect(css).not.toContain("--background: #ffffff;");
+  });
+});
+
+describe("radius pref", () => {
+  it("builds a clamped :root --radius override, empty when unset", () => {
+    expect(buildRadiusCss(null)).toBe("");
+    expect(buildRadiusCss(0)).toBe(":root { --radius: 0px; }");
+    expect(buildRadiusCss(14)).toBe(":root { --radius: 14px; }");
+    expect(buildRadiusCss(99)).toBe(`:root { --radius: ${RADIUS.max}px; }`);
+  });
+
+  it("round-trips through localStorage and drops junk", () => {
+    expect(getStoredRadius()).toBeNull();
+    storeRadius(14);
+    expect(getStoredRadius()).toBe(14);
+    storeRadius(null);
+    expect(getStoredRadius()).toBeNull();
+    localStorage.setItem("custom-radius", "not a number");
+    expect(getStoredRadius()).toBeNull();
   });
 });
 

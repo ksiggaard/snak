@@ -1,16 +1,21 @@
 import { create } from "zustand";
 import {
   applyCustomColors,
+  applyCustomRadius,
   applyCustomTypography,
   clampContrast,
+  clampSize,
   getStoredChatListStyle,
   getStoredChatStyle,
   getStoredCustomColors,
+  getStoredRadius,
   getStoredTypography,
   isHexColor,
+  RADIUS,
   storeChatListStyle,
   storeChatStyle,
   storeCustomColors,
+  storeRadius,
   storeTypography,
   type ChatListStyle,
   type ChatStyle,
@@ -29,6 +34,8 @@ interface AppearanceState {
   chatStyle: ChatStyle;
   /** What a sidebar thread row shows (T35): title/date/detailed/preview. */
   chatListStyle: ChatListStyle;
+  /** Corner radius (px) for the `--radius` token; null = built-in 10px. */
+  radius: number | null;
 
   /** Set one color pick for one mode, persist, and re-apply the overrides. */
   setColor: (mode: ColorMode, key: ColorKey, hex: string) => void;
@@ -44,6 +51,8 @@ interface AppearanceState {
   setChatStyle: (style: ChatStyle) => void;
   /** Switch the sidebar chat-list row style (T35). */
   setChatListStyle: (style: ChatListStyle) => void;
+  /** Set (or clear with null) the corner radius. */
+  setRadius: (v: number | null) => void;
 }
 
 export const useAppearance = create<AppearanceState>((set, get) => ({
@@ -51,6 +60,7 @@ export const useAppearance = create<AppearanceState>((set, get) => ({
   typography: getStoredTypography(),
   chatStyle: getStoredChatStyle(),
   chatListStyle: getStoredChatListStyle(),
+  radius: getStoredRadius(),
 
   setColor: (mode, key, hex) => {
     if (!isHexColor(hex)) return;
@@ -99,6 +109,12 @@ export const useAppearance = create<AppearanceState>((set, get) => ({
     set({ typography });
   },
 
+  setRadius: (v) => {
+    storeRadius(v);
+    applyCustomRadius(v);
+    set({ radius: v === null ? null : clampSize(v, RADIUS) });
+  },
+
   setChatStyle: (style) => {
     storeChatStyle(style);
     set({ chatStyle: style });
@@ -116,3 +132,4 @@ export const useAppearance = create<AppearanceState>((set, get) => ({
 // order relative to the async theme load doesn't matter.
 applyCustomColors(getStoredCustomColors());
 applyCustomTypography(getStoredTypography());
+applyCustomRadius(getStoredRadius());
