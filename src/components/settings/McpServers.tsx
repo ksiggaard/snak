@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { NativeSelect } from "@/components/NativeSelect";
 import {
   listTools,
   loadServers,
@@ -170,8 +171,8 @@ export function McpServers() {
             onChange={(e) => setDraftLabel(e.target.value)}
           />
           <div className="flex gap-2">
-            <select
-              className="border-input bg-background text-foreground h-9 rounded-md border px-2 text-sm"
+            <NativeSelect
+              className="h-9 w-24 shrink-0"
               value={draftTransport}
               onChange={(e) =>
                 setDraftTransport(e.target.value as McpTransport)
@@ -179,7 +180,7 @@ export function McpServers() {
             >
               <option value="stdio">stdio</option>
               <option value="http">http</option>
-            </select>
+            </NativeSelect>
             <Input
               placeholder={
                 draftTransport === "http"

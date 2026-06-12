@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { NativeSelect } from "@/components/NativeSelect";
 import { Themes } from "@/components/settings/Themes";
 import { useTitleBar } from "@/store/titlebar";
 import { useTheme } from "@/store/theme";
@@ -411,7 +412,7 @@ function FontRow({
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm font-medium">{label}</span>
         <div className="flex items-center gap-2">
-          <select
+          <NativeSelect
             value={selectValue}
             aria-label={t("typography.familyAria", { label })}
             onChange={(e) => {
@@ -423,7 +424,7 @@ function FontRow({
               setCustomOpen(false);
               onChange(v === FONT_DEFAULT ? null : v);
             }}
-            className="border-input bg-background text-foreground h-8 max-w-44 rounded-md border px-2 text-sm"
+            className="h-8 w-44"
           >
             <option value={FONT_DEFAULT}>{t("typography.default")}</option>
             {FONT_OPTIONS.map((o) => (
@@ -434,7 +435,7 @@ function FontRow({
               </option>
             ))}
             <option value={FONT_CUSTOM}>{t("typography.custom")}</option>
-          </select>
+          </NativeSelect>
           <Button
             variant="ghost"
             size="sm"
