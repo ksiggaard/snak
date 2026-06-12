@@ -1587,3 +1587,172 @@ title-only; offer richer variants for users who want more context per row.
   with a tiny static mock row each (`ChatListRowMock` in
   `settings/Appearance.tsx`). Verified: `npm run build`, `npm run lint`,
   `npm test` (274 passed, incl. 22 new T34/T35 tests) green.
+
+---
+
+## T36 — Incognito mode: explainer + unmistakable visual identity
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P2
+- **Layer:** Frontend
+- **Depends on:** — (builds on T29, done)
+
+(IDEAS 9.) Incognito (T29) is currently marked only by a small Ghost icon + muted italic
+title on the thread row (`src/components/sidebar/ThreadRow.tsx`) and a one-line hint above
+the composer (`src/components/chat/ChatView.tsx`). That's too subtle for a mode with
+privacy implications — make it impossible to miss, and explain honestly what it does and
+does not protect.
+
+**Acceptance criteria:**
+- **Pre-first-message explainer:** when an incognito draft/thread has no messages yet, the
+  empty chat area shows an explainer card stating what incognito *is* (the chat is purged
+  when the app exits; it never becomes `last_thread_id`) and what it *isn't* — **your
+  privacy from the provider is NOT protected: messages are still sent to the hosted
+  provider** (Anthropic/OpenAI/etc.). Wording must generalize across providers (don't
+  hardcode "Claude").
+- **Chat-area distinction while active:** a persistent, clearly visible treatment of the
+  whole chat surface (e.g. tinted/dashed border or distinct background + a labeled Ghost
+  header), not just the current one-line hint. Theme tokens only — works in light/dark and
+  with installed themes (T11).
+- **Sidebar distinction:** the thread row reads as incognito at a glance beyond the small
+  icon (e.g. tinted row background / left border + the Ghost badge). Must not break
+  selection highlight, rename, favorite, delete, or the T35 row styles.
+- All new strings go through the i18n catalog (`src/lib/i18n.ts`, T32) with the six
+  bundled translations (`src/locales/*.json`) updated.
+
+**Notes:**
+- Files: `src/components/chat/ChatView.tsx`, `src/components/sidebar/ThreadRow.tsx`,
+  `src/index.css` (if a reusable incognito tint helps), `src/locales/*.json`.
+- The quick overlay has no incognito path (T29 left it out) — out of scope here too.
+
+---
+
+## T37 — Local models via Ollama (Hugging Face) — built-in provider plugin
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P2
+- **Layer:** Rust (provider module + CLI/daemon detection) + Frontend (setup UX)
+- **Depends on:** — (T12/T18 plugin model, done)
+
+(IDEAS 10.) A default/bundled `provider`-category plugin ("Local (Ollama)") that runs
+Hugging Face–sourced models locally through the **Ollama CLI/daemon**. Ollama and models
+are NOT bundled with snak — ship clear in-app instructions to get rolling instead.
+
+**Acceptance criteria:**
+- New Rust provider module `src-tauri/src/providers/ollama.rs` implementing
+  `Provider::stream` against the local Ollama HTTP API (`http://localhost:11434`), wired
+  into the `providers::stream` match and declared as a built-in plugin manifest
+  (`src-tauri/src/plugins/builtin/ollama.json`; `KNOWN_PROVIDER_IDS` in
+  `src/lib/providers.ts` updated). Streaming, cancel (T3), usage capture (T16), and images
+  (when the loaded model supports them — degrade gracefully) follow the existing provider
+  conventions. Decide whether to use Ollama's OpenAI-compatible endpoint (reusing
+  `openai::chat_completions`) or its native `/api/chat` — document the choice.
+- **No API key:** the keychain/`has_api_key` send-gating must tolerate a keyless provider —
+  gate on "Ollama reachable" instead of "key present".
+- **Model discovery:** list locally installed models (GET `/api/tags`) into the
+  ModelPicker for this provider; provide a way to pull a new model by name (e.g.
+  `ollama pull <model>` staged via T17's `openInTerminal` flow, or a Rust-spawned pull
+  with progress — pick one; never silently execute).
+- **Setup UX:** when Ollama isn't installed/running, the provider's settings card and the
+  chat gate show actionable instructions (install link, start command, a suggested first
+  model) rather than raw connection errors.
+- Enabled by default but inert-and-helpful when Ollama is absent; the four cloud providers
+  are unaffected.
+
+**Notes:**
+- Keep scope to Ollama as the runtime; "from Hugging Face" is satisfied via Ollama's
+  HF-backed registry (`ollama pull hf.co/<repo>` works). A configurable base URL can come
+  later — hardcode localhost first.
+- Rust dispatch currently only resolves the four known ids (`providers/mod.rs`) and T18
+  enforced enablement frontend-only — this task adds the first new id since then; keep the
+  fallback behavior coherent.
+
+---
+
+## T38 — Bots: named personas with avatars and per-bot memory
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P2 (large — do a design pass before claiming)
+- **Layer:** DB (migration) + Frontend
+- **Depends on:** —
+
+(IDEAS 11.) User-created "bots": a named persona — e.g. "John", a very professional
+software engineer who always challenges your architecture, or "Maria", who cares about
+food and makes sure you eat healthy — with personality instructions, an uploaded avatar
+image, its own memory across conversations, and full create/edit/delete management.
+Chatting with a bot should feel like chatting with a person (avatar next to the chat).
+Infinite bots can be created.
+
+**Acceptance criteria:**
+- **Data model** (numbered migration, next version after `011_archive.sql`): `bots` (id,
+  name, personality/instructions, nullable avatar base64 + media_type, optional default
+  provider/model, timestamps), `bot_memory` (row-per-entry, mirroring `user_memory` from
+  migration 005), and a nullable `threads.bot_id`. Explicit child deletes like
+  `deleteThread` — no FK-cascade reliance.
+- **CRUD UI:** create/edit/delete bots (name, personality text, avatar upload reusing
+  `prepareImage` from `src/lib/image.ts`, default provider/model). Deleting a bot is
+  confirmed; its threads survive (`bot_id` → NULL).
+- **Starting a bot chat:** a way to start a new thread with a bot (sidebar and/or a bot
+  gallery); the thread inherits the bot's default provider/model.
+- **Context injection:** the bot's personality + its memory entries compose into the
+  system context at the message-assembly layer in `store/threads.ts` `send()` (a pure
+  `buildBotSystemText` helper alongside `src/lib/systemContext.ts`, unit-tested), with
+  documented precedence vs the global (T10) and project (T20) context. No
+  `src-tauri/src/providers/` changes.
+- **Memory control:** each bot's memory is viewable/editable/deletable from its edit
+  screen (manual entries, like the global Memory card). Automatic memory extraction from
+  conversations is explicitly OPTIONAL/follow-up — if attempted, it must be user-visible
+  and editable, never silent.
+- **Avatar presence:** the bot's avatar + name render next to its assistant messages in
+  `MessageList.tsx` (all four T34 chat styles) and on its thread rows; threads without a
+  bot are unchanged.
+
+**Notes:**
+- The biggest of the four — recommend a `brainstorming`/design-doc pass first (like T12).
+- FTS (T19): bot threads' messages index normally — nothing special needed.
+- Incognito (T29) + bot can compose (ephemeral thread with `bot_id`); bot-memory writes
+  from incognito threads should be skipped or explicitly confirmed.
+
+---
+
+## T39 — Document attachments: multi-format files in chats and projects
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P2
+- **Layer:** Rust (binary-format parsing) + Frontend (attach flow)
+- **Depends on:** —
+
+(IDEAS 12.) Attach more than images: any clear-text format (source code, md, csv, json,
+…) plus parsed binary documents — pdf, docx, odt, ods, odp, ppt(x), xlsx — in both chat
+messages and project files. Documents need to be parsed to text the model can read.
+
+**Acceptance criteria:**
+- **Chat attach flow:** `Composer.tsx` `addFiles` (currently filters to `image/*`) accepts
+  documents; text-like files are read directly; binary formats go through a Rust
+  `extract_document_text(bytes, media_type)` command returning extracted plain text
+  (crates: e.g. `pdf-extract`/`lopdf` for pdf, `docx-rs` or zip+XML for docx/odt/odp/pptx,
+  `calamine` for xlsx/ods — pick and document). Unsupported/failed parses surface a clear
+  inline error, never a silent drop.
+- **Storage:** reuse the `attachments` table (`kind = "document"`, `media_type`, extracted
+  text in `data`; extend the schema via a numbered migration if a filename column is
+  needed). The API payload injects the document text with a labeled wrapper (filename +
+  fenced content); decide and document a per-document size budget like T20's 100k-char
+  project budget.
+- **Native provider documents where supported:** Anthropic supports PDF input natively —
+  consult the `claude-api` skill before deciding raw-PDF-to-Anthropic vs extracted text
+  everywhere; extracted-text-everywhere is the acceptable v1.
+- **Projects:** the T20 project-files picker accepts the same formats, running the same
+  extraction into `project_files.content` (text), so project context "just works".
+- **UI:** attached documents render as a chip/card (filename, type icon, size) on the user
+  message in `MessageList.tsx` and in the Composer's pending-attachment row. Note FTS
+  implications (attachment text is not in `search_fts` — fine, document it).
+
+**Notes:**
+- Keep parsing in Rust (the webview has no fs access or heavy parsers); legacy binary
+  `.doc`/`.ppt` (pre-OOXML) are hard — explicitly out of scope or best-effort, document
+  the decision.
+- Mind context-window blowups — show a size meter/warning like the project view (T20).
