@@ -44,7 +44,10 @@ export function ChatPanel({
   const requestScroll = useSearch((s) => s.requestScroll);
   const [query, setQuery] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [totals, setTotals] = useState<ThreadUsageTotals | null>(null);
+  const [usage, setUsage] = useState<{
+    threadId: string;
+    totals: ThreadUsageTotals;
+  } | null>(null);
   const [lightbox, setLightbox] = useState<MediaEntry | null>(null);
 
   const userEntries = useMemo(() => userMessageEntries(messages), [messages]);
@@ -54,24 +57,25 @@ export function ChatPanel({
     [messages, query],
   );
 
-  // Token spend: re-summed when the thread changes or a reply lands.
+  // Token spend: re-summed when the thread changes or a reply lands. The
+  // result is keyed by thread id so a thread switch (or null thread) shows
+  // nothing rather than stale totals — no synchronous reset needed.
   useEffect(() => {
+    if (!threadId) return;
     let stale = false;
-    if (!threadId) {
-      setTotals(null);
-      return;
-    }
     threadUsageTotals(threadId)
       .then((u) => {
-        if (!stale) setTotals(u);
+        if (!stale) setUsage({ threadId, totals: u });
       })
       .catch(() => {
-        if (!stale) setTotals(null);
+        if (!stale) setUsage(null);
       });
     return () => {
       stale = true;
     };
   }, [threadId, messages.length]);
+  const totals =
+    threadId && usage?.threadId === threadId ? usage.totals : null;
 
   // Scroll spy: observe the user's message rows inside the message-list
   // scroll container; the topmost visible one (in message order) is active.
