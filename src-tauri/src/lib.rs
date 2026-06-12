@@ -145,6 +145,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/014_bot_tagline.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 15,
+            description: "personas: profile fields, self-managed memory + mood (T40)",
+            sql: include_str!("../migrations/015_personas.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

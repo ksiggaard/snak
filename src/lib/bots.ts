@@ -12,12 +12,22 @@ import type { Bot, BotMemory } from "@/types/db";
 
 /**
  * Build the system text injected for a thread that belongs to a bot: a
- * persona header, the bot's personality instructions, and its memory entries.
+ * persona header, the bot's personality instructions, its modus operandi and
+ * tone of voice, its current mood (when enabled), and its memory entries.
  * Returns an empty string when everything is blank — callers should skip
  * adding a system message in that case.
  */
 export function buildBotSystemText(
-  bot: Pick<Bot, "name" | "instructions" | "tagline">,
+  bot: Pick<
+    Bot,
+    | "name"
+    | "instructions"
+    | "tagline"
+    | "modus_operandi"
+    | "tone_of_voice"
+    | "mood_enabled"
+    | "mood"
+  >,
   memory: Pick<BotMemory, "content">[],
 ): string {
   const sections: string[] = [];
@@ -35,6 +45,25 @@ export function buildBotSystemText(
   const instructions = bot.instructions.trim();
   if (instructions) {
     sections.push(instructions);
+  }
+
+  const modusOperandi = bot.modus_operandi.trim();
+  if (modusOperandi) {
+    sections.push(`How you work:\n${modusOperandi}`);
+  }
+
+  const toneOfVoice = bot.tone_of_voice.trim();
+  if (toneOfVoice) {
+    sections.push(`Tone of voice:\n${toneOfVoice}`);
+  }
+
+  // Mood (T40): only injected while the persona's mood feature is on — a
+  // lingering mood string must not leak into chats once the toggle is off.
+  const mood = bot.mood.trim();
+  if (bot.mood_enabled && mood) {
+    sections.push(
+      `Your current mood: ${mood}\nLet it subtly color your responses; don't mention it unprompted.`,
+    );
   }
 
   const memoryLines = memory
