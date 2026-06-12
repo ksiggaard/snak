@@ -74,8 +74,7 @@ export function ChatPanel({
       stale = true;
     };
   }, [threadId, messages.length]);
-  const totals =
-    threadId && usage?.threadId === threadId ? usage.totals : null;
+  const totals = threadId && usage?.threadId === threadId ? usage.totals : null;
 
   // Scroll spy: observe the user's message rows inside the message-list
   // scroll container; the topmost visible one (in message order) is active.
