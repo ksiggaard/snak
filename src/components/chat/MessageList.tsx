@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { FoldVertical, Globe, Wrench } from "lucide-react";
+import { Check, Copy, FoldVertical, Globe, Wrench } from "lucide-react";
 import {
   imageDataUrl,
   type MessageToolCall,
@@ -40,29 +40,61 @@ function ToolCallChip({ call }: { call: MessageToolCall }) {
   );
 }
 
-/** Small footer under an assistant reply: relative time + generation duration.
- * Hidden for the streaming placeholder (empty created_at). `now` is supplied by
- * the parent's ticker so the relative label stays current. */
+/** Small footer under an assistant reply: relative time + generation duration
+ * + a copy-to-clipboard button for the whole reply. Hidden for the streaming
+ * placeholder (empty created_at). `now` is supplied by the parent's ticker so
+ * the relative label stays current. */
 function AssistantMeta({
   createdAt,
   durationMs,
   now,
+  content,
 }: {
   createdAt: string;
   durationMs: number | null;
   now: number;
+  /** The reply's raw Markdown, copied verbatim. */
+  content: string;
 }) {
+  const t = useT();
   // Active-locale formatting (T32): labels + Intl locale follow the language.
   const locale = useIntlLocale();
+  const [copied, setCopied] = useState(false);
   if (!createdAt) return null;
   const date = parseDbTime(createdAt);
+
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard may be unavailable (e.g. no permission); ignore silently.
+    }
+  };
+
   return (
     <div
-      className="text-muted-foreground text-xs"
+      className="text-muted-foreground flex items-center gap-1.5 text-xs"
       title={date.toLocaleString(locale)}
     >
-      {relativeTime(date, new Date(now), timeLabels(), locale)}
-      {durationMs != null && ` · ${formatDuration(durationMs)}`}
+      <span>
+        {relativeTime(date, new Date(now), timeLabels(), locale)}
+        {durationMs != null && ` · ${formatDuration(durationMs)}`}
+      </span>
+      <button
+        type="button"
+        onClick={onCopy}
+        aria-label={copied ? t("chat.copied") : t("chat.copy")}
+        title={copied ? t("chat.copied") : t("chat.copy")}
+        className="hover:bg-muted hover:text-foreground rounded p-1 transition-colors"
+      >
+        {copied ? (
+          <Check className="size-3.5" aria-hidden />
+        ) : (
+          <Copy className="size-3.5" aria-hidden />
+        )}
+      </button>
     </div>
   );
 }
@@ -157,6 +189,7 @@ function ChatMessage({
       createdAt={m.created_at}
       durationMs={m.duration_ms}
       now={now}
+      content={m.content}
     />
   );
   const flashRing = flashed && "ring-primary rounded-lg ring-2 ring-offset-2";
