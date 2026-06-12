@@ -36,6 +36,9 @@ interface SearchState {
   openHit: (hit: SearchHit) => Promise<void>;
   /** Called by MessageList after it scrolls, to consume the pending target. */
   consumeScroll: () => void;
+  /** Scroll-to + flash a message in the *current* thread (chat-panel jumps —
+   * the same mechanism MessageList already consumes for search results). */
+  requestScroll: (messageId: string) => void;
 }
 
 export const useSearch = create<SearchState>((set, get) => ({
@@ -84,4 +87,6 @@ export const useSearch = create<SearchState>((set, get) => ({
   },
 
   consumeScroll: () => set({ scrollToMessageId: null }),
+
+  requestScroll: (messageId) => set({ scrollToMessageId: messageId }),
 }));

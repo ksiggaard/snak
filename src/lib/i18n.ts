@@ -133,6 +133,18 @@ export const en = {
   "chat.openInTerminalTitle":
     "Open in terminal (staged, not run — review and press Enter)",
 
+  // --- Chat: right-side panel ------------------------------------------------------------------------------------------
+  "panel.open": "Open chat panel",
+  "panel.close": "Close panel",
+  "panel.searchPlaceholder": "Search this chat…",
+  "panel.results": "Results",
+  "panel.noMatches": "No matches.",
+  "panel.myMessages": "Your messages",
+  "panel.noMessages": "No messages yet.",
+  "panel.media": "Media",
+  "panel.noMedia": "No media shared.",
+  "panel.tokenSpend": "Token spend",
+
   // --- Composer -----------------------------------------------------------------
   "composer.placeholder":
     "Type a message…  ( / for commands · Enter to send · Shift+Enter for newline )",

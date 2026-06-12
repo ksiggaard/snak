@@ -484,6 +484,43 @@ export async function addUsage(input: {
   );
 }
 
+export interface ThreadUsageTotals {
+  input_tokens: number;
+  output_tokens: number;
+  cache_tokens: number;
+  total_tokens: number;
+}
+
+/** Summed token usage for one thread (the chat panel's spend number). */
+export async function threadUsageTotals(
+  threadId: string,
+): Promise<ThreadUsageTotals> {
+  const db = await getDb();
+  const rows = await db.select<
+    {
+      input_tokens: number | null;
+      output_tokens: number | null;
+      cache_tokens: number | null;
+    }[]
+  >(
+    `SELECT SUM(input_tokens) AS input_tokens,
+            SUM(output_tokens) AS output_tokens,
+            SUM(cache_creation_tokens + cache_read_tokens) AS cache_tokens
+       FROM usage WHERE thread_id = $1`,
+    [threadId],
+  );
+  const r = rows[0] ?? {};
+  const input = r.input_tokens ?? 0;
+  const output = r.output_tokens ?? 0;
+  const cache = r.cache_tokens ?? 0;
+  return {
+    input_tokens: input,
+    output_tokens: output,
+    cache_tokens: cache,
+    total_tokens: input + output + cache,
+  };
+}
+
 /** All usage rows, newest first. */
 export async function listUsage(): Promise<Usage[]> {
   const db = await getDb();

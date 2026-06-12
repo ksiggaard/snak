@@ -1,12 +1,18 @@
-import { Ghost } from "lucide-react";
+import { useState } from "react";
+import { Ghost, PanelRight } from "lucide-react";
 import { MessageList } from "@/components/chat/MessageList";
 import { Composer } from "@/components/chat/Composer";
+import { ChatPanel } from "@/components/chat/ChatPanel";
+import { Button } from "@/components/ui/button";
 import { useThreads } from "@/store/threads";
 import { useT } from "@/store/i18n";
 import { useProviders } from "@/lib/providers";
 
 export function ChatView() {
   const t = useT();
+  // Right-side chat panel (media / scroll spy / in-chat search / token
+  // spend). Hidden by default, per-session only — not persisted.
+  const [panelOpen, setPanelOpen] = useState(false);
   const messages = useThreads((s) => s.messages);
   const busy = useThreads((s) => s.busy);
   const error = useThreads((s) => s.error);
@@ -39,23 +45,44 @@ export function ChatView() {
   const pending = busy && (!last || last.role === "user");
 
   return (
-    <div className="flex flex-1 flex-col gap-3 overflow-hidden">
-      <MessageList messages={messages} pending={pending} />
-      {error && <p className="text-destructive px-1 text-sm">{error}</p>}
-      {incognito && (
-        <p className="text-muted-foreground flex items-center gap-1.5 px-1 text-xs">
-          <Ghost className="size-3.5 shrink-0" aria-hidden />
-          {t("chat.incognitoHint")}
-        </p>
+    <div className="relative flex flex-1 flex-row overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden">
+        <MessageList messages={messages} pending={pending} />
+        {error && <p className="text-destructive px-1 text-sm">{error}</p>}
+        {incognito && (
+          <p className="text-muted-foreground flex items-center gap-1.5 px-1 text-xs">
+            <Ghost className="size-3.5 shrink-0" aria-hidden />
+            {t("chat.incognitoHint")}
+          </p>
+        )}
+        <Composer
+          onSend={(text, images) => void send(text, images)}
+          onCancel={() => void cancel()}
+          busy={busy}
+          provider={provider}
+          providerEnabled={providerEnabled}
+          anyProvider={anyProvider}
+        />
+      </div>
+      {!panelOpen && (
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={t("panel.open")}
+          title={t("panel.open")}
+          onClick={() => setPanelOpen(true)}
+          className="text-muted-foreground hover:text-foreground absolute top-1 right-1 hidden md:inline-flex"
+        >
+          <PanelRight className="size-4" />
+        </Button>
       )}
-      <Composer
-        onSend={(text, images) => void send(text, images)}
-        onCancel={() => void cancel()}
-        busy={busy}
-        provider={provider}
-        providerEnabled={providerEnabled}
-        anyProvider={anyProvider}
-      />
+      {panelOpen && (
+        <ChatPanel
+          messages={messages}
+          threadId={currentThreadId}
+          onClose={() => setPanelOpen(false)}
+        />
+      )}
     </div>
   );
 }

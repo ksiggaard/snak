@@ -198,7 +198,7 @@ function ChatMessage({
     // Dense IRC-like row: a fixed-width role gutter, then the text. Markdown
     // margins are tightened by the `.chat-style-compact` rules in index.css.
     return (
-      <div ref={innerRef} className="flex scroll-mt-4">
+      <div ref={innerRef} data-mid={m.id} className="flex scroll-mt-4">
         <div
           className={cn(
             // chat-content: hook for the custom chat font/size overrides
@@ -229,7 +229,7 @@ function ChatMessage({
 
   const { row, content } = styleClasses(chatStyle, isUser);
   return (
-    <div ref={innerRef} className={cn("flex scroll-mt-4", row)}>
+    <div ref={innerRef} data-mid={m.id} className={cn("flex scroll-mt-4", row)}>
       <div
         className={cn(
           // chat-content: hook for the custom chat font/size overrides
@@ -295,6 +295,9 @@ export function MessageList({ messages, pending }: MessageListProps) {
 
   return (
     <div
+      // data-chat-scroll: the chat panel's scroll spy uses this container as
+      // its IntersectionObserver root (src/components/chat/ChatPanel.tsx).
+      data-chat-scroll
       className={cn(
         "flex flex-1 flex-col overflow-y-auto",
         // Style hook consumed by the T34 rules in index.css (bubble break-out,

@@ -1,0 +1,244 @@
+import { useEffect, useMemo, useState } from "react";
+import { Coins, Image as ImageIcon, ListOrdered, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import {
+  mediaEntries,
+  searchChatMessages,
+  userMessageEntries,
+} from "@/lib/chatPanel";
+import { threadUsageTotals, type ThreadUsageTotals } from "@/lib/db";
+import { imageDataUrl, type MessageView } from "@/lib/messages";
+import { highlightSegments } from "@/lib/search";
+import { formatTokens } from "@/lib/usage";
+import { useSearch } from "@/store/search";
+import { useT } from "@/store/i18n";
+
+/**
+ * Right-side chat panel (hidden by default): in-chat text search, a scroll
+ * spy over the user's own messages, every image shared in the thread, and the
+ * thread's summed token spend. All jumps reuse the T19 scroll-to + flash
+ * mechanism via `useSearch.requestScroll`.
+ */
+export function ChatPanel({
+  messages,
+  threadId,
+  onClose,
+}: {
+  messages: MessageView[];
+  threadId: string | null;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const requestScroll = useSearch((s) => s.requestScroll);
+  const [query, setQuery] = useState("");
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [totals, setTotals] = useState<ThreadUsageTotals | null>(null);
+
+  const userEntries = useMemo(() => userMessageEntries(messages), [messages]);
+  const media = useMemo(() => mediaEntries(messages), [messages]);
+  const hits = useMemo(
+    () => searchChatMessages(messages, query),
+    [messages, query],
+  );
+
+  // Token spend: re-summed when the thread changes or a reply lands.
+  useEffect(() => {
+    let stale = false;
+    if (!threadId) {
+      setTotals(null);
+      return;
+    }
+    threadUsageTotals(threadId)
+      .then((u) => {
+        if (!stale) setTotals(u);
+      })
+      .catch(() => {
+        if (!stale) setTotals(null);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [threadId, messages.length]);
+
+  // Scroll spy: observe the user's message rows inside the message-list
+  // scroll container; the topmost visible one (in message order) is active.
+  useEffect(() => {
+    const container = document.querySelector("[data-chat-scroll]");
+    if (!container || userEntries.length === 0) return;
+    const userIds = new Set(userEntries.map((u) => u.id));
+    const visible = new Set<string>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          const id = (e.target as HTMLElement).dataset.mid;
+          if (!id) continue;
+          if (e.isIntersecting) visible.add(id);
+          else visible.delete(id);
+        }
+        const first = userEntries.find((u) => visible.has(u.id));
+        if (first) setActiveId(first.id);
+      },
+      { root: container, threshold: 0.1 },
+    );
+    for (const el of container.querySelectorAll<HTMLElement>("[data-mid]")) {
+      if (el.dataset.mid && userIds.has(el.dataset.mid)) observer.observe(el);
+    }
+    return () => observer.disconnect();
+  }, [userEntries]);
+
+  return (
+    <aside className="border-border bg-background hidden w-72 shrink-0 flex-col overflow-hidden border-l md:flex">
+      <div className="flex items-center gap-2 border-b p-2">
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t("panel.searchPlaceholder")}
+          className="h-8"
+        />
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={t("panel.close")}
+          onClick={onClose}
+        >
+          <X className="size-4" />
+        </Button>
+      </div>
+
+      <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-3">
+        {query.trim() ? (
+          <Section title={t("panel.results")}>
+            {hits.length === 0 ? (
+              <Empty text={t("panel.noMatches")} />
+            ) : (
+              hits.map((h) => (
+                <button
+                  key={h.id}
+                  type="button"
+                  onClick={() => requestScroll(h.id)}
+                  className="hover:bg-muted w-full rounded-md px-2 py-1.5 text-left text-xs"
+                >
+                  <Snippet text={h.snippet} query={query} />
+                </button>
+              ))
+            )}
+          </Section>
+        ) : (
+          <>
+            <Section
+              title={t("panel.myMessages")}
+              icon={<ListOrdered className="size-3.5" aria-hidden />}
+            >
+              {userEntries.length === 0 ? (
+                <Empty text={t("panel.noMessages")} />
+              ) : (
+                userEntries.map((u) => (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => requestScroll(u.id)}
+                    className={cn(
+                      "w-full truncate rounded-md border-l-2 px-2 py-1.5 text-left text-xs transition-colors",
+                      activeId === u.id
+                        ? "border-primary bg-muted text-foreground"
+                        : "text-muted-foreground hover:bg-muted/60 border-transparent",
+                    )}
+                  >
+                    {u.label || "…"}
+                  </button>
+                ))
+              )}
+            </Section>
+
+            <Section
+              title={t("panel.media")}
+              icon={<ImageIcon className="size-3.5" aria-hidden />}
+            >
+              {media.length === 0 ? (
+                <Empty text={t("panel.noMedia")} />
+              ) : (
+                <div className="grid grid-cols-3 gap-1.5">
+                  {media.map((entry, i) => (
+                    <button
+                      key={`${entry.messageId}-${i}`}
+                      type="button"
+                      onClick={() => requestScroll(entry.messageId)}
+                      className="focus-visible:ring-ring overflow-hidden rounded-md focus-visible:ring-2"
+                    >
+                      <img
+                        src={imageDataUrl(entry.image)}
+                        alt=""
+                        loading="lazy"
+                        className="aspect-square w-full object-cover"
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </Section>
+          </>
+        )}
+      </div>
+
+      {totals !== null && totals.total_tokens > 0 && (
+        <div
+          className="text-muted-foreground flex items-center gap-1.5 border-t px-3 py-2 text-xs"
+          title={`${totals.input_tokens.toLocaleString()} in · ${totals.output_tokens.toLocaleString()} out · ${totals.cache_tokens.toLocaleString()} cache`}
+        >
+          <Coins className="size-3.5 shrink-0" aria-hidden />
+          <span className="font-medium">{t("panel.tokenSpend")}</span>
+          <span className="ml-auto tabular-nums">
+            ↓ {formatTokens(totals.input_tokens)} · ↑{" "}
+            {formatTokens(totals.output_tokens)}
+          </span>
+        </div>
+      )}
+    </aside>
+  );
+}
+
+function Section({
+  title,
+  icon,
+  children,
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="flex flex-col gap-1">
+      <h3 className="text-muted-foreground flex items-center gap-1.5 px-2 text-[11px] font-semibold tracking-wide uppercase">
+        {icon}
+        {title}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+function Empty({ text }: { text: string }) {
+  return <p className="text-muted-foreground px-2 text-xs">{text}</p>;
+}
+
+/** Search snippet with the matched terms highlighted. */
+function Snippet({ text, query }: { text: string; query: string }) {
+  return (
+    <span className="text-foreground/90 line-clamp-2">
+      {highlightSegments(text, query).map((seg, i) =>
+        seg.match ? (
+          <mark
+            key={i}
+            className="bg-primary/25 text-foreground rounded px-0.5"
+          >
+            {seg.text}
+          </mark>
+        ) : (
+          <span key={i}>{seg.text}</span>
+        ),
+      )}
+    </span>
+  );
+}
