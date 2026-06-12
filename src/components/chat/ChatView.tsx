@@ -97,7 +97,9 @@ export function ChatView() {
         )}
         {error && <p className="text-destructive px-1 text-sm">{error}</p>}
         <Composer
-          onSend={(text, images) => void send(text, images)}
+          onSend={(text, images, documents) =>
+            void send(text, images, documents)
+          }
           onCancel={() => void cancel()}
           busy={busy}
           provider={provider}

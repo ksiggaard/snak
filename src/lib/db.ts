@@ -298,13 +298,22 @@ export async function addAttachment(input: {
   kind: AttachmentKind;
   media_type: string;
   data: string;
+  /** Original file name for `document` rows (T39, migration 012). */
+  filename?: string;
 }): Promise<Attachment> {
   const db = await getDb();
   const id = newId();
   await db.execute(
-    `INSERT INTO attachments (id, message_id, kind, media_type, data)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [id, input.message_id, input.kind, input.media_type, input.data],
+    `INSERT INTO attachments (id, message_id, kind, media_type, data, filename)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [
+      id,
+      input.message_id,
+      input.kind,
+      input.media_type,
+      input.data,
+      input.filename ?? null,
+    ],
   );
   const rows = await db.select<Attachment[]>(
     `SELECT * FROM attachments WHERE id = $1`,

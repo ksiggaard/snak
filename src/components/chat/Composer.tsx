@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import {
   Camera,
+  FileText,
   FoldVertical,
   Loader2,
   Maximize2,
@@ -14,6 +15,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Canvas } from "@/components/chat/Canvas";
 import { ModelPicker } from "@/components/chat/ModelPicker";
 import { canCompact } from "@/lib/compaction";
+import {
+  classifyFile,
+  DOCUMENT_CHAR_BUDGET,
+  documentMediaType,
+  extractDocumentText,
+  fileExtension,
+  MAX_DOCUMENT_BYTES,
+  truncateDocumentText,
+  type PendingDocument,
+} from "@/lib/documents";
 import { prepareImage, type PreparedImage } from "@/lib/image";
 import { isKeylessProvider, useProviders } from "@/lib/providers";
 import { takeScreenshot } from "@/lib/quick";
@@ -33,7 +44,11 @@ import { t as tNow, useT } from "@/store/i18n";
 import type { Provider } from "@/types/db";
 
 interface ComposerProps {
-  onSend: (text: string, images: PreparedImage[]) => void;
+  onSend: (
+    text: string,
+    images: PreparedImage[],
+    documents: PendingDocument[],
+  ) => void;
   /** Cancel the in-flight stream (shown as a Stop button while busy). */
   onCancel: () => void;
   /** Streaming is in progress: show Stop instead of Send. */
@@ -60,6 +75,10 @@ export function Composer({
     providers.find((p) => p.id === id)?.label ?? id;
   const [text, setText] = useState("");
   const [images, setImages] = useState<PreparedImage[]>([]);
+  // Documents staged for the next send (T39): extracted text + metadata.
+  const [documents, setDocuments] = useState<PendingDocument[]>([]);
+  // A binary document is being text-extracted in the backend (spinner chip).
+  const [extracting, setExtracting] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [shooting, setShooting] = useState(false);
   const [canvasOpen, setCanvasOpen] = useState(false);
@@ -132,24 +151,93 @@ export function Composer({
     keyReady !== false &&
     canCompact(threadMessages);
 
+  /**
+   * Route picked/dropped/pasted files by `classifyFile` (T39): images keep the
+   * existing pipeline; text files are read in the webview; binary documents go
+   * through the Rust extractor. Legacy Office / unsupported files surface an
+   * inline notice — a file is NEVER silently dropped.
+   */
   async function addFiles(files: Iterable<File>) {
-    const imageFiles = Array.from(files).filter((f) =>
-      f.type.startsWith("image/"),
-    );
-    if (imageFiles.length === 0) return;
     setAttachError(null);
-    try {
-      const prepared = await Promise.all(
-        imageFiles.map((f) => prepareImage(f)),
-      );
-      setImages((prev) => [...prev, ...prepared]);
-    } catch {
-      setAttachError(tNow("composer.imageError"));
+    for (const file of Array.from(files)) {
+      const cls = classifyFile(file.name, file.type);
+      if (cls === "image") {
+        try {
+          const prepared = await prepareImage(file);
+          setImages((prev) => [...prev, prepared]);
+        } catch {
+          setAttachError(tNow("composer.imageError"));
+        }
+        continue;
+      }
+      if (cls === "legacy-document") {
+        setAttachError(tNow("composer.documentLegacy", { name: file.name }));
+        continue;
+      }
+      if (cls === "unsupported") {
+        setAttachError(
+          tNow("composer.documentUnsupported", { name: file.name }),
+        );
+        continue;
+      }
+      // text | binary-document — both end up as extracted text.
+      if (file.size > MAX_DOCUMENT_BYTES) {
+        setAttachError(
+          tNow("composer.documentTooLarge", {
+            name: file.name,
+            max: `${Math.round(MAX_DOCUMENT_BYTES / (1024 * 1024))} MB`,
+          }),
+        );
+        continue;
+      }
+      try {
+        let raw: string;
+        if (cls === "text") {
+          raw = await file.text();
+        } else {
+          setExtracting(true);
+          try {
+            raw = await extractDocumentText(file);
+          } finally {
+            setExtracting(false);
+          }
+        }
+        const { text: docText, truncated } = truncateDocumentText(raw);
+        setDocuments((prev) => [
+          ...prev,
+          {
+            name: file.name,
+            mediaType: documentMediaType(file.name, file.type),
+            text: docText,
+            truncated,
+          },
+        ]);
+        if (truncated) {
+          setAttachError(
+            tNow("composer.documentTruncated", {
+              name: file.name,
+              n: DOCUMENT_CHAR_BUDGET.toLocaleString(),
+            }),
+          );
+        }
+      } catch (err) {
+        // The extractor rejects with a user-readable string per its contract.
+        setAttachError(
+          tNow("composer.documentReadError", {
+            name: file.name,
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        );
+      }
     }
   }
 
   function removeImage(index: number) {
     setImages((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function removeDocument(index: number) {
+    setDocuments((prev) => prev.filter((_, i) => i !== index));
   }
 
   /** Interactive region screenshot (same path as the quick overlay): the
@@ -174,6 +262,7 @@ export function Composer({
   function resetDraft() {
     setText("");
     setImages([]);
+    setDocuments([]);
     setAttachError(null);
     setCanvasOpen(false);
     setPaletteOpen(false);
@@ -201,7 +290,7 @@ export function Composer({
       return;
     }
     if (command.kind === "transform") {
-      onSend(args, images);
+      onSend(args, images, documents);
       resetDraft();
       return;
     }
@@ -228,8 +317,8 @@ export function Composer({
       }
     }
 
-    if (!trimmed && images.length === 0) return;
-    onSend(trimmed, images);
+    if (!trimmed && images.length === 0 && documents.length === 0) return;
+    onSend(trimmed, images, documents);
     resetDraft();
   }
 
@@ -262,8 +351,11 @@ export function Composer({
   // check is moot when the provider can't be used at all). Composes with T6.
   const noKey = providerEnabled && keyReady === false;
   const composeDisabled = busy || !providerEnabled || noKey;
+  // Sending is held while a document is mid-extraction so it can't be dropped.
   const canSend =
-    !composeDisabled && (text.trim().length > 0 || images.length > 0);
+    !composeDisabled &&
+    !extracting &&
+    (text.trim().length > 0 || images.length > 0 || documents.length > 0);
 
   return (
     <div
@@ -275,6 +367,8 @@ export function Composer({
       }}
     >
       {canvasOpen && (
+        // Canvas stays images-only (v1): staged documents keep flowing through
+        // the normal send path below; they just aren't previewed in the canvas.
         <Canvas
           text={text}
           onChange={setText}
@@ -379,8 +473,8 @@ export function Composer({
         </div>
       )}
 
-      {images.length > 0 && (
-        <div className="flex flex-wrap gap-2">
+      {(images.length > 0 || documents.length > 0 || extracting) && (
+        <div className="flex flex-wrap items-center gap-2">
           {images.map((img, i) => (
             <div key={i} className="relative">
               <img
@@ -398,13 +492,44 @@ export function Composer({
               </button>
             </div>
           ))}
+          {documents.map((doc, i) => (
+            <div
+              key={`doc-${i}`}
+              title={doc.name}
+              className="bg-muted/40 relative flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs"
+            >
+              <FileText className="size-4 shrink-0" aria-hidden />
+              <span className="max-w-40 truncate">{doc.name}</span>
+              {fileExtension(doc.name) && (
+                <span className="text-muted-foreground text-[10px] font-semibold uppercase">
+                  {fileExtension(doc.name)}
+                </span>
+              )}
+              <span className="text-muted-foreground">
+                {t("document.chars", { n: doc.text.length.toLocaleString() })}
+              </span>
+              <button
+                type="button"
+                aria-label={t("composer.removeDocument")}
+                onClick={() => removeDocument(i)}
+                className="bg-background/80 absolute -top-1.5 -right-1.5 rounded-full border p-0.5"
+              >
+                <X className="size-3" />
+              </button>
+            </div>
+          ))}
+          {extracting && (
+            <div className="bg-muted/40 text-muted-foreground flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs">
+              <Loader2 className="size-4 animate-spin" aria-hidden />
+              {t("composer.extracting")}
+            </div>
+          )}
         </div>
       )}
 
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
         multiple
         hidden
         onChange={(e) => {
@@ -423,8 +548,10 @@ export function Composer({
           setPaletteIndex(0);
         }}
         onPaste={(e) => {
+          // Any pasted *files* go through the attach flow (images, documents,
+          // …); plain-text pastes have no files and stay normal text input.
           const files = Array.from(e.clipboardData.files);
-          if (files.some((f) => f.type.startsWith("image/"))) {
+          if (files.length > 0) {
             e.preventDefault();
             void addFiles(files);
           }
@@ -465,7 +592,8 @@ export function Composer({
         <Button
           variant="ghost"
           size="icon"
-          aria-label={t("composer.attachImage")}
+          aria-label={t("composer.attachFile")}
+          title={t("composer.attachFile")}
           disabled={composeDisabled}
           onClick={() => fileInputRef.current?.click()}
         >

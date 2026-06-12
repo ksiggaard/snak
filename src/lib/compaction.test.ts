@@ -118,6 +118,28 @@ describe("compactHistory", () => {
       { role: "user", content: summaryContext("s"), images: [] },
     ]);
   });
+
+  it("appends attached-document text to the user turn as a labelled block (T39)", () => {
+    const withDoc: CompactableMessage = {
+      role: "user",
+      content: "see attached",
+      kind: "normal",
+      documents: [{ name: "notes.txt", text: "hello world" }],
+    };
+    const history = compactHistory([withDoc, assistant("ok")]);
+    expect(history[0].content).toBe(
+      "see attached\n\n--- Attached document: notes.txt ---\n```\nhello world\n```",
+    );
+    expect(history[1].content).toBe("ok");
+  });
+
+  it("keeps document-less turns byte-identical to before", () => {
+    const history = compactHistory([user("hi  "), assistant("hello")]);
+    expect(history).toEqual([
+      { role: "user", content: "hi  ", images: [] },
+      { role: "assistant", content: "hello", images: [] },
+    ]);
+  });
 });
 
 describe("buildCompactionRequest", () => {

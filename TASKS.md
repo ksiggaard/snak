@@ -1753,8 +1753,8 @@ Infinite bots can be created.
 
 ## T39 — Document attachments: multi-format files in chats and projects
 
-- **Status:** todo
-- **Owner:** —
+- **Status:** done
+- **Owner:** Claude (T36–T39 wave)
 - **Priority:** P2
 - **Layer:** Rust (binary-format parsing) + Frontend (attach flow)
 - **Depends on:** —
@@ -1789,3 +1789,29 @@ messages and project files. Documents need to be parsed to text the model can re
   `.doc`/`.ppt` (pre-OOXML) are hard — explicitly out of scope or best-effort, document
   the decision.
 - Mind context-window blowups — show a size meter/warning like the project view (T20).
+- 2026-06-12 (Claude): Done. **Rust** (`commands/documents.rs`): `extract_document_text`
+  command (base64 in, `spawn_blocking`) over pure `detect_format`/`extract_text` —
+  `pdf-extract` 0.10 under `catch_unwind` for pdf; `zip` 8.6 (deflate-only) +
+  `quick-xml` 0.40 for docx/pptx/odt/odp (text capture gated to `w:t`/`a:t`/`text:p`
+  subtrees so markup whitespace doesn't leak; pptx slides numerically ordered with
+  `--- Slide N ---` separators); `calamine` 0.35 for xlsx/ods (per-sheet headers,
+  tab-joined rows). Legacy `.doc`/`.ppt`/`.xls` are **out of scope** — classified
+  frontend-side as `legacy-document` with a "save as .docx/…" error. 8 cargo tests
+  with in-test-generated fixtures (incl. a hand-written minimal PDF; no binaries
+  committed). Migration **012**: `attachments.filename TEXT`.
+- 2026-06-12: **Frontend**: `src/lib/documents.ts` — extension-based `classifyFile`
+  (File.type is empty for code files), 20 MB pre-extraction cap, **100k chars/doc**
+  budget (`truncateDocumentText` + marker), `buildDocumentBlock` (labeled, fence =
+  longest backtick run + 1) and `appendDocumentsToContent`. **Single injection seam:**
+  `compactHistory`'s MessageView→ApiMessage mapping appends the blocks to `content` —
+  covers sends, reloads, and compaction with zero provider changes (Anthropic native
+  PDF deferred per the AC; `claude-api` consulted). `MessageView.documents` from
+  `kind="document"` rows; `send(content, images, documents)` persists them (title falls
+  back to the first document's name). Composer: classifier-driven `addFiles` (extraction
+  on attach, spinner, inline per-file errors — nothing silently dropped; paste/drag
+  accept any file), document chips with ext badge + char count; `canSend` blocks while
+  extracting. MessageList renders chips in all chat styles (no click in v1 — only
+  extracted text is stored). ProjectView routes binary docs through the same extraction
+  into `project_files.content`. FTS: attachment text intentionally unindexed (noted in
+  the migration header). 9 i18n keys in all five packs. Verified: npm build/lint/test
+  (353) + cargo build/clippy/fmt/test (64) green; CLAUDE.md gained a T39 section.

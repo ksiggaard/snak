@@ -15,10 +15,20 @@ export interface MessageToolCall {
   url?: string;
 }
 
-/** A persisted message plus its attachments (images for user turns, tool-call
- * records for assistant turns) — used for display + API history. */
+/** A document attached to a user message (T39): the original file name plus
+ * the *extracted text* (stored in the attachment row's `data`). */
+export interface MessageDocument {
+  name: string;
+  media_type: string;
+  text: string;
+}
+
+/** A persisted message plus its attachments (images + documents for user
+ * turns, tool-call records for assistant turns) — used for display + API
+ * history. */
 export interface MessageView extends Message {
   images: MessageImage[];
+  documents: MessageDocument[];
   toolCalls: MessageToolCall[];
 }
 
@@ -53,16 +63,23 @@ export async function loadThreadMessages(
       // System rows and synthetic compaction summaries (T28) carry no
       // attachments, so skip the query for them.
       if (m.role === "system" || m.kind === "summary")
-        return { ...m, images: [], toolCalls: [] };
+        return { ...m, images: [], documents: [], toolCalls: [] };
       const attachments = await listAttachments(m.id);
       const images = attachments
         .filter((a) => a.kind === "image")
         .map((a) => ({ media_type: a.media_type, data: a.data }));
+      const documents = attachments
+        .filter((a) => a.kind === "document")
+        .map((a) => ({
+          name: a.filename ?? "document",
+          media_type: a.media_type,
+          text: a.data,
+        }));
       const toolCalls = attachments
         .filter((a) => a.kind === "tool_call")
         .map((a) => parseToolCall(a.data))
         .filter((tc): tc is MessageToolCall => tc !== null);
-      return { ...m, images, toolCalls };
+      return { ...m, images, documents, toolCalls };
     }),
   );
 }

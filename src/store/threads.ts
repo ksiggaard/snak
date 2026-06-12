@@ -39,6 +39,7 @@ import { buildGlobalSystemText } from "@/lib/systemContext";
 import { t } from "@/store/i18n";
 import { PROVIDERS } from "@/lib/providers";
 import type { PreparedImage } from "@/lib/image";
+import type { PendingDocument } from "@/lib/documents";
 import type { Provider, Thread } from "@/types/db";
 
 const LAST_THREAD_KEY = "last_thread_id";
@@ -127,7 +128,11 @@ interface ThreadsState {
   setProviderModel: (provider: Provider, model: string) => Promise<void>;
   /** Persist the default provider+model for new interactions. */
   setDefaultModel: (provider: Provider, model: string) => Promise<void>;
-  send: (content: string, images: PreparedImage[]) => Promise<void>;
+  send: (
+    content: string,
+    images: PreparedImage[],
+    documents?: PendingDocument[],
+  ) => Promise<void>;
   /**
    * Persist a synthetic assistant-role note into the current thread (creating a
    * draft thread lazily, like `send`). Used by slash commands (T14) to feed a
@@ -324,9 +329,10 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     });
   },
 
-  send: async (content, images) => {
+  send: async (content, images, documents = []) => {
     // Ignore empty/whitespace-only sends with no attachments.
-    if (!content.trim() && images.length === 0) return;
+    if (!content.trim() && images.length === 0 && documents.length === 0)
+      return;
     if (get().busy) return;
     set({ busy: true, cancelling: false, error: null });
     try {
@@ -343,7 +349,12 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         const thread = await createThread({
           provider,
           model,
-          title: deriveTitle(content || t("thread.image"), t("thread.newChat")),
+          // Attachment-only sends title from the first document's name, or
+          // the localized "Image" fallback (mirrors the image-only case).
+          title: deriveTitle(
+            content || documents[0]?.name || t("thread.image"),
+            t("thread.newChat"),
+          ),
           projectId,
           ephemeral,
         });
@@ -370,6 +381,17 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           kind: "image",
           media_type: img.mediaType,
           data: img.base64,
+        });
+      }
+      // Documents (T39): the *extracted text* is the payload; the original
+      // file name rides in `filename` (migration 012).
+      for (const d of documents) {
+        await addAttachment({
+          message_id: userMsg.id,
+          kind: "document",
+          media_type: d.mediaType,
+          data: d.text,
+          filename: d.name,
         });
       }
       const afterUser = await loadThreadMessages(id);
@@ -463,6 +485,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                   duration_ms: null,
                   created_at: "",
                   images: [],
+                  documents: [],
                   toolCalls: [],
                 },
               ];

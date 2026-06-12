@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Copy, FoldVertical, Globe, Wrench } from "lucide-react";
+import {
+  Check,
+  Copy,
+  FileText,
+  FoldVertical,
+  Globe,
+  Wrench,
+} from "lucide-react";
 import {
   imageDataUrl,
   type MessageToolCall,
@@ -134,6 +141,28 @@ function ChatMessage({
       ))}
     </div>
   );
+  // Document attachments (T39) — rendered alongside images, so they appear in
+  // every chat style (each style branch below includes {docs}). No click
+  // action in v1: the stored payload is the *extracted text* (which already
+  // travels inside the message context), not the original file, so there's
+  // nothing meaningful to open or download yet.
+  const docs = m.documents.length > 0 && (
+    <div className="flex flex-wrap gap-2">
+      {m.documents.map((d, i) => (
+        <div
+          key={i}
+          title={d.name}
+          className="bg-muted/40 text-muted-foreground flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 text-xs"
+        >
+          <FileText className="size-3.5 shrink-0" aria-hidden />
+          <span className="text-foreground/90 truncate">{d.name}</span>
+          <span className="shrink-0">
+            {t("document.chars", { n: d.text.length.toLocaleString() })}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
   const tools = m.role === "assistant" && m.toolCalls.length > 0 && (
     <div className="flex flex-col items-start gap-1">
       {m.toolCalls.map((tc, i) => (
@@ -185,6 +214,7 @@ function ChatMessage({
           </span>
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             {images}
+            {docs}
             {tools}
             {body}
             {meta}
@@ -226,6 +256,7 @@ function ChatMessage({
             {isUser ? t("chat.you") : t("chat.ai")}
           </span>
           {images}
+          {docs}
           {tools}
           {body}
           {meta}
@@ -255,6 +286,7 @@ function ChatMessage({
           )}
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             {images}
+            {docs}
             {tools}
             {body}
             {meta}
@@ -277,6 +309,7 @@ function ChatMessage({
         )}
       >
         {images}
+        {docs}
         {tools}
         {body}
         {meta}
