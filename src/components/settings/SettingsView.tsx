@@ -5,15 +5,18 @@ import { Models } from "@/components/settings/Models";
 import { Memory } from "@/components/settings/Memory";
 import { ShortcutSetting } from "@/components/settings/Shortcut";
 import { CloseToTraySetting } from "@/components/settings/CloseToTray";
-import { Themes } from "@/components/settings/Themes";
+import { Appearance } from "@/components/settings/Appearance";
+import { Language } from "@/components/settings/Language";
 import { McpServers } from "@/components/settings/McpServers";
 import { Skills } from "@/components/settings/Skills";
 import { Plugins } from "@/components/settings/Plugins";
+import { useT, type MessageKey } from "@/store/i18n";
 import { cn } from "@/lib/utils";
 
 interface Section {
   id: string;
-  label: string;
+  /** i18n key for the nav label (resolved at render so it switches live). */
+  label: MessageKey;
   Component: ComponentType;
 }
 
@@ -21,19 +24,29 @@ interface Section {
 // card has the full width/height of the content pane instead of being stacked
 // and clipped — see the left-nav layout below.
 const SECTIONS: Section[] = [
-  { id: "api-keys", label: "API Keys", Component: ApiKeys },
-  { id: "default-model", label: "Default Model", Component: DefaultModel },
-  { id: "models", label: "Models", Component: Models },
-  { id: "memory", label: "Memory", Component: Memory },
-  { id: "shortcut", label: "Shortcut", Component: ShortcutSetting },
-  { id: "tray", label: "Close to Tray", Component: CloseToTraySetting },
-  { id: "themes", label: "Themes", Component: Themes },
-  { id: "mcp", label: "MCP Servers", Component: McpServers },
-  { id: "skills", label: "Skills", Component: Skills },
-  { id: "plugins", label: "Plugins", Component: Plugins },
+  { id: "api-keys", label: "settings.nav.apiKeys", Component: ApiKeys },
+  {
+    id: "default-model",
+    label: "settings.nav.defaultModel",
+    Component: DefaultModel,
+  },
+  { id: "models", label: "settings.nav.models", Component: Models },
+  { id: "memory", label: "settings.nav.memory", Component: Memory },
+  {
+    id: "shortcut",
+    label: "settings.nav.shortcut",
+    Component: ShortcutSetting,
+  },
+  { id: "tray", label: "settings.nav.tray", Component: CloseToTraySetting },
+  { id: "appearance", label: "settings.nav.appearance", Component: Appearance },
+  { id: "language", label: "settings.nav.language", Component: Language },
+  { id: "mcp", label: "settings.nav.mcp", Component: McpServers },
+  { id: "skills", label: "settings.nav.skills", Component: Skills },
+  { id: "plugins", label: "settings.nav.plugins", Component: Plugins },
 ];
 
 export function SettingsView() {
+  const t = useT();
   const [activeId, setActiveId] = useState(SECTIONS[0].id);
   const active = SECTIONS.find((s) => s.id === activeId) ?? SECTIONS[0];
   const Active = active.Component;
@@ -55,7 +68,7 @@ export function SettingsView() {
                 : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
             )}
           >
-            {s.label}
+            {t(s.label)}
           </button>
         ))}
       </nav>

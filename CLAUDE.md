@@ -19,7 +19,9 @@ Backend (run from `src-tauri/`):
 - `cargo build` — compile the Rust backend.
 - `cargo clippy` — lint. `cargo fmt` — format (`rustfmt.toml`, 100-col).
 
-Packaging: `npm run tauri build` (AppImage/.deb for KDE — wired up in a later stage).
+Packaging: `npm run tauri build` (produces .deb/.rpm/AppImage). On Arch-based systems the
+AppImage step needs `NO_STRIP=true npm run tauri build` — linuxdeploy's bundled `strip`
+can't read modern `.relr.dyn` ELF sections (see T5 in `TASKS.md`).
 
 ## Conventions
 

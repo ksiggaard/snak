@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getSetting, setSetting } from "@/lib/db";
+import { useT } from "@/store/i18n";
 
 export const CLOSE_TO_TRAY_KEY = "close_to_tray";
 
@@ -18,6 +19,7 @@ const syncBackend = (enabled: boolean): Promise<void> =>
   invoke("set_close_to_tray", { enabled });
 
 export function CloseToTraySetting() {
+  const t = useT();
   const [enabled, setEnabled] = useState(true);
 
   useEffect(() => {
@@ -38,22 +40,18 @@ export function CloseToTraySetting() {
   return (
     <Card className="w-full max-w-lg">
       <CardHeader>
-        <CardTitle>Close to tray</CardTitle>
-        <CardDescription>
-          When on, closing the window hides it to the system tray and the app
-          keeps running for the global shortcut. Quit from the tray menu to exit
-          fully.
-        </CardDescription>
+        <CardTitle>{t("tray.title")}</CardTitle>
+        <CardDescription>{t("tray.description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex items-center gap-3">
         <Button
           variant={enabled ? "default" : "outline"}
           onClick={() => void toggle()}
         >
-          {enabled ? "On" : "Off"}
+          {enabled ? t("common.on") : t("common.off")}
         </Button>
         <span className="text-muted-foreground text-sm">
-          {enabled ? "Closing hides to tray" : "Closing quits the app"}
+          {enabled ? t("tray.hides") : t("tray.quits")}
         </span>
       </CardContent>
     </Card>

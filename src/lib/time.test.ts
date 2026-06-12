@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { formatDuration, parseDbTime, relativeTime } from "@/lib/time";
+import {
+  formatDuration,
+  formatThreadDate,
+  parseDbTime,
+  relativeTime,
+} from "@/lib/time";
 
 describe("parseDbTime", () => {
   it("parses a SQLite UTC string as UTC, not local time", () => {
@@ -52,5 +57,38 @@ describe("formatDuration", () => {
   it("clamps the sub-minute branch so it never rounds up to 60.0s", () => {
     expect(formatDuration(59_990)).toBe("59.9s");
     expect(formatDuration(59_500)).toBe("59.5s");
+  });
+});
+
+describe("formatThreadDate", () => {
+  const now = new Date("2026-06-12T12:00:00Z");
+
+  it("is relative under 7 days", () => {
+    expect(formatThreadDate("2026-06-12 10:00:00", now)).toBe("2h ago");
+    expect(formatThreadDate("2026-06-09 12:00:00", now)).toBe("3d ago");
+    expect(formatThreadDate("2026-06-12 11:59:50", now)).toBe("just now");
+  });
+
+  it("is an Intl-formatted absolute date (no year) at/beyond 7 days", () => {
+    const out = formatThreadDate("2026-04-02 12:00:00", now);
+    expect(out).toBe(
+      new Intl.DateTimeFormat(undefined, {
+        month: "short",
+        day: "numeric",
+      }).format(parseDbTime("2026-04-02 12:00:00")),
+    );
+    expect(out).not.toMatch(/ago/);
+  });
+
+  it("includes the year when it differs from now's", () => {
+    const out = formatThreadDate("2025-12-30 12:00:00", now);
+    expect(out).toContain("2025");
+  });
+
+  it("switches exactly at the 7-day boundary", () => {
+    // 7 days minus a second: still relative.
+    expect(formatThreadDate("2026-06-05 12:00:01", now)).toBe("6d ago");
+    // Exactly 7 days: absolute.
+    expect(formatThreadDate("2026-06-05 12:00:00", now)).not.toMatch(/ago/);
   });
 });

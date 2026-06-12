@@ -18,6 +18,7 @@ import {
   type McpTransport,
 } from "@/lib/mcp";
 import { confirmDialog } from "@/store/confirm";
+import { t as tNow, useT } from "@/store/i18n";
 
 /**
  * MCP servers settings card (T13). Lets the user toggle the built-in web-browse
@@ -27,6 +28,7 @@ import { confirmDialog } from "@/store/confirm";
  * the model. When everything here is disabled, chat behaves exactly as before.
  */
 export function McpServers() {
+  const t = useT();
   const [servers, setServers] = useState<McpServer[]>([]);
   const [tools, setTools] = useState<McpListedTool[]>([]);
   const [loading, setLoading] = useState(false);
@@ -97,13 +99,8 @@ export function McpServers() {
   return (
     <Card className="w-full max-w-lg">
       <CardHeader>
-        <CardTitle>MCP servers</CardTitle>
-        <CardDescription>
-          Connect Model Context Protocol servers to give the model tools. The
-          built-in web-browsing server works out of the box. Add custom servers
-          over stdio (a command) or HTTP (a URL). Enabled servers&apos; tools are
-          offered to the model on every message.
-        </CardDescription>
+        <CardTitle>{t("mcp.title")}</CardTitle>
+        <CardDescription>{t("mcp.description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-col">
@@ -120,7 +117,7 @@ export function McpServers() {
                   </span>
                   {s.builtin && (
                     <span className="text-muted-foreground rounded border px-1 text-[10px] uppercase">
-                      built-in
+                      {t("common.builtIn")}
                     </span>
                   )}
                 </div>
@@ -135,9 +132,11 @@ export function McpServers() {
                   <Switch
                     checked={s.enabled}
                     onCheckedChange={() => toggle(s.id)}
-                    aria-label={`${s.label} ${s.enabled ? "enabled" : "disabled"}`}
+                    aria-label={`${s.label} ${s.enabled ? t("common.enabled") : t("common.disabled")}`}
                   />
-                  <span className="w-12">{s.enabled ? "Enabled" : "Disabled"}</span>
+                  <span className="w-12">
+                    {s.enabled ? t("common.enabled") : t("common.disabled")}
+                  </span>
                 </label>
                 {!s.builtin && (
                   <Button
@@ -145,15 +144,15 @@ export function McpServers() {
                     variant="outline"
                     onClick={() => {
                       void confirmDialog({
-                        title: `Remove "${s.label}"?`,
-                        confirmText: "Remove",
+                        title: tNow("mcp.removeTitle", { label: s.label }),
+                        confirmText: tNow("common.remove"),
                         destructive: true,
                       }).then((ok) => {
                         if (ok) remove(s.id);
                       });
                     }}
                   >
-                    Remove
+                    {t("common.remove")}
                   </Button>
                 )}
               </div>
@@ -163,10 +162,10 @@ export function McpServers() {
 
         <div className="flex flex-col gap-2 border-t pt-3">
           <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">
-            Add custom server
+            {t("mcp.addCustom")}
           </span>
           <Input
-            placeholder="Label (e.g. GitHub)"
+            placeholder={t("mcp.labelPlaceholder")}
             value={draftLabel}
             onChange={(e) => setDraftLabel(e.target.value)}
           />
@@ -197,14 +196,14 @@ export function McpServers() {
             disabled={!draftLabel.trim() || !draftTarget.trim()}
             onClick={addCustom}
           >
-            Add server
+            {t("mcp.addServer")}
           </Button>
         </div>
 
         <div className="flex flex-col gap-2 border-t pt-3">
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">
-              Available tools
+              {t("mcp.availableTools")}
             </span>
             <Button
               size="sm"
@@ -212,12 +211,12 @@ export function McpServers() {
               disabled={loading}
               onClick={() => void refreshTools()}
             >
-              {loading ? "Loading…" : "Refresh"}
+              {loading ? t("common.loading") : t("common.refresh")}
             </Button>
           </div>
           {tools.length === 0 ? (
             <p className="text-muted-foreground text-sm">
-              Refresh to list tools from enabled servers.
+              {t("mcp.refreshHint")}
             </p>
           ) : (
             <ul className="flex flex-col gap-1">

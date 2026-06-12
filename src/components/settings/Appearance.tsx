@@ -1,0 +1,557 @@
+import { useState, type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Themes } from "@/components/settings/Themes";
+import { useTitleBar } from "@/store/titlebar";
+import { useTheme } from "@/store/theme";
+import { useAppearance } from "@/store/appearance";
+import { useT, type MessageKey } from "@/store/i18n";
+import { resolveTheme } from "@/lib/theme";
+import { cn } from "@/lib/utils";
+import {
+  CHAT_LIST_STYLES,
+  CHAT_SIZE,
+  CHAT_STYLES,
+  DEFAULT_PICKER_COLORS,
+  FONT_OPTIONS,
+  UI_SIZE,
+  type ChatListStyle,
+  type ChatStyle,
+  type SizeRange,
+} from "@/lib/appearance";
+import {
+  isMac,
+  type ControlsSide,
+  type ControlsStyle,
+  type MenuBarMode,
+  type TitleBarMode,
+} from "@/lib/titlebar";
+
+/**
+ * Appearance settings section: title bar customization (native vs. custom
+ * chrome, window-control side and style), the installable Themes card, custom
+ * Colors (T30) and Typography (T33) cards, plus the chat message layout (T34)
+ * and sidebar chat-list row (T35) styles.
+ */
+export function Appearance() {
+  return (
+    <div className="flex flex-col gap-4">
+      <TitleBarCard />
+      <Themes />
+      <ColorsCard />
+      <TypographyCard />
+      <ChatStyleCard />
+      <ChatListCard />
+    </div>
+  );
+}
+
+/** i18n keys for the T34 chat-style labels (values stay in lib/appearance). */
+const CHAT_STYLE_KEYS: Record<ChatStyle, MessageKey> = {
+  default: "chatStyle.default",
+  bubbles: "chatStyle.bubbles",
+  compact: "chatStyle.compact",
+  document: "chatStyle.document",
+};
+
+/** How chat messages render (T34): the original flat layout, messenger-style
+ *  bubbles, a dense IRC-like view, or a document/reading mode. */
+function ChatStyleCard() {
+  const t = useT();
+  const chatStyle = useAppearance((s) => s.chatStyle);
+  const setChatStyle = useAppearance((s) => s.setChatStyle);
+
+  return (
+    <Card className="w-full max-w-lg">
+      <CardHeader>
+        <CardTitle>{t("chatStyle.title")}</CardTitle>
+        <CardDescription>{t("chatStyle.description")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <OptionRow label={t("chatStyle.layout")}>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            spacing={0}
+            value={chatStyle}
+            onValueChange={(v) => v && setChatStyle(v as ChatStyle)}
+          >
+            {CHAT_STYLES.map((s) => (
+              <ToggleGroupItem key={s.value} value={s.value}>
+                {t(CHAT_STYLE_KEYS[s.value])}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </OptionRow>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** i18n keys for the T35 chat-list row-style labels. */
+const CHAT_LIST_KEYS: Record<ChatListStyle, MessageKey> = {
+  title: "chatList.titleOption",
+  "title-date": "chatList.titleDate",
+  detailed: "chatList.detailed",
+  preview: "chatList.preview",
+};
+
+/** Tiny static mock of one sidebar row, per chat-list style (T35). */
+function ChatListRowMock({ style }: { style: ChatListStyle }) {
+  const t = useT();
+  const mockDate = t("time.hoursAgo", { n: 2 });
+  return (
+    <span className="bg-background flex w-full min-w-0 flex-col rounded-md border px-2 py-1.5 text-left">
+      <span className="truncate text-xs font-medium">
+        {t("chatList.mockTitle")}
+      </span>
+      {style === "title-date" && (
+        <span className="text-muted-foreground truncate text-[10px]">
+          {mockDate}
+        </span>
+      )}
+      {style === "detailed" && (
+        <span className="text-muted-foreground truncate text-[10px]">
+          {mockDate} · Anthropic · Opus 4.8
+        </span>
+      )}
+      {style === "preview" && (
+        <span className="text-muted-foreground truncate text-[10px]">
+          {t("chatList.mockPreview")}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** What a sidebar thread row shows (T35), picked from inline previews. */
+function ChatListCard() {
+  const t = useT();
+  const listStyle = useAppearance((s) => s.chatListStyle);
+  const setListStyle = useAppearance((s) => s.setChatListStyle);
+
+  return (
+    <Card className="w-full max-w-lg">
+      <CardHeader>
+        <CardTitle>{t("chatList.title")}</CardTitle>
+        <CardDescription>{t("chatList.description")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 gap-2">
+          {CHAT_LIST_STYLES.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              aria-pressed={listStyle === o.value}
+              onClick={() => setListStyle(o.value)}
+              className={cn(
+                "flex flex-col gap-1.5 rounded-lg border p-2 text-left",
+                listStyle === o.value
+                  ? "border-primary ring-primary/30 ring-2"
+                  : "hover:bg-muted/50",
+              )}
+            >
+              <ChatListRowMock style={o.value} />
+              <span className="text-xs font-medium">
+                {t(CHAT_LIST_KEYS[o.value])}
+              </span>
+            </button>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Custom accent/background color picks (T30). Picks are per-mode: editing
+ * happens against whichever of light/dark is currently active, and the
+ * overrides are scoped so each mode keeps its own picks. Custom picks override
+ * the selected installed/plugin theme (by selector specificity — see
+ * `lib/appearance.ts`).
+ */
+function ColorsCard() {
+  const t = useT();
+  const theme = useTheme((s) => s.theme);
+  const mode = resolveTheme(theme);
+  const colors = useAppearance((s) => s.colors);
+  const setColor = useAppearance((s) => s.setColor);
+  const resetColor = useAppearance((s) => s.resetColor);
+  const picks = colors[mode];
+
+  return (
+    <Card className="w-full max-w-lg">
+      <CardHeader>
+        <CardTitle>{t("colors.title")}</CardTitle>
+        <CardDescription>
+          {t("colors.description", {
+            mode: mode === "dark" ? t("colors.dark") : t("colors.light"),
+          })}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <ColorRow
+          label={t("colors.accent")}
+          value={picks.primary ?? DEFAULT_PICKER_COLORS[mode].primary}
+          custom={picks.primary !== undefined}
+          onChange={(hex) => setColor(mode, "primary", hex)}
+          onReset={() => resetColor(mode, "primary")}
+        />
+        <ColorRow
+          label={t("colors.background")}
+          value={picks.background ?? DEFAULT_PICKER_COLORS[mode].background}
+          custom={picks.background !== undefined}
+          onChange={(hex) => setColor(mode, "background", hex)}
+          onReset={() => resetColor(mode, "background")}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
+function ColorRow({
+  label,
+  value,
+  custom,
+  onChange,
+  onReset,
+}: {
+  label: string;
+  /** Current hex shown by the picker (the default seed when not custom). */
+  value: string;
+  /** Whether a custom pick is stored (enables Reset). */
+  custom: boolean;
+  onChange: (hex: string) => void;
+  onReset: () => void;
+}) {
+  const t = useT();
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-sm font-medium">{label}</span>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          value={value}
+          aria-label={t("colors.colorAria", { label })}
+          onChange={(e) => onChange(e.target.value)}
+          className="border-input h-8 w-12 cursor-pointer rounded-md border bg-transparent p-0.5"
+        />
+        <Button variant="ghost" size="sm" disabled={!custom} onClick={onReset}>
+          {t("common.reset")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Font family + size for the app UI and for chat message content (T33).
+ * Families come from a curated list (plus a free-text escape hatch); sizes are
+ * px sliders. UI size scales the root font-size (everything rem-based follows);
+ * chat settings only affect message content via `.chat-content`.
+ */
+function TypographyCard() {
+  const t = useT();
+  const typography = useAppearance((s) => s.typography);
+  const setTypography = useAppearance((s) => s.setTypography);
+
+  return (
+    <Card className="w-full max-w-lg">
+      <CardHeader>
+        <CardTitle>{t("typography.title")}</CardTitle>
+        <CardDescription>{t("typography.description")}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <FontRow
+          label={t("typography.uiFont")}
+          value={typography.uiFont}
+          onChange={(v) => setTypography({ uiFont: v })}
+        />
+        <FontRow
+          label={t("typography.chatFont")}
+          value={typography.chatFont}
+          onChange={(v) => setTypography({ chatFont: v })}
+        />
+        <SizeRow
+          label={t("typography.uiSize")}
+          value={typography.uiSize}
+          range={UI_SIZE}
+          onChange={(v) => setTypography({ uiSize: v })}
+        />
+        <SizeRow
+          label={t("typography.chatSize")}
+          value={typography.chatSize}
+          range={CHAT_SIZE}
+          onChange={(v) => setTypography({ chatSize: v })}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
+const FONT_DEFAULT = "__default__";
+const FONT_CUSTOM = "__custom__";
+
+/** Curated entries whose display names are translatable (system stacks); the
+ *  rest of `FONT_OPTIONS` are font names and stay as-is. */
+const FONT_LABEL_KEYS: Record<string, MessageKey> = {
+  "system-ui": "typography.systemDefault",
+  serif: "typography.systemSerif",
+  monospace: "typography.systemMonospace",
+};
+
+function FontRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  /** Stored family string, or null for the bundled default (Geist). */
+  value: string | null;
+  onChange: (v: string | null) => void;
+}) {
+  const t = useT();
+  // "Custom…" stays selected while the free-text input is open, even when the
+  // typed value happens to match a curated one.
+  const [customOpen, setCustomOpen] = useState(false);
+  const isCurated =
+    value === null || FONT_OPTIONS.some((o) => o.value === value);
+  const showCustom = customOpen || !isCurated;
+  const selectValue = showCustom
+    ? FONT_CUSTOM
+    : value === null
+      ? FONT_DEFAULT
+      : value;
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-medium">{label}</span>
+        <div className="flex items-center gap-2">
+          <select
+            value={selectValue}
+            aria-label={t("typography.familyAria", { label })}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === FONT_CUSTOM) {
+                setCustomOpen(true);
+                return;
+              }
+              setCustomOpen(false);
+              onChange(v === FONT_DEFAULT ? null : v);
+            }}
+            className="border-input bg-background h-8 max-w-44 rounded-md border px-2 text-sm"
+          >
+            <option value={FONT_DEFAULT}>{t("typography.default")}</option>
+            {FONT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {FONT_LABEL_KEYS[o.value]
+                  ? t(FONT_LABEL_KEYS[o.value])
+                  : o.label}
+              </option>
+            ))}
+            <option value={FONT_CUSTOM}>{t("typography.custom")}</option>
+          </select>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={value === null}
+            onClick={() => {
+              setCustomOpen(false);
+              onChange(null);
+            }}
+          >
+            {t("common.reset")}
+          </Button>
+        </div>
+      </div>
+      {showCustom && (
+        <Input
+          value={value ?? ""}
+          placeholder={t("typography.customPlaceholder")}
+          aria-label={t("typography.customFamilyAria", { label })}
+          onChange={(e) => onChange(e.target.value || null)}
+          className="h-8"
+        />
+      )}
+    </div>
+  );
+}
+
+function SizeRow({
+  label,
+  value,
+  range,
+  onChange,
+}: {
+  label: string;
+  /** Stored px size, or null for the default. */
+  value: number | null;
+  range: SizeRange;
+  onChange: (v: number | null) => void;
+}) {
+  const t = useT();
+  const current = value ?? range.fallback;
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-sm font-medium">{label}</span>
+      <div className="flex items-center gap-2">
+        <input
+          type="range"
+          min={range.min}
+          max={range.max}
+          step={1}
+          value={current}
+          aria-label={t("typography.sizeAria", { label })}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="accent-primary w-36"
+        />
+        <span className="text-muted-foreground w-12 text-right text-xs tabular-nums">
+          {current}px
+        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={value === null}
+          onClick={() => onChange(null)}
+        >
+          {t("common.reset")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function TitleBarCard() {
+  const t = useT();
+  const mode = useTitleBar((s) => s.mode);
+  const side = useTitleBar((s) => s.side);
+  const style = useTitleBar((s) => s.style);
+  const menuBar = useTitleBar((s) => s.menuBar);
+  const setMode = useTitleBar((s) => s.setMode);
+  const setSide = useTitleBar((s) => s.setSide);
+  const setStyle = useTitleBar((s) => s.setStyle);
+  const setMenuBar = useTitleBar((s) => s.setMenuBar);
+
+  return (
+    <Card className="w-full max-w-lg">
+      <CardHeader>
+        <CardTitle>{t("appearance.titleBar.title")}</CardTitle>
+        <CardDescription>
+          {t("appearance.titleBar.description")}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <OptionRow label={t("appearance.titleBar.label")}>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            spacing={0}
+            value={mode}
+            onValueChange={(v) => v && setMode(v as TitleBarMode)}
+          >
+            <ToggleGroupItem value="custom">
+              {t("appearance.titleBar.custom")}
+            </ToggleGroupItem>
+            <ToggleGroupItem value="native">
+              {t("appearance.titleBar.native")}
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </OptionRow>
+
+        {mode === "custom" && (
+          <>
+            <OptionRow label={t("appearance.titleBar.controls")}>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                spacing={0}
+                value={side}
+                onValueChange={(v) => v && setSide(v as ControlsSide)}
+              >
+                <ToggleGroupItem value="left">
+                  {t("appearance.titleBar.left")}
+                </ToggleGroupItem>
+                <ToggleGroupItem value="right">
+                  {t("appearance.titleBar.right")}
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </OptionRow>
+
+            <OptionRow label={t("appearance.titleBar.controlStyle")}>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                spacing={0}
+                value={style}
+                onValueChange={(v) => v && setStyle(v as ControlsStyle)}
+              >
+                {/* OS names are proper nouns — not translated. */}
+                <ToggleGroupItem value="windows">Windows</ToggleGroupItem>
+                <ToggleGroupItem value="macos">macOS</ToggleGroupItem>
+                <ToggleGroupItem value="gnome">GNOME</ToggleGroupItem>
+              </ToggleGroup>
+            </OptionRow>
+          </>
+        )}
+
+        {/* macOS always uses the system menu bar; placement only applies to
+            the in-window menubar on Linux/Windows. */}
+        {!isMac && (
+          <div className="flex flex-col gap-1.5">
+            <OptionRow label={t("appearance.menuBar.label")}>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                spacing={0}
+                value={menuBar}
+                onValueChange={(v) => v && setMenuBar(v as MenuBarMode)}
+              >
+                <ToggleGroupItem value="native">
+                  {t("appearance.menuBar.native")}
+                </ToggleGroupItem>
+                <ToggleGroupItem value="inline">
+                  {t("appearance.menuBar.inline")}
+                </ToggleGroupItem>
+                <ToggleGroupItem value="hidden">
+                  {t("appearance.menuBar.hidden")}
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </OptionRow>
+            <p className="text-muted-foreground text-xs">
+              {t("appearance.menuBar.hint")}
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function OptionRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-sm font-medium">{label}</span>
+      {children}
+    </div>
+  );
+}

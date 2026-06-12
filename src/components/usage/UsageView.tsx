@@ -10,6 +10,7 @@ import {
   type HeatmapWeek,
 } from "@/lib/usage";
 import { PROVIDERS } from "@/lib/providers";
+import { useT, useTp } from "@/store/i18n";
 
 type SortKey = "model" | "total_tokens" | "last_used";
 type SortDir = "asc" | "desc";
@@ -47,9 +48,10 @@ function ActivityHeatmap({ allWeeks }: { allWeeks: HeatmapWeek[] }) {
   }, []);
 
   // Compute how many columns fit in the available width.
-  const maxCols = containerWidth > 0
-    ? Math.max(1, Math.floor((containerWidth + CELL_GAP) / COL_STRIDE))
-    : allWeeks.length;
+  const maxCols =
+    containerWidth > 0
+      ? Math.max(1, Math.floor((containerWidth + CELL_GAP) / COL_STRIDE))
+      : allWeeks.length;
 
   // Take only the last maxCols weeks (most recent).
   const weeks = allWeeks.slice(-maxCols);
@@ -131,6 +133,8 @@ function DayTooltip({
   cell: HeatmapCell;
   anchorRect: DOMRect;
 }) {
+  const t = useT();
+  const tp = useTp();
   const ref = useRef<HTMLDivElement>(null);
   const [style, setStyle] = useState<React.CSSProperties>({
     visibility: "hidden",
@@ -172,35 +176,35 @@ function DayTooltip({
       <p className="mb-1 text-xs font-semibold">{cell.day}</p>
       {hasBreakdown ? (
         <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs">
-          <dt className="text-muted-foreground">Input</dt>
+          <dt className="text-muted-foreground">{t("usage.input")}</dt>
           <dd className="text-right tabular-nums">
             {formatTokens(cell.input_tokens)}
           </dd>
-          <dt className="text-muted-foreground">Output</dt>
+          <dt className="text-muted-foreground">{t("usage.output")}</dt>
           <dd className="text-right tabular-nums">
             {formatTokens(cell.output_tokens)}
           </dd>
           {cell.cache_tokens > 0 && (
             <>
-              <dt className="text-muted-foreground">Cache</dt>
+              <dt className="text-muted-foreground">{t("usage.cache")}</dt>
               <dd className="text-right tabular-nums">
                 {formatTokens(cell.cache_tokens)}
               </dd>
             </>
           )}
           <dt className="text-muted-foreground border-border mt-1 border-t pt-1">
-            Total
+            {t("usage.total")}
           </dt>
           <dd className="border-border mt-1 border-t pt-1 text-right font-medium tabular-nums">
             {formatTokens(cell.total_tokens)}
           </dd>
         </dl>
       ) : (
-        <p className="text-muted-foreground text-xs">No activity</p>
+        <p className="text-muted-foreground text-xs">{t("usage.noActivity")}</p>
       )}
       {cell.responses > 0 && (
         <p className="text-muted-foreground mt-1 text-xs">
-          {cell.responses} response{cell.responses !== 1 ? "s" : ""}
+          {tp("usage.responseCount", cell.responses)}
         </p>
       )}
     </div>
@@ -209,6 +213,7 @@ function DayTooltip({
 
 /** The token-usage view (T16): a sortable per-model table + activity heatmap. */
 export function UsageView() {
+  const t = useT();
   const [rows, setRows] = useState<UsageByModel[]>([]);
   const [allWeeks, setAllWeeks] = useState<HeatmapWeek[]>([]);
   const [loading, setLoading] = useState(true);
@@ -283,7 +288,7 @@ export function UsageView() {
   if (loading) {
     return (
       <div className="text-muted-foreground flex flex-1 items-center justify-center text-sm">
-        Loading usage…
+        {t("usage.loading")}
       </div>
     );
   }
@@ -291,8 +296,8 @@ export function UsageView() {
   if (rows.length === 0) {
     return (
       <div className="text-muted-foreground flex flex-1 flex-col items-center justify-center gap-1 text-sm">
-        <p>No token usage recorded yet.</p>
-        <p>Send a message and usage will appear here.</p>
+        <p>{t("usage.emptyTitle")}</p>
+        <p>{t("usage.emptyHint")}</p>
       </div>
     );
   }
@@ -301,28 +306,40 @@ export function UsageView() {
     <div className="flex flex-1 flex-col gap-4 overflow-y-auto">
       {/* Summary */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <SummaryStat label="Total tokens" value={formatTokens(totals.total)} />
-        <SummaryStat label="Input" value={formatTokens(totals.input)} />
-        <SummaryStat label="Output" value={formatTokens(totals.output)} />
-        <SummaryStat label="Responses" value={String(totals.responses)} />
+        <SummaryStat
+          label={t("usage.totalTokens")}
+          value={formatTokens(totals.total)}
+        />
+        <SummaryStat
+          label={t("usage.input")}
+          value={formatTokens(totals.input)}
+        />
+        <SummaryStat
+          label={t("usage.output")}
+          value={formatTokens(totals.output)}
+        />
+        <SummaryStat
+          label={t("usage.responses")}
+          value={String(totals.responses)}
+        />
       </div>
 
       {/* Activity heatmap */}
       <Card className="px-4">
-        <h2 className="text-sm font-semibold">Activity (last 12 months)</h2>
+        <h2 className="text-sm font-semibold">{t("usage.activity")}</h2>
         <ActivityHeatmap allWeeks={allWeeks} />
         <div className="text-muted-foreground mt-2 flex items-center gap-1 text-xs">
-          <span>Less</span>
+          <span>{t("usage.less")}</span>
           {LEVEL_BG.map((bg, i) => (
             <div key={i} className={`size-3 rounded-sm ${bg}`} />
           ))}
-          <span>More</span>
+          <span>{t("usage.more")}</span>
         </div>
       </Card>
 
       {/* Per-model table */}
       <Card className="px-4">
-        <h2 className="text-sm font-semibold">By model</h2>
+        <h2 className="text-sm font-semibold">{t("usage.byModel")}</h2>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
@@ -331,24 +348,32 @@ export function UsageView() {
                   className="cursor-pointer py-2 pr-3 font-medium select-none"
                   onClick={() => toggleSort("model")}
                 >
-                  Model {sortIcon("model")}
+                  {t("usage.model")} {sortIcon("model")}
                 </th>
-                <th className="py-2 pr-3 font-medium">Provider</th>
-                <th className="py-2 pr-3 text-right font-medium">Responses</th>
-                <th className="py-2 pr-3 text-right font-medium">Input</th>
-                <th className="py-2 pr-3 text-right font-medium">Output</th>
-                <th className="py-2 pr-3 text-right font-medium">Cache</th>
+                <th className="py-2 pr-3 font-medium">{t("usage.provider")}</th>
+                <th className="py-2 pr-3 text-right font-medium">
+                  {t("usage.responses")}
+                </th>
+                <th className="py-2 pr-3 text-right font-medium">
+                  {t("usage.input")}
+                </th>
+                <th className="py-2 pr-3 text-right font-medium">
+                  {t("usage.output")}
+                </th>
+                <th className="py-2 pr-3 text-right font-medium">
+                  {t("usage.cache")}
+                </th>
                 <th
                   className="cursor-pointer py-2 pr-3 text-right font-medium select-none"
                   onClick={() => toggleSort("total_tokens")}
                 >
-                  Total {sortIcon("total_tokens")}
+                  {t("usage.total")} {sortIcon("total_tokens")}
                 </th>
                 <th
                   className="cursor-pointer py-2 text-right font-medium select-none"
                   onClick={() => toggleSort("last_used")}
                 >
-                  Last used {sortIcon("last_used")}
+                  {t("usage.lastUsed")} {sortIcon("last_used")}
                 </th>
               </tr>
             </thead>

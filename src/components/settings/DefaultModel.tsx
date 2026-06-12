@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/card";
 import { useThreads } from "@/store/threads";
 import { useModels } from "@/store/models";
+import { useT } from "@/store/i18n";
 import { useProviders } from "@/lib/providers";
 import { buildModelOptions } from "@/lib/modelOptions";
 import { ModelChooser } from "@/components/chat/ModelChooser";
@@ -18,6 +19,7 @@ import { ModelChooser } from "@/components/chat/ModelChooser";
  * lists all configured models for enabled providers.
  */
 export function DefaultModel() {
+  const t = useT();
   const provider = useThreads((s) => s.defaultProvider);
   const model = useThreads((s) => s.defaultModel);
   const setDefaultModel = useThreads((s) => s.setDefaultModel);
@@ -26,22 +28,21 @@ export function DefaultModel() {
 
   // All enabled providers count as selectable here (not filtered by API key).
   const allEnabled = new Set(providers.map((p) => p.id));
-  const options = buildModelOptions(providers, allEnabled, models, { provider, model });
+  const options = buildModelOptions(providers, allEnabled, models, {
+    provider,
+    model,
+  });
 
   return (
     <Card className="w-full max-w-lg overflow-visible">
       <CardHeader>
-        <CardTitle>Default Model</CardTitle>
-        <CardDescription>
-          The provider and model new chats (and the quick-input overlay) start
-          with. You can still change it per chat from the top bar, and manage
-          the list in Settings → Models.
-        </CardDescription>
+        <CardTitle>{t("defaultModel.title")}</CardTitle>
+        <CardDescription>{t("defaultModel.description")}</CardDescription>
       </CardHeader>
       <CardContent>
         {options.length === 0 ? (
           <p className="text-muted-foreground text-sm">
-            No models configured — add some in Settings → Models.
+            {t("defaultModel.none")}
           </p>
         ) : (
           <ModelChooser

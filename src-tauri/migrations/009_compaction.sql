@@ -1,0 +1,11 @@
+-- T28: chat compaction (context summarization). Every message row is either a
+-- normal chat turn or a synthetic 'summary' row marking a compaction point.
+-- Non-destructive: no rows are deleted or rewritten — the full transcript stays
+-- in place for display, while the API context sent on subsequent turns becomes
+-- [latest summary content + messages after it] (assembled in the frontend
+-- store; see src/lib/compaction.ts).
+--
+-- Note (T19 FTS): the search_fts triggers from migration 004 index summary rows
+-- like any other message insert, so compaction summaries are searchable. That
+-- is intentional/acceptable — a summary is real conversation content.
+ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'normal';

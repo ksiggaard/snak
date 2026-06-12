@@ -2,9 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { useModels } from "@/store/models";
 import { useKeys } from "@/store/keys";
+import { useT } from "@/store/i18n";
 import { useProviders } from "@/lib/providers";
 import { buildModelOptions, currentModelLabel } from "@/lib/modelOptions";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { Provider } from "@/types/db";
 
@@ -17,7 +22,7 @@ interface ModelChooserProps {
   /** Override the set of provider IDs considered "keyed". Pass a set of all
    *  enabled provider IDs to show all models regardless of saved API keys
    *  (used by the Default Model settings card). */
-  keyed?: Set<string>;
+  keyed?: Set<Provider>;
 }
 
 export function ModelChooser({
@@ -28,6 +33,7 @@ export function ModelChooser({
   className,
   keyed: keyedProp,
 }: ModelChooserProps) {
+  const t = useT();
   const models = useModels((s) => s.models);
   const providers = useProviders();
   const { label, providerLabel: currentProviderLabel } = currentModelLabel(
@@ -42,7 +48,9 @@ export function ModelChooser({
   const keyed = keyedProp ?? (keysLoaded ? present : null);
 
   const options =
-    keyed === null ? [] : buildModelOptions(providers, keyed, models, { provider, model });
+    keyed === null
+      ? []
+      : buildModelOptions(providers, keyed, models, { provider, model });
 
   const groups: { providerLabel: string; items: typeof options }[] = [];
   for (const o of options) {
@@ -66,7 +74,10 @@ export function ModelChooser({
   useEffect(() => {
     if (!open) return;
     function onPointerDown(e: PointerEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
         setOpen(false);
       }
     }
@@ -80,7 +91,7 @@ export function ModelChooser({
         <TooltipTrigger asChild>
           <button
             type="button"
-            aria-label="Choose model"
+            aria-label={t("model.choose")}
             aria-expanded={open}
             aria-haspopup="listbox"
             onClick={handleToggle}
@@ -101,7 +112,7 @@ export function ModelChooser({
       {open && (
         <div
           role="listbox"
-          aria-label="Model"
+          aria-label={t("model.aria")}
           className={cn(
             "bg-popover text-popover-foreground absolute z-50 min-w-48 rounded-lg p-1 shadow-md ring-1 ring-foreground/10",
             openAbove ? "bottom-full mb-1" : "mt-1",
@@ -109,7 +120,9 @@ export function ModelChooser({
           )}
         >
           {keyed === null ? (
-            <div className="text-muted-foreground px-2 py-1.5 text-sm">Loading…</div>
+            <div className="text-muted-foreground px-2 py-1.5 text-sm">
+              {t("common.loading")}
+            </div>
           ) : (
             groups.map((g, gi) => (
               <div key={g.providerLabel}>
@@ -118,7 +131,8 @@ export function ModelChooser({
                   {g.providerLabel}
                 </div>
                 {g.items.map((o) => {
-                  const selected = o.provider === provider && o.modelId === model;
+                  const selected =
+                    o.provider === provider && o.modelId === model;
                   return (
                     <button
                       key={`${o.provider}:${o.modelId}`}
@@ -135,11 +149,18 @@ export function ModelChooser({
                       )}
                     >
                       <Check
-                        className={cn("size-4 shrink-0", selected ? "opacity-100" : "opacity-0")}
+                        className={cn(
+                          "size-4 shrink-0",
+                          selected ? "opacity-100" : "opacity-0",
+                        )}
                       />
-                      <span className="flex-1 truncate text-left">{o.label}</span>
+                      <span className="flex-1 truncate text-left">
+                        {o.label}
+                      </span>
                       {!o.active && (
-                        <span className="text-muted-foreground text-xs">unavailable</span>
+                        <span className="text-muted-foreground text-xs">
+                          {t("model.unavailable")}
+                        </span>
                       )}
                     </button>
                   );

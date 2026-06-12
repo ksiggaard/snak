@@ -1,8 +1,14 @@
 import { useState } from "react";
-import { Star, Trash2 } from "lucide-react";
+import { Ghost, Star, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useThreads } from "@/store/threads";
+import { useModels } from "@/store/models";
+import { useAppearance } from "@/store/appearance";
 import { confirmDialog } from "@/store/confirm";
+import { t as tNow, timeLabels, useIntlLocale, useT } from "@/store/i18n";
+import { useProviders } from "@/lib/providers";
+import { currentModelLabel } from "@/lib/modelOptions";
+import { formatThreadDate } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import type { Thread } from "@/types/db";
 
@@ -11,17 +17,50 @@ interface ThreadRowProps {
   active: boolean;
   /** Navigate to this thread (the parent wires the surrounding view changes). */
   onSelect: () => void;
+  /** Last-message snippet for the "preview" row style (T35); undefined for
+   *  empty threads or when the style doesn't need it. */
+  snippet?: string;
 }
 
 /** One thread entry in the sidebar: select, double-click-to-rename, favorite
- *  star, and delete. Shared by the Chats and Projects panes. */
-export function ThreadRow({ thread, active, onSelect }: ThreadRowProps) {
+ *  star, and delete. Shared by the Chats and Projects panes. What the row
+ *  shows below the title follows the Appearance "Chat list" style (T35). */
+export function ThreadRow({
+  thread,
+  active,
+  onSelect,
+  snippet,
+}: ThreadRowProps) {
+  const t = useT();
+  const locale = useIntlLocale();
   const rename = useThreads((s) => s.rename);
   const remove = useThreads((s) => s.remove);
   const toggleFavorite = useThreads((s) => s.toggleFavorite);
+  const listStyle = useAppearance((s) => s.chatListStyle);
+  const providers = useProviders();
+  const models = useModels((s) => s.models);
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(thread.title);
+
+  // Second line per row style (T35). null = single-line row ("title", or a
+  // preview row whose thread has no messages yet).
+  let subline: string | null = null;
+  // Date formatting follows the active language (T32).
+  const dateOpts = { locale, labels: timeLabels() };
+  if (listStyle === "title-date") {
+    subline = formatThreadDate(thread.updated_at, new Date(), dateOpts);
+  } else if (listStyle === "detailed") {
+    const { label, providerLabel } = currentModelLabel(
+      providers,
+      models,
+      thread.provider,
+      thread.model,
+    );
+    subline = `${formatThreadDate(thread.updated_at, new Date(), dateOpts)} · ${providerLabel} · ${label}`;
+  } else if (listStyle === "preview") {
+    subline = snippet ?? null;
+  }
 
   function beginEdit() {
     setDraft(thread.title);
@@ -59,16 +98,43 @@ export function ThreadRow({ thread, active, onSelect }: ThreadRowProps) {
           type="button"
           onClick={onSelect}
           onDoubleClick={beginEdit}
-          className="min-w-0 flex-1 text-left"
-          title="Double-click to rename"
+          className="flex min-w-0 flex-1 flex-col text-left"
+          title={
+            thread.ephemeral
+              ? t("sidebar.incognitoRenameHint")
+              : t("sidebar.renameHint")
+          }
         >
-          <div className="truncate text-sm">{thread.title}</div>
+          <span className="flex w-full min-w-0 items-center gap-1.5">
+            {/* Incognito badge (T29): session-only thread, purged on exit. */}
+            {!!thread.ephemeral && (
+              <Ghost
+                className="text-muted-foreground size-3.5 shrink-0"
+                aria-label={t("sidebar.incognitoBadge")}
+              />
+            )}
+            <span
+              className={cn(
+                "truncate text-sm",
+                !!thread.ephemeral && "text-muted-foreground italic",
+              )}
+            >
+              {thread.title}
+            </span>
+          </span>
+          {subline !== null && (
+            <span className="text-muted-foreground w-full truncate text-xs">
+              {subline}
+            </span>
+          )}
         </button>
       )}
       <button
         type="button"
-        aria-label={fav ? "Unfavorite conversation" : "Favorite conversation"}
-        title={fav ? "Unfavorite" : "Favorite"}
+        aria-label={
+          fav ? t("sidebar.unfavoriteAria") : t("sidebar.favoriteAria")
+        }
+        title={fav ? t("sidebar.unfavorite") : t("sidebar.favorite")}
         onClick={() => void toggleFavorite(thread.id)}
         className={cn(
           "shrink-0",
@@ -81,11 +147,11 @@ export function ThreadRow({ thread, active, onSelect }: ThreadRowProps) {
       </button>
       <button
         type="button"
-        aria-label="Delete conversation"
+        aria-label={t("sidebar.deleteConversation")}
         onClick={() => {
           void confirmDialog({
-            title: `Delete "${thread.title}"?`,
-            confirmText: "Delete",
+            title: tNow("sidebar.deleteThreadTitle", { title: thread.title }),
+            confirmText: tNow("common.delete"),
             destructive: true,
           }).then((ok) => {
             if (ok) void remove(thread.id);

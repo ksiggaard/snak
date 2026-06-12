@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/store/confirm";
+import { useT } from "@/store/i18n";
 
 /**
  * The single confirmation modal, mounted once at the app root. Driven by the
@@ -8,6 +9,7 @@ import { useConfirm } from "@/store/confirm";
  * choice. Replaces the webview's broken native `window.confirm()`.
  */
 export function ConfirmDialog() {
+  const t = useT();
   const open = useConfirm((s) => s.open);
   const options = useConfirm((s) => s.options);
   const respond = useConfirm((s) => s.respond);
@@ -53,7 +55,7 @@ export function ConfirmDialog() {
         )}
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="outline" size="sm" onClick={() => respond(false)}>
-            {options.cancelText ?? "Cancel"}
+            {options.cancelText ?? t("common.cancel")}
           </Button>
           <Button
             ref={confirmRef}
@@ -61,7 +63,7 @@ export function ConfirmDialog() {
             variant={options.destructive ? "destructive" : "default"}
             onClick={() => respond(true)}
           >
-            {options.confirmText ?? "Confirm"}
+            {options.confirmText ?? t("common.confirm")}
           </Button>
         </div>
       </div>

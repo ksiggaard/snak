@@ -1,9 +1,18 @@
 import { useMemo, useRef, useState } from "react";
-import { Maximize2, Paperclip, Square, TerminalSquare, X } from "lucide-react";
+import {
+  FoldVertical,
+  Loader2,
+  Maximize2,
+  Paperclip,
+  Square,
+  TerminalSquare,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Canvas } from "@/components/chat/Canvas";
 import { ModelPicker } from "@/components/chat/ModelPicker";
+import { canCompact } from "@/lib/compaction";
 import { prepareImage, type PreparedImage } from "@/lib/image";
 import { useProviders } from "@/lib/providers";
 import { openInTerminal } from "@/lib/terminal";
@@ -17,6 +26,7 @@ import {
 import { selectRegistry, usePlugins } from "@/store/plugins";
 import { useThreads } from "@/store/threads";
 import { useKeys } from "@/store/keys";
+import { t as tNow, useT } from "@/store/i18n";
 import type { Provider } from "@/types/db";
 
 interface ComposerProps {
@@ -41,6 +51,7 @@ export function Composer({
   providerEnabled,
   anyProvider,
 }: ComposerProps) {
+  const t = useT();
   const providers = useProviders();
   const providerLabel = (id: Provider) =>
     providers.find((p) => p.id === id)?.label ?? id;
@@ -90,6 +101,21 @@ export function Composer({
   const keysLoaded = useKeys((s) => s.loaded);
   const keyReady = keysLoaded ? keyPresent.has(provider) : null;
 
+  // --- Compaction (T28) -------------------------------------------------------
+  // Enabled only for a saved thread with at least one exchange since the last
+  // compaction point and nothing in flight; shows a spinner while summarizing.
+  const compact = useThreads((s) => s.compact);
+  const compacting = useThreads((s) => s.compacting);
+  const currentThreadId = useThreads((s) => s.currentThreadId);
+  const threadMessages = useThreads((s) => s.messages);
+  const compactEnabled =
+    currentThreadId !== null &&
+    !busy &&
+    !compacting &&
+    providerEnabled &&
+    keyReady !== false &&
+    canCompact(threadMessages);
+
   async function addFiles(files: Iterable<File>) {
     const imageFiles = Array.from(files).filter((f) =>
       f.type.startsWith("image/"),
@@ -97,12 +123,12 @@ export function Composer({
     if (imageFiles.length === 0) return;
     setAttachError(null);
     try {
-      const prepared = await Promise.all(imageFiles.map((f) => prepareImage(f)));
+      const prepared = await Promise.all(
+        imageFiles.map((f) => prepareImage(f)),
+      );
       setImages((prev) => [...prev, ...prepared]);
     } catch {
-      setAttachError(
-        "Couldn't process that image — it may be too large or an unsupported format.",
-      );
+      setAttachError(tNow("composer.imageError"));
     }
   }
 
@@ -130,7 +156,7 @@ export function Composer({
   function runCommand(command: SlashCommand, args: string) {
     if (command.kind === "terminal") {
       if (!args.trim()) {
-        setAttachError("Usage: /terminal <shell command>");
+        setAttachError(tNow("composer.terminalUsage"));
         return;
       }
       // SAFETY GATE: never execute model/user shell input silently. Stash it and
@@ -146,8 +172,7 @@ export function Composer({
     }
     // Unknown/declarative contribution — no executable handler in the host.
     void postNote(
-      `The \`${command.command}\` command is provided by a plugin but has no ` +
-        `built-in action in this host, so it can't run here.`,
+      tNow("composer.pluginCommandNote", { command: command.command }),
     );
     resetDraft();
   }
@@ -187,14 +212,14 @@ export function Composer({
     try {
       await openInTerminal(pending.args);
       await postNote(
-        "Staged this command in your terminal — review it and press Enter " +
-          "there to run it (it was not auto-executed):\n\n```bash\n" +
+        tNow("composer.terminalStagedNote") +
+          "\n\n```bash\n" +
           pending.args +
           "\n```",
       );
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      setAttachError(`Couldn't open a terminal: ${msg}`);
+      setAttachError(tNow("composer.terminalOpenError", { error: msg }));
     }
   }
 
@@ -202,7 +227,8 @@ export function Composer({
   // check is moot when the provider can't be used at all). Composes with T6.
   const noKey = providerEnabled && keyReady === false;
   const composeDisabled = busy || !providerEnabled || noKey;
-  const canSend = !composeDisabled && (text.trim().length > 0 || images.length > 0);
+  const canSend =
+    !composeDisabled && (text.trim().length > 0 || images.length > 0);
 
   return (
     <div
@@ -228,24 +254,21 @@ export function Composer({
       {!providerEnabled &&
         (anyProvider ? (
           <p className="text-muted-foreground text-xs">
-            “{providerLabel(provider)}” is disabled. Pick another provider above,
-            or re-enable it in Settings → Plugins.
+            {t("composer.providerDisabled", {
+              provider: providerLabel(provider),
+            })}
           </p>
         ) : (
           <p className="text-muted-foreground text-xs">
-            No providers are enabled. Enable a provider plugin in Settings →
-            Plugins to start chatting.
+            {t("composer.noProviders")}
           </p>
         ))}
       {noKey && (
         <p className="text-muted-foreground text-xs">
-          No API key set for {providerLabel(provider)}. Add one in Settings to
-          send messages.
+          {t("composer.noKey", { provider: providerLabel(provider) })}
         </p>
       )}
-      {attachError && (
-        <p className="text-destructive text-xs">{attachError}</p>
-      )}
+      {attachError && <p className="text-destructive text-xs">{attachError}</p>}
 
       {/* Slash-command palette (T14): discovery/autocomplete while typing `/…`. */}
       {showPalette && (
@@ -272,7 +295,7 @@ export function Composer({
               </span>
               {c.source === "plugin" && (
                 <span className="text-muted-foreground ml-auto shrink-0 text-[10px] uppercase">
-                  plugin
+                  {t("composer.pluginBadge")}
                 </span>
               )}
             </button>
@@ -285,26 +308,24 @@ export function Composer({
         <div className="border-primary/40 bg-muted/40 flex flex-col gap-2 rounded-md border p-3 text-sm">
           <div className="flex items-center gap-2 font-medium">
             <TerminalSquare className="size-4" />
-            Run this in a terminal?
+            {t("composer.runInTerminal")}
           </div>
           <p className="text-muted-foreground text-xs">
-            The command below will be <strong>staged</strong> in your terminal
-            for review — it is never auto-executed. You press Enter there to run
-            it.
+            {t("composer.terminalExplain")}
           </p>
           <pre className="bg-background overflow-x-auto rounded border p-2 font-mono text-xs whitespace-pre-wrap">
             {pendingCommand.args}
           </pre>
           <div className="flex gap-2">
             <Button size="sm" onClick={() => void confirmPendingCommand()}>
-              Stage in terminal
+              {t("composer.stageInTerminal")}
             </Button>
             <Button
               size="sm"
               variant="outline"
               onClick={() => setPendingCommand(null)}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
           </div>
         </div>
@@ -316,12 +337,12 @@ export function Composer({
             <div key={i} className="relative">
               <img
                 src={img.dataUrl}
-                alt="attachment preview"
+                alt={t("composer.attachmentPreview")}
                 className="size-16 rounded-md object-cover"
               />
               <button
                 type="button"
-                aria-label="Remove image"
+                aria-label={t("composer.removeImage")}
                 onClick={() => removeImage(i)}
                 className="bg-background/80 absolute -top-1.5 -right-1.5 rounded-full border p-0.5"
               >
@@ -360,7 +381,7 @@ export function Composer({
             void addFiles(files);
           }
         }}
-        placeholder="Type a message…  ( / for commands · Enter to send · Shift+Enter for newline )"
+        placeholder={t("composer.placeholder")}
         className="max-h-[260px] resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
         onKeyDown={(e) => {
           // Palette navigation takes priority over send/newline.
@@ -396,7 +417,7 @@ export function Composer({
         <Button
           variant="ghost"
           size="icon"
-          aria-label="Attach image"
+          aria-label={t("composer.attachImage")}
           disabled={composeDisabled}
           onClick={() => fileInputRef.current?.click()}
         >
@@ -405,8 +426,22 @@ export function Composer({
         <Button
           variant="ghost"
           size="icon"
-          aria-label="Open canvas"
-          title="Open canvas — a larger editor with live Markdown preview"
+          aria-label={t("composer.compact")}
+          title={t("composer.compactTitle")}
+          disabled={!compactEnabled}
+          onClick={() => void compact()}
+        >
+          {compacting ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <FoldVertical className="size-4" />
+          )}
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={t("composer.openCanvas")}
+          title={t("composer.openCanvasTitle")}
           disabled={composeDisabled}
           onClick={() => setCanvasOpen(true)}
         >
@@ -419,14 +454,14 @@ export function Composer({
             type="button"
             variant="destructive"
             onClick={onCancel}
-            aria-label="Stop generating"
+            aria-label={t("composer.stopAria")}
           >
             <Square className="size-4" />
-            Stop
+            {t("composer.stop")}
           </Button>
         ) : (
           <Button onClick={send} disabled={!canSend}>
-            Send
+            {t("common.send")}
           </Button>
         )}
       </div>

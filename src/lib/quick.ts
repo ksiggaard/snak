@@ -8,6 +8,12 @@ export interface QuickPayload {
   images: PreparedImage[];
   provider: Provider;
   model: string;
+  /**
+   * Destination thread (T31): an existing thread's id to send into (using its
+   * saved provider/model), or null/absent to start a new chat. Snake_case like
+   * the other payload fields — Rust passes the payload through verbatim.
+   */
+  thread_id?: string | null;
 }
 
 /** Forward overlay input to the main window; backend also focuses main + hides overlay. */

@@ -24,6 +24,39 @@ export function languageFromClassName(
   return null;
 }
 
+/**
+ * Flatten a Markdown message into a one-line plain-text snippet (T35 sidebar
+ * preview rows). A pragmatic regex flattener, not a full parser: fence markers,
+ * heading/list/blockquote prefixes, table chrome, and inline emphasis/code
+ * markers are stripped (code *content* and link/image text are kept — they are
+ * often the useful preview), whitespace is collapsed to single spaces, and the
+ * result is truncated to `maxLen` with an ellipsis.
+ */
+export function flattenSnippet(markdown: string, maxLen = 120): string {
+  const flat = markdown
+    // Code-fence marker lines go away; the code itself stays.
+    .replace(/^[ \t]*(?:`{3,}|~{3,}).*$/gm, " ")
+    // Images → alt text, links → link text.
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    // Line-start structure: headings, blockquotes, list markers, checkboxes.
+    .replace(/^[ \t]{0,3}#{1,6}[ \t]+/gm, "")
+    .replace(/^[ \t]*>+[ \t]?/gm, "")
+    .replace(/^[ \t]*(?:[-*+]|\d+[.)])[ \t]+/gm, "")
+    .replace(/^\[(?:[ xX])\][ \t]+/gm, "")
+    // Horizontal rules, setext underlines, and table separator rows; then the
+    // pipes of remaining table rows.
+    .replace(/^[ \t]*[=|\-: \t]+$/gm, " ")
+    .replace(/\|/g, " ")
+    // Inline emphasis / strikethrough / code markers.
+    .replace(/(\*\*|__|~~)/g, "")
+    .replace(/[*_`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (flat.length <= maxLen) return flat;
+  return flat.slice(0, Math.max(0, maxLen - 1)).trimEnd() + "…";
+}
+
 /** Extract the plain-text content of a code block from react-markdown children. */
 export function codeText(children: unknown): string {
   if (typeof children === "string") return children;

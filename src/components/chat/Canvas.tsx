@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Maximize2, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/chat/Markdown";
+import { useT } from "@/store/i18n";
 import type { PreparedImage } from "@/lib/image";
 
 interface CanvasProps {
@@ -38,6 +39,7 @@ export function Canvas({
   canSend,
   onClose,
 }: CanvasProps) {
+  const t = useT();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Focus the editor on open and close on Escape.
@@ -58,21 +60,21 @@ export function Canvas({
       className="bg-background/80 fixed inset-0 z-50 flex flex-col p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
-      aria-label="Canvas editor"
+      aria-label={t("canvas.aria")}
     >
       <div className="bg-card flex flex-1 flex-col overflow-hidden rounded-lg border shadow-lg">
         <div className="flex items-center justify-between border-b px-4 py-2">
           <div className="flex items-center gap-2">
             <Maximize2 className="text-muted-foreground size-4" />
-            <span className="text-sm font-medium">Canvas</span>
+            <span className="text-sm font-medium">{t("canvas.title")}</span>
             <span className="text-muted-foreground text-xs">
-              Markdown editor with live preview
+              {t("canvas.subtitle")}
             </span>
           </div>
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Close canvas"
+            aria-label={t("canvas.close")}
             onClick={onClose}
           >
             <X className="size-4" />
@@ -83,13 +85,13 @@ export function Canvas({
           {/* Editor */}
           <div className="flex min-h-0 flex-col border-b md:border-r md:border-b-0">
             <div className="text-muted-foreground border-b px-4 py-1.5 text-xs font-medium">
-              Edit
+              {t("canvas.edit")}
             </div>
             <textarea
               ref={textareaRef}
               value={text}
               onChange={(e) => onChange(e.target.value)}
-              placeholder="Compose a long Markdown message…"
+              placeholder={t("canvas.placeholder")}
               className="placeholder:text-muted-foreground min-h-0 flex-1 resize-none bg-transparent px-4 py-3 font-mono text-sm outline-none"
               onKeyDown={(e) => {
                 // Cmd/Ctrl+Enter sends from the canvas; Enter inserts newlines
@@ -105,14 +107,14 @@ export function Canvas({
           {/* Preview */}
           <div className="flex min-h-0 flex-col">
             <div className="text-muted-foreground border-b px-4 py-1.5 text-xs font-medium">
-              Preview
+              {t("canvas.preview")}
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
               {text.trim() ? (
                 <Markdown content={text} />
               ) : (
                 <p className="text-muted-foreground text-sm">
-                  Nothing to preview yet.
+                  {t("canvas.empty")}
                 </p>
               )}
             </div>
@@ -127,12 +129,12 @@ export function Canvas({
                 <div key={i} className="relative">
                   <img
                     src={img.dataUrl}
-                    alt="attachment preview"
+                    alt={t("composer.attachmentPreview")}
                     className="size-10 rounded-md object-cover"
                   />
                   <button
                     type="button"
-                    aria-label="Remove image"
+                    aria-label={t("composer.removeImage")}
                     onClick={() => onRemoveImage(i)}
                     className="bg-background/80 absolute -top-1.5 -right-1.5 rounded-full border p-0.5"
                   >
@@ -143,12 +145,12 @@ export function Canvas({
             </div>
           ) : (
             <span className="text-muted-foreground text-xs">
-              Cmd/Ctrl+Enter to send · Esc to close (draft is kept)
+              {t("canvas.hint")}
             </span>
           )}
           <Button onClick={onSend} disabled={!canSend}>
             <Send className="size-4" />
-            Send
+            {t("common.send")}
           </Button>
         </div>
       </div>

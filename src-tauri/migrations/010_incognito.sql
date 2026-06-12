@@ -1,0 +1,12 @@
+-- T29: incognito chats. An ephemeral thread lives only for the current app
+-- session: it persists like any other thread *within* the session (so thread
+-- switching, rename, favorite etc. all work), but is purged — messages,
+-- attachments, and usage included — by `purgeEphemeralThreads()` at the START
+-- of the next app launch (`init()` in src/store/threads.ts), plus best-effort
+-- on window close. Purging on startup makes the wipe crash-safe: a kill or
+-- crash never leaks an incognito chat into the next session.
+--
+-- Note (T19 FTS): the search_fts delete triggers from migration 004 fire per
+-- deleted message/thread row, so the purge also removes the index entries —
+-- no extra FTS handling is needed here.
+ALTER TABLE threads ADD COLUMN ephemeral INTEGER NOT NULL DEFAULT 0;

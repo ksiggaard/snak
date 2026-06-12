@@ -50,7 +50,10 @@ export async function loadThreadMessages(
   const messages = await listMessages(threadId);
   return Promise.all(
     messages.map(async (m): Promise<MessageView> => {
-      if (m.role === "system") return { ...m, images: [], toolCalls: [] };
+      // System rows and synthetic compaction summaries (T28) carry no
+      // attachments, so skip the query for them.
+      if (m.role === "system" || m.kind === "summary")
+        return { ...m, images: [], toolCalls: [] };
       const attachments = await listAttachments(m.id);
       const images = attachments
         .filter((a) => a.kind === "image")

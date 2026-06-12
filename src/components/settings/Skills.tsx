@@ -8,6 +8,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { usePlugins } from "@/store/plugins";
+import { useT } from "@/store/i18n";
 import type { PluginInfo, SkillContribution } from "@/types/plugins";
 
 /**
@@ -19,6 +20,7 @@ import type { PluginInfo, SkillContribution } from "@/types/plugins";
  * `store/threads.ts`.
  */
 function SkillRow({ p }: { p: PluginInfo }) {
+  const t = useT();
   const setEnabled = usePlugins((s) => s.setEnabled);
   const { id, name, version, description } = p.manifest;
   const skill = p.manifest.contributes as SkillContribution | undefined;
@@ -33,7 +35,7 @@ function SkillRow({ p }: { p: PluginInfo }) {
           <span className="text-muted-foreground text-xs">v{version}</span>
           {p.source === "builtin" && (
             <span className="text-muted-foreground rounded border px-1 text-[10px] uppercase">
-              built-in
+              {t("common.builtIn")}
             </span>
           )}
         </div>
@@ -52,13 +54,14 @@ function SkillRow({ p }: { p: PluginInfo }) {
         variant={p.enabled ? "default" : "outline"}
         onClick={() => void setEnabled(id, !p.enabled)}
       >
-        {p.enabled ? "Enabled" : "Disabled"}
+        {p.enabled ? t("common.enabled") : t("common.disabled")}
       </Button>
     </div>
   );
 }
 
 export function Skills() {
+  const t = useT();
   const plugins = usePlugins((s) => s.plugins);
   const loaded = usePlugins((s) => s.loaded);
   const error = usePlugins((s) => s.error);
@@ -73,20 +76,15 @@ export function Skills() {
   return (
     <Card className="w-full max-w-lg">
       <CardHeader>
-        <CardTitle>Skills</CardTitle>
-        <CardDescription>
-          Skills are reusable instruction packs the model can draw on. Enable a
-          skill to inject its guidance into every chat&apos;s system context.
-          Install more by adding <code>skill</code> plugins (see the Plugins
-          card).
-        </CardDescription>
+        <CardTitle>{t("skills.title")}</CardTitle>
+        <CardDescription>{t("skills.description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col">
-        {!loaded && <p className="text-muted-foreground text-sm">Loading…</p>}
+        {!loaded && (
+          <p className="text-muted-foreground text-sm">{t("common.loading")}</p>
+        )}
         {loaded && skills.length === 0 && (
-          <p className="text-muted-foreground text-sm">
-            No skills installed yet.
-          </p>
+          <p className="text-muted-foreground text-sm">{t("skills.none")}</p>
         )}
         {loaded && skills.map((p) => <SkillRow key={p.manifest.id} p={p} />)}
         {error && <p className="text-destructive mt-3 text-sm">{error}</p>}

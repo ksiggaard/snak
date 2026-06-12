@@ -10,11 +10,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { getSetting, setSetting } from "@/lib/db";
 import { setGlobalShortcut } from "@/lib/quick";
+import { useT } from "@/store/i18n";
 
 export const SHORTCUT_KEY = "global_shortcut";
 export const DEFAULT_SHORTCUT = "Alt+Space";
 
 export function ShortcutSetting() {
+  const t = useT();
   const [value, setValue] = useState(DEFAULT_SHORTCUT);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -43,13 +45,8 @@ export function ShortcutSetting() {
   return (
     <Card className="w-full max-w-lg">
       <CardHeader>
-        <CardTitle>Global shortcut</CardTitle>
-        <CardDescription>
-          Summon the quick-input overlay from anywhere. Use modifiers like{" "}
-          <code>Alt</code>, <code>CmdOrControl</code>, <code>Shift</code> joined
-          with <code>+</code> (e.g. <code>Alt+Space</code>,{" "}
-          <code>CmdOrControl+Shift+K</code>).
-        </CardDescription>
+        <CardTitle>{t("shortcut.title")}</CardTitle>
+        <CardDescription>{t("shortcut.description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
         <div className="flex gap-2">
@@ -63,11 +60,11 @@ export function ShortcutSetting() {
             spellCheck={false}
             autoComplete="off"
           />
-          <Button onClick={() => void save()}>Save</Button>
+          <Button onClick={() => void save()}>{t("common.save")}</Button>
         </div>
         {status === "saved" && (
           <p className="text-xs text-emerald-600 dark:text-emerald-400">
-            Shortcut registered ✓
+            {t("shortcut.saved")}
           </p>
         )}
         {status === "error" && error && (

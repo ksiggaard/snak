@@ -1,8 +1,10 @@
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useLayout } from "@/store/layout";
+import { useT } from "@/store/i18n";
 
 /** Segmented Chats / Projects switch (T24). Persists via the layout store. */
 export function SidebarModeSwitch() {
+  const t = useT();
   const mode = useLayout((s) => s.sidebarMode);
   const setMode = useLayout((s) => s.setSidebarMode);
 
@@ -20,10 +22,10 @@ export function SidebarModeSwitch() {
       className="w-full"
     >
       <ToggleGroupItem value="chats" className="flex-1">
-        Chats
+        {t("sidebar.chats")}
       </ToggleGroupItem>
       <ToggleGroupItem value="projects" className="flex-1">
-        Projects
+        {t("sidebar.projects")}
       </ToggleGroupItem>
     </ToggleGroup>
   );

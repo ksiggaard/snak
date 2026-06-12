@@ -10,6 +10,7 @@ import {
   listProjectFiles,
   listThreads,
   listUserMemory,
+  purgeEphemeralThreads,
   renameThread,
   setSetting,
   setThreadFavorite,
@@ -28,10 +29,12 @@ import {
   type MessageToolCall,
   type MessageView,
 } from "@/lib/messages";
+import { buildCompactionRequest, compactHistory } from "@/lib/compaction";
 import { buildProjectSystemText } from "@/lib/projects";
 import { buildSkillsSystemText } from "@/lib/skills";
 import { selectRegistry, usePlugins } from "@/store/plugins";
 import { buildGlobalSystemText } from "@/lib/systemContext";
+import { t } from "@/store/i18n";
 import { PROVIDERS } from "@/lib/providers";
 import type { PreparedImage } from "@/lib/image";
 import type { Provider, Thread } from "@/types/db";
@@ -43,12 +46,25 @@ export const DEFAULT_MODEL_KEY = "default_model";
 // replaced by the persisted DB row once the stream completes.
 const STREAM_ID = "__streaming__";
 
-/** Derive a thread title from the first user message. */
-export function deriveTitle(content: string): string {
+/** Derive a thread title from the first user message. `fallback` is used for
+ * an empty message (callers pass the localized "New chat"; English default
+ * keeps the fn pure/test-stable). */
+export function deriveTitle(content: string, fallback = "New chat"): string {
   const oneLine = content.replace(/\s+/g, " ").trim();
-  return oneLine.length > 48
-    ? `${oneLine.slice(0, 48)}…`
-    : oneLine || "New chat";
+  return oneLine.length > 48 ? `${oneLine.slice(0, 48)}…` : oneLine || fallback;
+}
+
+/**
+ * Whether a thread may be persisted as `last_thread_id` (T29). Incognito
+ * (ephemeral) threads are session-only — remembering one would point the next
+ * launch at a thread the startup purge has just deleted, so they are never
+ * recorded. An unknown thread (undefined) is remembered, preserving the
+ * pre-T29 behavior for ordinary threads. Pure (unit-tested).
+ */
+export function shouldRememberThread(
+  thread: Pick<Thread, "ephemeral"> | undefined,
+): boolean {
+  return !thread?.ephemeral;
 }
 
 /** The default provider+model for new interactions. */
@@ -83,7 +99,11 @@ interface ThreadsState {
   defaultModel: string;
   /** Project a new (draft) chat will be created in, or null for none. */
   draftProjectId: string | null;
+  /** Incognito draft (T29): the first send creates the thread `ephemeral`. */
+  draftIncognito: boolean;
   busy: boolean;
+  /** A compaction summarization call is in flight (T28; busy is also set). */
+  compacting: boolean;
   /** True between requesting a cancel and the stream actually stopping. */
   cancelling: boolean;
   error: string | null;
@@ -92,7 +112,8 @@ interface ThreadsState {
   init: () => Promise<void>;
   refreshThreads: () => Promise<void>;
   selectThread: (id: string) => Promise<void>;
-  startNewChat: () => void;
+  /** Start a new draft chat; `incognito` makes it session-only (T29). */
+  startNewChat: (opts?: { incognito?: boolean }) => void;
   /** Start a new draft chat that will be created inside the given project. */
   startNewChatInProject: (projectId: string) => void;
   /** Move an existing thread into a project (or null to remove it). */
@@ -112,6 +133,13 @@ interface ThreadsState {
    * through the LLM. Does not stream or call a provider.
    */
   postNote: (content: string) => Promise<void>;
+  /**
+   * Compact the current thread (T28): ask its provider/model to summarize the
+   * history since the last compaction point and persist the result as a
+   * synthetic `kind: "summary"` row. Non-destructive — all rows are kept;
+   * subsequent sends carry [summary + messages after it] (see lib/compaction).
+   */
+  compact: () => Promise<void>;
   /** Stop the in-flight stream; partial text is persisted via the normal path. */
   cancel: () => Promise<void>;
   rename: (id: string, title: string) => Promise<void>;
@@ -179,13 +207,21 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   defaultProvider: PROVIDERS[0].id,
   defaultModel: PROVIDERS[0].defaultModel,
   draftProjectId: null,
+  draftIncognito: false,
   busy: false,
+  compacting: false,
   cancelling: false,
   error: null,
   initialized: false,
 
   init: async () => {
     if (get().initialized) return;
+    // T29: purge incognito threads from the previous session FIRST — before
+    // the thread list is loaded or last_thread_id restored. Running on startup
+    // makes the purge crash-safe: even a kill/crash (or tray-Quit's app.exit,
+    // which the frontend cannot intercept) never leaks an incognito chat into
+    // this session. The quit-time purge in App.tsx is only best-effort.
+    await purgeEphemeralThreads();
     const threads = await listThreads();
     set({ threads, initialized: true });
     // Load the persisted default and seed the draft from it before deciding
@@ -218,15 +254,19 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   selectThread: async (id) => {
     const messages = await loadThreadMessages(id);
     set({ currentThreadId: id, messages, error: null });
-    await setSetting(LAST_THREAD_KEY, id);
+    // Incognito threads are never remembered as last_thread_id (T29) — the
+    // startup purge would have deleted them before restore anyway.
+    const thread = get().threads.find((t) => t.id === id);
+    if (shouldRememberThread(thread)) await setSetting(LAST_THREAD_KEY, id);
   },
 
-  startNewChat: () => {
+  startNewChat: (opts) => {
     set({
       currentThreadId: null,
       messages: [],
       error: null,
       draftProjectId: null,
+      draftIncognito: opts?.incognito ?? false,
       draftProvider: get().defaultProvider,
       draftModel: get().defaultModel,
     });
@@ -238,6 +278,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       messages: [],
       error: null,
       draftProjectId: projectId,
+      draftIncognito: false,
       draftProvider: get().defaultProvider,
       draftModel: get().defaultModel,
     });
@@ -286,15 +327,18 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         provider = get().draftProvider;
         model = get().draftModel;
         projectId = get().draftProjectId;
+        const ephemeral = get().draftIncognito;
         const thread = await createThread({
           provider,
           model,
-          title: deriveTitle(content || "Image"),
+          title: deriveTitle(content || t("thread.image"), t("thread.newChat")),
           projectId,
+          ephemeral,
         });
         id = thread.id;
         set({ currentThreadId: id });
-        await setSetting(LAST_THREAD_KEY, id);
+        // Incognito threads never become last_thread_id (T29).
+        if (!ephemeral) await setSetting(LAST_THREAD_KEY, id);
         await get().refreshThreads();
       } else {
         const t = get().threads.find((x) => x.id === id)!;
@@ -319,11 +363,11 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       const afterUser = await loadThreadMessages(id);
       set({ messages: afterUser });
 
-      const history: ApiMessage[] = afterUser.map((m) => ({
-        role: m.role,
-        content: m.content,
-        images: m.images,
-      }));
+      // Compacted API history (T28): everything after the latest `summary`
+      // row, with that summary injected as a leading user turn — or the full
+      // transcript when the thread was never compacted. Display is unaffected
+      // (the store keeps every row); only the API context shrinks.
+      const history: ApiMessage[] = compactHistory(afterUser);
 
       // Leading system context, assembled at the message layer (not in the
       // Rust providers). Precedence is global → project → thread; since we
@@ -403,6 +447,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                   thread_id: id!,
                   role: "assistant" as const,
                   content: "",
+                  kind: "normal" as const,
                   duration_ms: null,
                   created_at: "",
                   images: [],
@@ -485,19 +530,82 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     if (!content.trim()) return;
     let id = get().currentThreadId;
     if (!id) {
+      const ephemeral = get().draftIncognito;
       const thread = await createThread({
         provider: get().draftProvider,
         model: get().draftModel,
-        title: deriveTitle(content),
+        title: deriveTitle(content, t("thread.newChat")),
         projectId: get().draftProjectId,
+        ephemeral,
       });
       id = thread.id;
       set({ currentThreadId: id });
-      await setSetting(LAST_THREAD_KEY, id);
+      // Incognito threads never become last_thread_id (T29).
+      if (!ephemeral) await setSetting(LAST_THREAD_KEY, id);
     }
     await addMessage({ thread_id: id, role: "assistant", content });
     set({ messages: await loadThreadMessages(id) });
     await get().refreshThreads();
+  },
+
+  compact: async () => {
+    const id = get().currentThreadId;
+    if (!id || get().busy || get().compacting) return;
+    const thread = get().threads.find((t) => t.id === id);
+    if (!thread) return;
+    // `busy` is set too so sends are blocked and Stop can cancel the call —
+    // the same in-flight conventions as a normal stream.
+    set({ busy: true, compacting: true, cancelling: false, error: null });
+    try {
+      const request = buildCompactionRequest(get().messages);
+      // No streaming placeholder: the summary isn't a chat bubble; it lands as
+      // a divider row once persisted.
+      const result = await chatStream(
+        thread.provider,
+        thread.model,
+        request,
+        () => {},
+      );
+      // Stopped mid-summarization → don't persist a truncated summary; the
+      // thread simply stays uncompacted.
+      if (get().cancelling) return;
+      const content = result.content.trim();
+      if (!content) {
+        throw new Error("The model returned an empty summary — not compacted.");
+      }
+      const summaryMsg = await addMessage({
+        thread_id: id,
+        role: "assistant",
+        content,
+        kind: "summary",
+      });
+      // Attribute the summarization call's tokens like any other response (T16).
+      const u = result.usage;
+      if (
+        u &&
+        (u.input_tokens > 0 ||
+          u.output_tokens > 0 ||
+          u.cache_creation_tokens > 0 ||
+          u.cache_read_tokens > 0)
+      ) {
+        await addUsage({
+          message_id: summaryMsg.id,
+          thread_id: id,
+          provider: thread.provider,
+          model: result.model || thread.model,
+          input_tokens: u.input_tokens,
+          output_tokens: u.output_tokens,
+          cache_creation_tokens: u.cache_creation_tokens,
+          cache_read_tokens: u.cache_read_tokens,
+        });
+      }
+      set({ messages: await loadThreadMessages(id) });
+      await get().refreshThreads();
+    } catch (e) {
+      set({ error: friendlyError(e) });
+    } finally {
+      set({ busy: false, compacting: false, cancelling: false });
+    }
   },
 
   cancel: async () => {
@@ -513,7 +621,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   },
 
   rename: async (id, title) => {
-    await renameThread(id, title.trim() || "Untitled");
+    await renameThread(id, title.trim() || t("thread.untitled"));
     await get().refreshThreads();
   },
 

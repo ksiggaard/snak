@@ -15,6 +15,8 @@ export interface Thread {
   project_id: string | null;
   /** 1 if pinned to the sidebar Favorites group, else 0 (T23). */
   favorite: number;
+  /** 1 for an incognito (session-only) thread purged on next launch (T29). */
+  ephemeral: number;
   created_at: string;
   updated_at: string;
 }
@@ -45,11 +47,21 @@ export interface Model {
   sort_order: number;
 }
 
+/**
+ * Message kinds (T28, migration 009): `normal` chat turns vs a synthetic
+ * `summary` row marking a compaction point. Summary rows render as a divider
+ * in the transcript; on send, the API history becomes [latest summary +
+ * messages after it] (see `src/lib/compaction.ts`).
+ */
+export type MessageKind = "normal" | "summary";
+
 export interface Message {
   id: string;
   thread_id: string;
   role: Role;
   content: string;
+  /** 'normal' chat turn or a 'summary' compaction-point row (T28). */
+  kind: MessageKind;
   /** Wall-clock generation time in ms for assistant replies; null otherwise. */
   duration_ms: number | null;
   created_at: string;

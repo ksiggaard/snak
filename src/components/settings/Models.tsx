@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useModels } from "@/store/models";
+import { useT } from "@/store/i18n";
 import { useProviders } from "@/lib/providers";
 import type { Provider } from "@/types/db";
 
@@ -18,6 +19,7 @@ import type { Provider } from "@/types/db";
  * read this list (via `useModels`).
  */
 export function Models() {
+  const t = useT();
   const providers = useProviders();
   const models = useModels((s) => s.models);
   const add = useModels((s) => s.add);
@@ -40,17 +42,14 @@ export function Models() {
   return (
     <Card className="w-full max-w-lg">
       <CardHeader>
-        <CardTitle>Models</CardTitle>
-        <CardDescription>
-          The models offered per provider in the chat picker. Each has a model
-          id (sent to the API) and a friendly label.
-        </CardDescription>
+        <CardTitle>{t("models.title")}</CardTitle>
+        <CardDescription>{t("models.description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
         {error && <p className="text-destructive text-sm">{error}</p>}
         {providers.length === 0 && (
           <p className="text-muted-foreground text-sm">
-            No providers enabled — enable one in Settings → Plugins.
+            {t("models.noProviders")}
           </p>
         )}
         {providers.map((p) => {
@@ -60,7 +59,7 @@ export function Models() {
               <div className="text-sm font-medium">{p.label}</div>
               {rows.length === 0 && (
                 <p className="text-muted-foreground text-xs">
-                  No models yet — add one below.
+                  {t("models.noModels")}
                 </p>
               )}
               {rows.map((m) => (
@@ -74,7 +73,7 @@ export function Models() {
                     size="sm"
                     onClick={() => void remove(m.id)}
                   >
-                    Remove
+                    {t("common.remove")}
                   </Button>
                 </div>
               ))}
@@ -84,7 +83,7 @@ export function Models() {
                   onChange={(e) =>
                     setLabelDraft((d) => ({ ...d, [p.id]: e.target.value }))
                   }
-                  placeholder="Label (e.g. Opus 4.8)"
+                  placeholder={t("models.labelPlaceholder")}
                   className="h-8 text-sm"
                 />
                 <Input
@@ -92,7 +91,7 @@ export function Models() {
                   onChange={(e) =>
                     setIdDraft((d) => ({ ...d, [p.id]: e.target.value }))
                   }
-                  placeholder="model id"
+                  placeholder={t("models.idPlaceholder")}
                   className="h-8 font-mono text-sm"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -102,7 +101,7 @@ export function Models() {
                   }}
                 />
                 <Button size="sm" onClick={() => submit(p.id)}>
-                  Add
+                  {t("common.add")}
                 </Button>
               </div>
             </div>

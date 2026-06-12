@@ -18,6 +18,7 @@ import {
   SYSTEM_PROMPT_ADDENDUM_KEY,
   updateUserMemory,
 } from "@/lib/db";
+import { useT } from "@/store/i18n";
 import type { UserMemory } from "@/types/db";
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -28,6 +29,7 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
  * leading system context on every request — see `src/lib/systemContext.ts`.
  */
 export function Memory() {
+  const t = useT();
   const [addendum, setAddendum] = useState("");
   const [savedAddendum, setSavedAddendum] = useState("");
   const [memories, setMemories] = useState<UserMemory[]>([]);
@@ -96,19 +98,18 @@ export function Memory() {
   return (
     <Card className="w-full max-w-lg">
       <CardHeader>
-        <CardTitle>System prompt &amp; memory</CardTitle>
-        <CardDescription>
-          Added to the system context of every chat, ahead of any project
-          instructions (precedence: global → project → thread).
-        </CardDescription>
+        <CardTitle>{t("memory.title")}</CardTitle>
+        <CardDescription>{t("memory.description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="system-prompt-addendum">System-prompt addendum</Label>
+          <Label htmlFor="system-prompt-addendum">
+            {t("memory.addendumLabel")}
+          </Label>
           <Textarea
             id="system-prompt-addendum"
             rows={4}
-            placeholder="e.g. Always respond in British English and prefer concise answers."
+            placeholder={t("memory.addendumPlaceholder")}
             value={addendum}
             disabled={busy}
             onChange={(e) => setAddendum(e.target.value)}
@@ -118,11 +119,11 @@ export function Memory() {
               onClick={() => void saveAddendum()}
               disabled={busy || addendum === savedAddendum}
             >
-              Save
+              {t("common.save")}
             </Button>
             {addendum !== savedAddendum && (
               <span className="text-muted-foreground text-xs">
-                Unsaved changes
+                {t("memory.unsaved")}
               </span>
             )}
           </div>
@@ -130,9 +131,9 @@ export function Memory() {
 
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1">
-            <Label>Memory about you</Label>
+            <Label>{t("memory.aboutYou")}</Label>
             <p className="text-muted-foreground text-xs">
-              Facts and preferences the assistant should remember across chats.
+              {t("memory.aboutYouHint")}
             </p>
           </div>
 
@@ -149,7 +150,7 @@ export function Memory() {
                 onClick={() => void removeMemory(m.id)}
                 disabled={busy}
               >
-                Remove
+                {t("common.remove")}
               </Button>
             </div>
           ))}
@@ -157,7 +158,7 @@ export function Memory() {
           <div className="flex gap-2">
             <Textarea
               rows={2}
-              placeholder="Add a memory, e.g. I'm a TypeScript developer working on a desktop app."
+              placeholder={t("memory.addPlaceholder")}
               value={newMemory}
               disabled={busy}
               onChange={(e) => setNewMemory(e.target.value)}
@@ -166,7 +167,7 @@ export function Memory() {
               onClick={() => void addMemory()}
               disabled={busy || newMemory.trim().length === 0}
             >
-              Add
+              {t("common.add")}
             </Button>
           </div>
         </div>

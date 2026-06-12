@@ -5,12 +5,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useProjects } from "@/store/projects";
+import { t as tNow, useT, useTp } from "@/store/i18n";
 import { PROJECT_CONTEXT_CHAR_BUDGET, projectFilesSize } from "@/lib/projects";
 
 /** Max size (chars) for a single uploaded project file. */
 const MAX_FILE_CHARS = 200_000;
 
 export function ProjectView() {
+  const t = useT();
+  const tp = useTp();
   const openProjectId = useProjects((s) => s.openProjectId);
   const projects = useProjects((s) => s.projects);
   const files = useProjects((s) => s.openProjectFiles);
@@ -39,7 +42,7 @@ export function ProjectView() {
   if (!project) {
     return (
       <div className="text-muted-foreground flex flex-1 items-center justify-center text-sm">
-        Project not found.
+        {t("project.notFound")}
       </div>
     );
   }
@@ -58,11 +61,14 @@ export function ProjectView() {
         await addFile(project.id, file.name, content);
         if (text.length > MAX_FILE_CHARS) {
           setError(
-            `"${file.name}" was truncated to ${MAX_FILE_CHARS.toLocaleString()} characters.`,
+            tNow("project.truncated", {
+              name: file.name,
+              n: MAX_FILE_CHARS.toLocaleString(),
+            }),
           );
         }
       } catch {
-        setError(`Couldn't read "${file.name}" as text.`);
+        setError(tNow("project.readError", { name: file.name }));
       }
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -71,7 +77,7 @@ export function ProjectView() {
   return (
     <div className="bg-card flex flex-1 flex-col gap-5 overflow-y-auto rounded-lg border p-5">
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="project-name">Project name</Label>
+        <Label htmlFor="project-name">{t("project.name")}</Label>
         <Input
           id="project-name"
           value={nameDraft}
@@ -85,9 +91,11 @@ export function ProjectView() {
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="project-instructions">Instructions</Label>
+        <Label htmlFor="project-instructions">
+          {t("project.instructions")}
+        </Label>
         <p className="text-muted-foreground text-xs">
-          Shared context added to every chat in this project.
+          {t("project.instructionsHint")}
         </p>
         <Textarea
           id="project-instructions"
@@ -98,20 +106,20 @@ export function ProjectView() {
               void setInstructions(project.id, instrDraft);
           }}
           rows={6}
-          placeholder="e.g. You are helping with the Acme codebase. Prefer TypeScript…"
+          placeholder={t("project.instructionsPlaceholder")}
         />
       </div>
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <Label>Files</Label>
+          <Label>{t("project.files")}</Label>
           <Button
             variant="outline"
             size="sm"
             onClick={() => fileInputRef.current?.click()}
           >
             <Upload className="size-4" />
-            Add files
+            {t("project.addFiles")}
           </Button>
           <input
             ref={fileInputRef}
@@ -128,15 +136,17 @@ export function ProjectView() {
               : "text-muted-foreground text-xs"
           }
         >
-          {files.length} file{files.length === 1 ? "" : "s"} ·{" "}
-          {filesSize.toLocaleString()} /{" "}
-          {PROJECT_CONTEXT_CHAR_BUDGET.toLocaleString()} chars
-          {overBudget && " — over budget; excess is truncated when sending."}
+          {tp("project.fileCount", files.length)} ·{" "}
+          {t("project.chars", {
+            used: filesSize.toLocaleString(),
+            budget: PROJECT_CONTEXT_CHAR_BUDGET.toLocaleString(),
+          })}
+          {overBudget && ` ${t("project.overBudget")}`}
         </p>
 
         {files.length === 0 ? (
           <p className="text-muted-foreground text-xs">
-            No files yet. Text files are added as reference context.
+            {t("project.noFiles")}
           </p>
         ) : (
           <ul className="flex flex-col gap-1">
@@ -152,7 +162,7 @@ export function ProjectView() {
                 </span>
                 <button
                   type="button"
-                  aria-label={`Remove ${f.name}`}
+                  aria-label={t("project.removeFile", { name: f.name })}
                   onClick={() => void removeFile(f.id)}
                   className="text-muted-foreground hover:text-destructive shrink-0"
                 >

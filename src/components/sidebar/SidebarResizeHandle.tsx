@@ -1,10 +1,12 @@
 import { useRef } from "react";
 import { useLayout } from "@/store/layout";
+import { useT } from "@/store/i18n";
 
 /** Drag handle on the sidebar's right edge (T22). Resizes the sidebar live
  *  (clamped to MIN..MAX in the store) and persists the chosen width. Width
  *  updates are coalesced to one per animation frame to avoid layout thrash. */
 export function SidebarResizeHandle() {
+  const t = useT();
   const setSidebarWidth = useLayout((s) => s.setSidebarWidth);
   const frame = useRef<number | null>(null);
   const latest = useRef(0);
@@ -41,7 +43,7 @@ export function SidebarResizeHandle() {
     <div
       role="separator"
       aria-orientation="vertical"
-      aria-label="Resize sidebar"
+      aria-label={t("sidebar.resize")}
       onPointerDown={onPointerDown}
       className="hover:bg-sidebar-ring/60 absolute inset-y-0 -right-1 z-20 hidden w-2 cursor-col-resize md:block"
     />

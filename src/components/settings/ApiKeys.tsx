@@ -12,11 +12,13 @@ import { Label } from "@/components/ui/label";
 import { useProviders } from "@/lib/providers";
 import { deleteApiKey, setApiKey } from "@/lib/keys";
 import { useKeys } from "@/store/keys";
+import { useT } from "@/store/i18n";
 import type { Provider } from "@/types/db";
 
 type Drafts = Partial<Record<Provider, string>>;
 
 export function ApiKeys() {
+  const t = useT();
   // Only enabled provider plugins get a key row (T18) — disabling a provider
   // removes it from the settings list.
   const providers = useProviders();
@@ -62,16 +64,13 @@ export function ApiKeys() {
   return (
     <Card className="w-full max-w-lg">
       <CardHeader>
-        <CardTitle>API keys</CardTitle>
-        <CardDescription>
-          Keys are stored in your OS keychain and never leave this machine.
-        </CardDescription>
+        <CardTitle>{t("apiKeys.title")}</CardTitle>
+        <CardDescription>{t("apiKeys.description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         {providers.length === 0 && (
           <p className="text-muted-foreground text-sm">
-            No providers are enabled. Enable a provider plugin in the Plugins
-            section below to add its API key.
+            {t("apiKeys.noProviders")}
           </p>
         )}
         {providers.map((p) => {
@@ -84,13 +83,17 @@ export function ApiKeys() {
                 <Label htmlFor={`key-${p.id}`}>{p.label}</Label>
                 <span className="text-xs">
                   {saved === undefined ? (
-                    <span className="text-muted-foreground">checking…</span>
+                    <span className="text-muted-foreground">
+                      {t("apiKeys.checking")}
+                    </span>
                   ) : saved ? (
                     <span className="text-emerald-600 dark:text-emerald-400">
-                      Saved ✓
+                      {t("apiKeys.saved")}
                     </span>
                   ) : (
-                    <span className="text-muted-foreground">Not set</span>
+                    <span className="text-muted-foreground">
+                      {t("apiKeys.notSet")}
+                    </span>
                   )}
                 </span>
               </div>
@@ -99,7 +102,9 @@ export function ApiKeys() {
                   id={`key-${p.id}`}
                   type="password"
                   autoComplete="off"
-                  placeholder={saved ? "•••••••• (stored)" : p.keyHint}
+                  placeholder={
+                    saved ? t("apiKeys.storedPlaceholder") : p.keyHint
+                  }
                   value={draft}
                   disabled={isBusy}
                   onChange={(e) =>
@@ -113,7 +118,7 @@ export function ApiKeys() {
                   onClick={() => void save(p.id)}
                   disabled={isBusy || draft.trim().length === 0}
                 >
-                  {saved ? "Update" : "Save"}
+                  {saved ? t("common.update") : t("common.save")}
                 </Button>
                 {saved && (
                   <Button
@@ -121,7 +126,7 @@ export function ApiKeys() {
                     onClick={() => void remove(p.id)}
                     disabled={isBusy}
                   >
-                    Remove
+                    {t("common.remove")}
                   </Button>
                 )}
               </div>

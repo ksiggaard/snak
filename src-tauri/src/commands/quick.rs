@@ -46,6 +46,11 @@ pub fn show_quick(app: &AppHandle) {
         }
         let _ = w.show();
         let _ = w.set_focus();
+        // T31: ask the main window for the recent-thread list. The overlay never
+        // touches the DB, so main answers from its in-memory threads store by
+        // emitting `quick-recents` (id + title of the most recent threads) to
+        // the `quick` window.
+        let _ = app.emit_to("main", "quick-recents-request", ());
     }
 }
 

@@ -10,8 +10,8 @@ import type { SearchHit, ThreadSearchGroup } from "@/types/db";
 // selectThread action to open a result).
 
 interface SearchState {
-  /** Whether the search results overlay is shown. */
-  open: boolean;
+  /** Whether the search modal (top-center input + results) is shown. */
+  overlayOpen: boolean;
   query: string;
   results: ThreadSearchGroup[];
   /** Raw flat hits (for testing / future use). */
@@ -25,10 +25,12 @@ interface SearchState {
    */
   scrollToMessageId: string | null;
 
+  openOverlay: () => void;
+  closeOverlay: () => void;
   setQuery: (query: string) => void;
   /** Run the search for the current query (debounce in the caller/UI). */
   run: () => Promise<void>;
-  /** Close + clear the search overlay. */
+  /** Close the overlay and clear the query/results. */
   clear: () => void;
   /** Open a search result: select its thread and request scroll-to-message. */
   openHit: (hit: SearchHit) => Promise<void>;
@@ -37,7 +39,7 @@ interface SearchState {
 }
 
 export const useSearch = create<SearchState>((set, get) => ({
-  open: false,
+  overlayOpen: false,
   query: "",
   results: [],
   hits: [],
@@ -45,17 +47,18 @@ export const useSearch = create<SearchState>((set, get) => ({
   ran: false,
   scrollToMessageId: null,
 
-  setQuery: (query) => {
-    set({ query, open: query.trim().length > 0 ? get().open : false });
-  },
+  openOverlay: () => set({ overlayOpen: true }),
+  closeOverlay: () => set({ overlayOpen: false }),
+
+  setQuery: (query) => set({ query }),
 
   run: async () => {
     const query = get().query;
     if (query.trim().length === 0) {
-      set({ results: [], hits: [], open: false, ran: false });
+      set({ results: [], hits: [], ran: false });
       return;
     }
-    set({ searching: true, open: true });
+    set({ searching: true });
     try {
       const hits = await searchHistory(query);
       set({ hits, results: groupHitsByThread(hits), ran: true });
@@ -65,7 +68,7 @@ export const useSearch = create<SearchState>((set, get) => ({
   },
 
   clear: () => {
-    set({ query: "", results: [], hits: [], open: false, ran: false });
+    set({ query: "", results: [], hits: [], overlayOpen: false, ran: false });
   },
 
   openHit: async (hit) => {
@@ -75,7 +78,7 @@ export const useSearch = create<SearchState>((set, get) => ({
     useProjects.getState().close();
     await useThreads.getState().selectThread(hit.thread_id);
     set({
-      open: false,
+      overlayOpen: false,
       scrollToMessageId: hit.kind === "message" ? hit.message_id : null,
     });
   },

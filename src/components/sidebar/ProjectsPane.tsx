@@ -1,16 +1,26 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Plus, Settings2, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Plus,
+  Settings2,
+  Trash2,
+} from "lucide-react";
 import { useThreads } from "@/store/threads";
 import { useProjects } from "@/store/projects";
 import { useSearch } from "@/store/search";
 import { useView } from "@/store/view";
+import { useAppearance } from "@/store/appearance";
 import { confirmDialog } from "@/store/confirm";
+import { t as tNow, useT } from "@/store/i18n";
 import { ThreadRow } from "./ThreadRow";
+import { useThreadSnippets } from "./useThreadSnippets";
 import { cn } from "@/lib/utils";
 
 /** Projects mode (T24): the project list; opening one shows its detail view in
  *  the main pane and reveals its threads here. */
 export function ProjectsPane() {
+  const t = useT();
   const threads = useThreads((s) => s.threads);
   const currentId = useThreads((s) => s.currentThreadId);
   const selectThread = useThreads((s) => s.selectThread);
@@ -24,6 +34,9 @@ export function ProjectsPane() {
 
   const clearSearch = useSearch((s) => s.clear);
   const showChat = useView((s) => s.showChat);
+  const listStyle = useAppearance((s) => s.chatListStyle);
+  // One query covering every project's threads, only in "preview" mode (T35).
+  const snippets = useThreadSnippets(threads, listStyle === "preview");
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
@@ -49,7 +62,7 @@ export function ProjectsPane() {
   if (projects.length === 0) {
     return (
       <p className="text-muted-foreground px-2 py-4 text-xs">
-        No projects yet. Create one with “New project”.
+        {t("sidebar.noProjects")}
       </p>
     );
   }
@@ -58,7 +71,9 @@ export function ProjectsPane() {
     <div className="flex flex-col">
       {projects.map((project) => {
         const isCollapsed = collapsed[project.id];
-        const projectThreads = threads.filter((t) => t.project_id === project.id);
+        const projectThreads = threads.filter(
+          (t) => t.project_id === project.id,
+        );
         const isOpen = openProjectId === project.id;
         return (
           <div key={project.id} className="mb-1">
@@ -70,7 +85,11 @@ export function ProjectsPane() {
             >
               <button
                 type="button"
-                aria-label={isCollapsed ? "Expand project" : "Collapse project"}
+                aria-label={
+                  isCollapsed
+                    ? t("sidebar.expandProject")
+                    : t("sidebar.collapseProject")
+                }
                 onClick={() =>
                   setCollapsed((c) => ({ ...c, [project.id]: !c[project.id] }))
                 }
@@ -86,36 +105,38 @@ export function ProjectsPane() {
                 type="button"
                 onClick={() => goProject(project.id)}
                 className="min-w-0 flex-1 truncate text-left text-sm font-medium"
-                title="Open project"
+                title={t("sidebar.openProject")}
               >
                 {project.name}
               </button>
               <button
                 type="button"
-                aria-label="New chat in project"
+                aria-label={t("sidebar.newChatInProject")}
                 onClick={() => newChat(project.id)}
                 className="text-muted-foreground hover:text-foreground shrink-0 opacity-0 group-hover:opacity-100"
-                title="New chat in project"
+                title={t("sidebar.newChatInProject")}
               >
                 <Plus className="size-4" />
               </button>
               <button
                 type="button"
-                aria-label="Edit project"
+                aria-label={t("sidebar.editProject")}
                 onClick={() => goProject(project.id)}
                 className="text-muted-foreground hover:text-foreground shrink-0 opacity-0 group-hover:opacity-100"
-                title="Edit project"
+                title={t("sidebar.editProject")}
               >
                 <Settings2 className="size-4" />
               </button>
               <button
                 type="button"
-                aria-label="Delete project"
+                aria-label={t("sidebar.deleteProject")}
                 onClick={() => {
                   void confirmDialog({
-                    title: `Delete project "${project.name}"?`,
-                    description: "Its chats are kept (moved out of the project).",
-                    confirmText: "Delete",
+                    title: tNow("sidebar.deleteProjectTitle", {
+                      name: project.name,
+                    }),
+                    description: tNow("sidebar.deleteProjectDescription"),
+                    confirmText: tNow("common.delete"),
                     destructive: true,
                   }).then((ok) => {
                     if (ok) void removeProject(project.id);
@@ -130,7 +151,7 @@ export function ProjectsPane() {
               <div className="border-sidebar-border ml-3 border-l pl-1">
                 {projectThreads.length === 0 ? (
                   <p className="text-muted-foreground px-2 py-1 text-xs">
-                    No chats yet.
+                    {t("sidebar.noChatsInProject")}
                   </p>
                 ) : (
                   projectThreads.map((t) => (
@@ -139,6 +160,7 @@ export function ProjectsPane() {
                       thread={t}
                       active={t.id === currentId}
                       onSelect={() => selectChat(t.id)}
+                      snippet={snippets.get(t.id)}
                     />
                   ))
                 )}

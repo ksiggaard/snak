@@ -1,12 +1,24 @@
 import { type MouseEvent, useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
 import { Camera, Paperclip, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ModelChooser } from "@/components/chat/ModelChooser";
 import { prepareImage, type PreparedImage } from "@/lib/image";
-import { hideQuick, submitQuick, takeScreenshot, setQuickHeight } from "@/lib/quick";
+import {
+  hideQuick,
+  submitQuick,
+  takeScreenshot,
+  setQuickHeight,
+} from "@/lib/quick";
+import {
+  QUICK_RECENTS_EVENT,
+  cycleDestination,
+  destinationThreadId,
+  type QuickRecent,
+} from "@/lib/quickDestinations";
 import { getSetting } from "@/lib/db";
 import {
   DEFAULT_PROVIDER_KEY,
@@ -16,6 +28,7 @@ import {
 import { usePlugins } from "@/store/plugins";
 import { useModels } from "@/store/models";
 import { useKeys } from "@/store/keys";
+import { useI18n, useT } from "@/store/i18n";
 import { PROVIDERS } from "@/lib/providers";
 import type { Provider } from "@/types/db";
 
@@ -28,12 +41,16 @@ async function screenshotToImage(base64Png: string): Promise<PreparedImage> {
 }
 
 export function QuickInput() {
+  const t = useT();
   const [text, setText] = useState("");
   const [images, setImages] = useState<PreparedImage[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [provider, setProvider] = useState<Provider>(PROVIDERS[0].id);
   const [model, setModel] = useState<string>(PROVIDERS[0].defaultModel);
+  // Destination picker (T31): index 0 = "New chat", 1..n = recent threads.
+  const [recents, setRecents] = useState<QuickRecent[]>([]);
+  const [destIndex, setDestIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -44,6 +61,8 @@ export function QuickInput() {
     void usePlugins.getState().load();
     void useModels.getState().load();
     void useKeys.getState().load();
+    // Bundled language packs apply synchronously; this folds in user packs.
+    void useI18n.getState().loadUserPacks();
     void Promise.all([
       getSetting(DEFAULT_PROVIDER_KEY),
       getSetting(DEFAULT_MODEL_KEY),
@@ -55,6 +74,21 @@ export function QuickInput() {
     });
     return () => {
       active = false;
+    };
+  }, []);
+
+  // Recent destination threads (T31). Rust `show_quick` asks the main window,
+  // which answers by emitting this event to the overlay — so the list refreshes
+  // on every show and this window stays DB-free. Each show is a fresh
+  // interaction, so the selection resets to "New chat" (which also clamps a
+  // selection that pointed at a since-deleted thread).
+  useEffect(() => {
+    const unlisten = listen<QuickRecent[]>(QUICK_RECENTS_EVENT, (e) => {
+      setRecents(e.payload);
+      setDestIndex(0);
+    });
+    return () => {
+      void unlisten.then((fn) => fn());
     };
   }, []);
 
@@ -112,13 +146,20 @@ export function QuickInput() {
     setText("");
     setImages([]);
     setError(null);
+    setDestIndex(0);
     void setQuickHeight(QUICK_MIN_HEIGHT);
   }
 
   async function submit() {
     const trimmed = text.trim();
     if (busy || (!trimmed && images.length === 0)) return;
-    await submitQuick({ text: trimmed, images, provider, model });
+    await submitQuick({
+      text: trimmed,
+      images,
+      provider,
+      model,
+      thread_id: destinationThreadId(recents, destIndex),
+    });
     reset();
   }
 
@@ -138,95 +179,171 @@ export function QuickInput() {
   return (
     <TooltipProvider delayDuration={300}>
       <div className="flex h-screen items-start justify-center p-2">
-      <div
-        ref={panelRef}
-        onMouseDown={startDrag}
-        className="bg-popover text-popover-foreground flex w-full cursor-grab flex-col gap-2 rounded-xl border p-3 shadow-2xl active:cursor-grabbing"
-      >
-        {images.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {images.map((img, i) => (
-              <div key={i} className="relative">
-                <img
-                  src={img.dataUrl}
-                  alt="attachment preview"
-                  className="size-14 rounded-md object-cover"
-                />
-                <button
-                  type="button"
-                  aria-label="Remove image"
-                  onClick={() =>
-                    setImages((prev) => prev.filter((_, j) => j !== i))
-                  }
-                  className="bg-background/80 absolute -top-1.5 -right-1.5 rounded-full border p-0.5"
-                >
-                  <X className="size-3" />
-                </button>
-              </div>
+        <div
+          ref={panelRef}
+          onMouseDown={startDrag}
+          className="bg-popover text-popover-foreground flex w-full cursor-grab flex-col gap-2 rounded-xl border p-3 shadow-2xl active:cursor-grabbing"
+        >
+          {images.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {images.map((img, i) => (
+                <div key={i} className="relative">
+                  <img
+                    src={img.dataUrl}
+                    alt={t("composer.attachmentPreview")}
+                    className="size-14 rounded-md object-cover"
+                  />
+                  <button
+                    type="button"
+                    aria-label={t("composer.removeImage")}
+                    onClick={() =>
+                      setImages((prev) => prev.filter((_, j) => j !== i))
+                    }
+                    className="bg-background/80 absolute -top-1.5 -right-1.5 rounded-full border p-0.5"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {error && <p className="text-destructive px-1 text-xs">{error}</p>}
+
+          <Textarea
+            ref={textareaRef}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onPaste={(e) => {
+              const files = Array.from(e.clipboardData.files);
+              if (files.some((f) => f.type.startsWith("image/"))) {
+                e.preventDefault();
+                void addFiles(files);
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void submit();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                void cancel();
+              } else if (
+                e.key === "Tab" ||
+                (e.ctrlKey && (e.key === "ArrowUp" || e.key === "ArrowDown"))
+              ) {
+                // Cycle the destination without leaving the textarea (T31):
+                // Tab forward, Shift+Tab / Ctrl+Up backward, Ctrl+Down forward.
+                e.preventDefault();
+                const dir = e.shiftKey || e.key === "ArrowUp" ? -1 : 1;
+                setDestIndex((i) => cycleDestination(i, recents.length, dir));
+              }
+            }}
+            placeholder={t("quick.placeholder")}
+            className="max-h-[320px] resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
+            autoFocus
+          />
+
+          {/* Destination chips (T31): New chat + up to 5 recent threads. */}
+          <div
+            className="flex flex-wrap items-center gap-1.5"
+            onMouseDown={startDrag}
+            role="radiogroup"
+            aria-label={t("quick.destination")}
+          >
+            <DestinationChip
+              label={t("quick.newChat")}
+              selected={destIndex === 0}
+              onSelect={() => {
+                setDestIndex(0);
+                textareaRef.current?.focus();
+              }}
+            />
+            {recents.map((r, i) => (
+              <DestinationChip
+                key={r.id}
+                label={r.title}
+                selected={destIndex === i + 1}
+                onSelect={() => {
+                  setDestIndex(i + 1);
+                  textareaRef.current?.focus();
+                }}
+              />
             ))}
           </div>
-        )}
 
-        {error && <p className="text-destructive px-1 text-xs">{error}</p>}
-
-        <Textarea
-          ref={textareaRef}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onPaste={(e) => {
-            const files = Array.from(e.clipboardData.files);
-            if (files.some((f) => f.type.startsWith("image/"))) {
-              e.preventDefault();
-              void addFiles(files);
-            }
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              void submit();
-            } else if (e.key === "Escape") {
-              e.preventDefault();
-              void cancel();
-            }
-          }}
-          placeholder="Ask anything…  (Enter to start a chat, Esc to dismiss)"
-          className="max-h-[320px] resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
-          autoFocus
-        />
-
-        <div className="flex items-center gap-2">
-          <ImagePicker onFiles={addFiles} disabled={busy} />
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Take screenshot"
-            disabled={busy}
-            onClick={() => void screenshot()}
-          >
-            <Camera className="size-4" />
-          </Button>
-          <div
-            className="flex-1 cursor-grab self-stretch active:cursor-grabbing"
-            onMouseDown={startDrag}
-          />
-          <ModelChooser
-            provider={provider}
-            model={model}
-            onSelect={(p, m) => {
-              setProvider(p);
-              setModel(m);
-            }}
-          />
-          <Button
-            onClick={() => void submit()}
-            disabled={busy || (text.trim().length === 0 && images.length === 0)}
-          >
-            Start chat
-          </Button>
+          <div className="flex items-center gap-2">
+            <ImagePicker onFiles={addFiles} disabled={busy} />
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("quick.takeScreenshot")}
+              disabled={busy}
+              onClick={() => void screenshot()}
+            >
+              <Camera className="size-4" />
+            </Button>
+            <div
+              className="flex-1 cursor-grab self-stretch active:cursor-grabbing"
+              onMouseDown={startDrag}
+            />
+            {/* An existing thread keeps its saved provider/model, so the chooser
+              only applies (and shows) when the destination is a new chat. */}
+            {destIndex === 0 && (
+              <ModelChooser
+                provider={provider}
+                model={model}
+                onSelect={(p, m) => {
+                  setProvider(p);
+                  setModel(m);
+                }}
+              />
+            )}
+            <Button
+              onClick={() => void submit()}
+              disabled={
+                busy || (text.trim().length === 0 && images.length === 0)
+              }
+            >
+              {destIndex === 0 ? t("quick.startChat") : t("common.send")}
+            </Button>
+          </div>
         </div>
       </div>
-      </div>
     </TooltipProvider>
+  );
+}
+
+/**
+ * One destination chip (T31). Not focusable (tabIndex -1): keyboard selection
+ * happens from the textarea (Tab / Ctrl+Arrows), so Tab never steals the
+ * user's typing flow; the mouse remains a shortcut.
+ */
+function DestinationChip({
+  label,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      tabIndex={-1}
+      onClick={onSelect}
+      title={label}
+      className={`max-w-40 truncate rounded-full border px-2 py-0.5 text-xs transition-colors ${
+        selected
+          ? "border-primary bg-primary text-primary-foreground"
+          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground bg-transparent"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -237,6 +354,7 @@ function ImagePicker({
   onFiles: (files: Iterable<File>) => void;
   disabled?: boolean;
 }) {
+  const t = useT();
   const ref = useRef<HTMLInputElement>(null);
   return (
     <>
@@ -254,7 +372,7 @@ function ImagePicker({
       <Button
         variant="ghost"
         size="icon"
-        aria-label="Attach image"
+        aria-label={t("composer.attachImage")}
         disabled={disabled}
         onClick={() => ref.current?.click()}
       >

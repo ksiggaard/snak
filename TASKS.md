@@ -181,8 +181,8 @@ test tooling and seed it with meaningful unit tests on pure logic. Follow
 
 ## T5 — KDE/Linux packaging + app branding
 
-- **Status:** blocked
-- **Owner:** WS-A (macOS slice)
+- **Status:** done
+- **Owner:** Claude (orchestrator) — Linux slice
 - **Priority:** P2
 - **Layer:** Tooling / config (Rust bundle) + assets
 - **Depends on:** —
@@ -208,6 +208,18 @@ Tauri placeholders.
   **Still BLOCKED:** producing/verifying the AppImage + `.deb` and confirming the tray, global
   shortcut, and `spectacle -r` on a real KDE session — needs a Linux/KDE machine (dev box is
   macOS). Pick this up on a KDE target.
+- 2026-06-12 (Claude, orchestrator): **Linux packaging slice done on a real KDE box (CachyOS/
+  Arch).** `npm run tauri build` produced `snak_0.1.0_amd64.deb` (8.3 MB) and
+  `snak-0.1.0-1.x86_64.rpm` cleanly; the AppImage step initially failed with
+  `failed to run linuxdeploy` — root cause: linuxdeploy's bundled `strip` (old binutils)
+  can't read the `.relr.dyn` (SHT_RELR) ELF sections emitted by modern Arch toolchains.
+  Workaround (documented upstream): run with **`NO_STRIP=true npm run tauri build`** —
+  produces `snak_0.1.0_amd64.AppImage` (106 MB). No other extra system deps were needed
+  (fuse2 was already present; linuxdeploy is auto-downloaded to `~/.cache/tauri`).
+  **2026-06-12 (later):** Kasper confirmed the packaged AppImage in the live KDE session:
+  tray icon (sharp after switching the embedded tray asset from `icons/32x32.png` to
+  `icons/128x128.png` in `lib.rs` — KDE panels render above 32px), global shortcut
+  (Alt+Space), and `spectacle -r` screenshot capture all work. All acceptance criteria met.
 
 ---
 
@@ -1042,3 +1054,536 @@ popup should be styled.
 
 **Notes:** Builds on the existing usage view and the usage data layer (`src/lib/usage.ts`)
 from T16.
+
+---
+
+# Backlog (from IDEAS.md, 2026-06-12)
+
+Sourced from `IDEAS.md`. Coarse-grained — refine acceptance criteria (and consider a
+design pass) before claiming one.
+
+---
+
+## T28 — Compact a chat (context summarization)
+
+- **Status:** done
+- **Owner:** Agent-T28
+- **Priority:** P2
+- **Layer:** Frontend (store + Composer) + possibly DB (migration)
+- **Depends on:** —
+
+(IDEAS 1.) Like Claude Code's `/compact`: condense a long conversation into a summary so
+the thread can continue without resending the full history each turn. Triggered from an
+icon in the chat input box, next to the attachment button (`src/components/chat/
+Composer.tsx`).
+
+**Acceptance criteria:**
+- A compact icon-button in the Composer's button row (next to attachments), enabled when
+  the current thread has history and no stream is in flight; shows progress while running.
+- Compaction asks the thread's current provider/model to summarize the conversation so
+  far (reusing the existing `chatStream` path), then makes subsequent sends carry
+  `[summary] + messages after the compaction point` instead of the full history
+  (`store/threads.ts` `send()` assembles history today).
+- **Decide and document persistence:** non-destructive is preferred — keep all rows in
+  `messages` for display and store the summary + cutoff marker (e.g. a synthetic message
+  row with a new `kind`/flag via a numbered migration, or a `threads` column) so the UI
+  still shows the full transcript but the API context is compacted. If destructive
+  (replacing old messages), require an explicit confirm.
+- The compaction point is visible in the transcript (e.g. a divider/note row), and
+  compacting twice composes sanely.
+- Works with project/system context (T10/T20): the global/project system messages are
+  not summarized away — only the message history is.
+
+**Notes:**
+- Mind the FTS index (T19): if message rows are deleted/rewritten, the triggers keep
+  `search_fts` in sync; a summary stored as a synthetic message would become searchable —
+  decide if that's acceptable.
+- A slash command `/compact` (T14 built-in) could alias the same action — optional.
+- 2026-06-12 (Agent-T28): Implemented, **non-destructive**. Migration
+  `009_compaction.sql` (version 9 — 008 was taken by the in-flight duration work) adds
+  `messages.kind TEXT NOT NULL DEFAULT 'normal'` (`'normal' | 'summary'`); no rows are
+  ever deleted/rewritten. Compacting inserts one synthetic `role: assistant`,
+  `kind: 'summary'` row at the compaction point.
+- 2026-06-12 (Agent-T28): Pure logic in `src/lib/compaction.ts` (unit-tested in
+  `compaction.test.ts`): `compactHistory(messages)` returns [latest summary injected as
+  a leading **user** turn (safe first-non-system role for all four providers) + messages
+  after it], or the full transcript when never compacted; `buildCompactionRequest`
+  frames that compacted slice (so compacting twice composes) with a system prompt + a
+  closing user instruction, images stripped; `canCompact` requires ≥2 messages after the
+  last compaction point.
+- 2026-06-12 (Agent-T28): Store (`store/threads.ts`): new `compact()` action +
+  `compacting` flag — calls the thread's provider/model via the existing `chatStream`
+  (no streaming placeholder), persists the summary row + its token usage (T16), and
+  reuses busy/error conventions (`busy` is set, so Stop cancels; a cancelled compaction
+  persists nothing). `send()` now assembles API history via `compactHistory(...)`;
+  global/project/skills system messages are unshifted afterwards as before, so they are
+  never summarized away (T10/T20 intact).
+- 2026-06-12 (Agent-T28): UI: Composer gains a `FoldVertical` icon button next to
+  attach (spinner while compacting; enabled only for a saved thread with ≥1 exchange
+  since the last compaction, provider enabled + key present, not busy). `MessageList`
+  renders `kind === 'summary'` rows as a muted "Conversation compacted" divider with the
+  summary text behind a `<details>` disclosure; the full transcript stays visible.
+- 2026-06-12 (Agent-T28): FTS (T19): the migration-004 triggers reference no message
+  column lists, so the new column needs nothing; summary rows are indexed on insert and
+  therefore searchable — accepted (a summary is real conversation content; noted in the
+  migration header).
+- 2026-06-12 (Agent-T28): Verified: `npm run build`, `npm run lint`, `npm test`
+  (220 passed, incl. 13 new compaction tests), `cargo build`, `cargo clippy`
+  (0 warnings), `cargo fmt --check` — all green.
+
+---
+
+## T29 — Incognito chats (purged on app exit)
+
+- **Status:** done
+- **Owner:** Agent-T29
+- **Priority:** P2
+- **Layer:** Frontend + DB (migration) + small Rust touch (exit hook)
+- **Depends on:** —
+
+(IDEAS 2.) An incognito mode for chats: an incognito thread lives only for the current
+app session and is deleted before/when the app closes. Useful for throwaway or sensitive
+conversations.
+
+**Acceptance criteria:**
+- A way to start an incognito chat (e.g. a toggle on "New chat" / an incognito new-chat
+  action in the sidebar and quick overlay), with a clear visual indicator on the thread
+  row + chat view while active.
+- Incognito threads are flagged in the DB (numbered migration, e.g.
+  `threads.ephemeral INTEGER NOT NULL DEFAULT 0`) so they survive *within* a session
+  (thread switching still works) but are purged at end-of-session.
+- **Purge is crash-safe:** delete all `ephemeral` threads (messages + attachments,
+  explicit child deletes like `deleteThread`) on app **startup** (`init()` in
+  `store/threads.ts`) in addition to a best-effort purge on quit — so a crash or kill
+  never leaks an incognito chat to the next session.
+- "App closed" means actual exit, not hide-to-tray (close-to-tray keeps the session
+  alive; tray Quit / `quit_app` / window close with close-to-tray off end it).
+- Incognito threads never become `last_thread_id`, and their FTS rows are removed by the
+  existing delete triggers (verify).
+
+**Notes:**
+- Frontend owns the DB (Stage 1), so the startup purge is the authoritative one; a
+  Rust exit-hook purge would need its own SQLite access — prefer frontend-only.
+- 2026-06-12 (Agent-T29): Migration `010_incognito.sql` (version 10, registered in
+  `migrations()` in `src-tauri/src/lib.rs`): `threads.ephemeral INTEGER NOT NULL
+  DEFAULT 0`. `Thread` type gains `ephemeral`; `createThread` accepts an `ephemeral`
+  flag; new `purgeEphemeralThreads()` in `src/lib/db.ts` deletes all ephemeral threads
+  with explicit child deletes (attachments → usage → messages → threads), mirroring
+  `deleteThread`. FTS verified: the migration-004 `search_fts` delete triggers fire per
+  deleted message/thread row, so index entries are cleaned automatically.
+- 2026-06-12 (Agent-T29): Store (`store/threads.ts`): `startNewChat(opts?: {
+  incognito?: boolean })` sets a new `draftIncognito` flag (reset by plain
+  `startNewChat` and `startNewChatInProject`); the first `send`/`postNote` creates the
+  thread with `ephemeral = 1`. **Crash-safe purge:** `init()` awaits
+  `purgeEphemeralThreads()` FIRST, before listing threads / restoring
+  `last_thread_id`. `last_thread_id` exclusion: `send`/`postNote` skip the write for
+  ephemeral threads, and `selectThread` gates it via the pure, unit-tested
+  `shouldRememberThread()` (unknown thread → remember, preserving pre-T29 behavior).
+- 2026-06-12 (Agent-T29): Quit semantics: tray Quit / File→Quit call `app.exit` in
+  Rust — the frontend cannot intercept those, so the startup purge is the documented
+  guarantee for them (and for crashes/kills). Best-effort quit purge added in
+  `App.tsx` via `onCloseRequested`: registering the JS listener defers the close, so
+  when close-to-tray is OFF we purge then let the window be destroyed; when ON we
+  `preventDefault()` (the Rust handler already hid the window — the JS wrapper would
+  otherwise `destroy()` it and break hide-to-tray), keeping the session and its
+  incognito threads alive.
+- 2026-06-12 (Agent-T29): UI: Ghost icon button next to "New chat" in the sidebar
+  (chats mode); `ThreadRow` shows a Ghost badge + muted italic title with an
+  explanatory tooltip; `ChatView` shows "Incognito — this chat is deleted when the app
+  exits." above the composer for an incognito thread or draft. Incognito threads
+  otherwise behave normally (rename/delete/favorite/switching). Quick overlay
+  (`QuickInput`) incognito path is out of scope per task guidance — not added (sending
+  into an existing incognito thread from the overlay still works and stays ephemeral).
+- 2026-06-12 (Agent-T29): Tests: new `store/threads.incognito.test.ts` (purge-before-
+  list ordering in `init`, `last_thread_id` gating, draft-flag lifecycle,
+  `shouldRememberThread`); `threads.defaultModel.test.ts` mock extended with
+  `purgeEphemeralThreads`. Verified: `npm run build`, `npm run lint`, `npm test`
+  (252 passed), `cargo build`, `cargo clippy`, `cargo fmt --check` — all green.
+
+---
+
+## T30 — Appearance: accent + background color pickers
+
+- **Status:** done
+- **Owner:** Agent-T30-T33
+- **Priority:** P3
+- **Layer:** Frontend
+- **Depends on:** —
+
+(IDEAS 3.) Let the user pick the theme's main (accent) color and background color
+directly from the Appearance settings, without authoring a full T11 theme folder.
+
+**Acceptance criteria:**
+- Color pickers in Settings → Appearance (`src/components/settings/Appearance.tsx`) for
+  at least **accent** (`--primary` family) and **background** (`--background` family),
+  with a reset-to-default per color.
+- Custom colors are applied as CSS-variable overrides (same mechanism as installed theme
+  CSS — e.g. a dedicated `<style>` element like `applyInstalledThemeCss`) and persist in
+  localStorage (synchronous at startup, no flash — mirrors `lib/theme.ts`).
+- Composes sensibly with light/dark and with installed/plugin themes — decide and
+  document precedence (suggested: custom picks override the active theme) and whether a
+  pick applies to both light and dark or is per-mode.
+- Derived tokens stay readable (e.g. `--primary-foreground` contrast when the accent
+  changes) — compute or document limits.
+
+**Notes:**
+- Keep the picker dependency-light (a native `<input type="color">` styled to match may
+  be enough; WebKitGTK support verified).
+- 2026-06-12 (Agent-T30-T33): Implemented. New "Colors" card in `Appearance.tsx`
+  (native `<input type="color">` + per-color Reset, no new deps); pure helpers +
+  persistence in `src/lib/appearance.ts` (unit-tested, `appearance.test.ts`), state in
+  `src/store/appearance.ts` (`useAppearance`).
+- 2026-06-12: **Decisions** — (1) Picks are **per-mode**: a pick edits whichever of
+  light/dark is currently active and is stored separately for each (one localStorage key
+  `custom-colors`, `{ light: {…}, dark: {…} }`). (2) **Precedence:** custom picks
+  override installed/plugin themes — overrides are emitted into
+  `<style id="custom-colors">` with doubled-specificity scopes
+  (`:root:not(.dark), body:not(.dark)` / `:root.dark, body.dark`), which beat a theme's
+  `:root`/`.dark` rules regardless of style-element order (body mirrored for the
+  WebKitGTK portal quirk). (3) **Contrast:** `--primary-foreground` (and `--foreground`
+  for background picks) is computed from WCAG relative luminance → white or near-black
+  (`contrastForeground`, unit-tested). Hex values are valid CSS var values since all
+  consumers use `var()` (Tailwind v4 `--color-* : var(--*)` mapping).
+- 2026-06-12: **Documented limits** — only `--primary`/`--background` (+ computed
+  foregrounds) are overridden; derived surfaces (`--card`, `--muted`, `--sidebar`, …)
+  keep theme values. Picker seed colors when unset are sRGB approximations of the
+  built-in palette (a color input can't display oklch), so the seed may not match an
+  installed theme until a pick is made. Startup apply is module-level in
+  `store/appearance.ts` (side-effect import in `App.tsx`), before first paint — no
+  flash. Verified: `npm run build`, `npm run lint`, `npm test` (243 passed) all green.
+
+---
+
+## T31 — Quick-input overlay: choose destination thread
+
+- **Status:** done
+- **Owner:** Agent-T31
+- **Priority:** P2
+- **Layer:** Frontend (overlay + App handler) + small Rust touch (payload/event)
+- **Depends on:** —
+
+(IDEAS 4.) When the global-shortcut overlay (`QuickInput`) opens, let the user choose
+where the message goes: default **new thread** (current behavior), or one of the **5 most
+recent chats**.
+
+**Acceptance criteria:**
+- The overlay shows a destination picker (compact — e.g. a row of chips or a small
+  listbox navigable with arrow keys without leaving the input), defaulting to "New chat"
+  and listing the 5 most recently updated threads by title.
+- Submitting routes correctly: new thread keeps today's `startNewChat()` + `send(...)`
+  path; an existing thread selects it (`selectThread`) and sends into it with its saved
+  provider/model.
+- The overlay still never touches the DB — get recents to it another way (e.g. Rust's
+  `show_quick` emits an event the main window answers with the recent-thread list over
+  an event to the `quick` window, or main pushes the list whenever threads change).
+  Document the choice. `submit_quick`'s payload (`QuickPayload`) gains an optional
+  `thread_id`; `App`'s `quick-submit` listener branches on it.
+- Works when there are fewer than 5 threads (or none), and a recent that was deleted
+  mid-session falls back to "New chat" gracefully.
+
+**Notes:**
+- Default shortcut is `Alt+Space` (user-customizable — Ctrl+Space in the idea is just a
+  rebinding); behavior must not depend on the specific accelerator.
+- Keyboard-first: the overlay is a speed feature — picking a destination must not cost
+  the user their typing flow (e.g. Tab cycles destinations, Enter still sends).
+- 2026-06-12 (Agent-T31): **Recents delivery — request/answer per show** (chosen over
+  push-on-change to avoid emitting to a hidden window on every thread update): Rust
+  `show_quick` emits `quick-recents-request` to `main`; App's quick-submit effect answers
+  by `emitTo("quick", "quick-recents", recentDestinations(threads))` from the in-memory
+  store (no DB query; overlay stays DB-free). Event names + pure helpers
+  (`recentDestinations` sort/slice, `cycleDestination`, `destinationThreadId`) in new
+  `src/lib/quickDestinations.ts`, 10 Vitest cases in `quickDestinations.test.ts`.
+- 2026-06-12 (Agent-T31): Overlay (`QuickInput.tsx`): chip row under the textarea —
+  "New chat" (default) + up to 5 recent titles (truncated, radiogroup semantics).
+  Tab / Shift+Tab / Ctrl+Up/Down cycles chips without leaving the textarea (chips are
+  `tabIndex=-1`; click also selects); Enter still sends; selection resets to "New chat"
+  on each show (also handles a recents list that shrank). ModelChooser + "Start chat"
+  label only show for the new-chat destination (an existing thread keeps its saved
+  provider/model).
+- 2026-06-12 (Agent-T31): `QuickPayload` gained optional `thread_id` (snake_case like
+  `media_type`; Rust `submit_quick` forwards the payload as opaque `serde_json::Value`,
+  so no Rust struct change). App's `quick-submit` listener branches: id present **and**
+  still in the store → `selectThread(id)` then `send(...)`; absent/stale → unchanged
+  `startNewChat()` + draft provider/model path. No capability edits needed —
+  `core:default` already includes `core:event:default` (`allow-emit-to`, verified in
+  gen/schemas). Verified: `npm run build`, `npm run lint` (own files; concurrent agents'
+  in-flight files caused transient unrelated errors), `npm test` (220 incl. 10 new),
+  `cargo build`/`clippy` clean, `cargo fmt --check` clean for `quick.rs` (lib.rs diff
+  belongs to the compaction task).
+
+---
+
+## T32 — Language packs (i18n), bundled + user-installable
+
+- **Status:** done
+- **Owner:** Agent-T32
+- **Priority:** P3 (large — touches every UI string)
+- **Layer:** Frontend (i18n layer) + Rust (pack discovery) + plugins
+- **Depends on:** T12 (category/registry alignment)
+
+(IDEAS 5.) Localize the UI via language packs: ship **English, German, French, Polish,
+Spanish, and Danish** out of the box, with packs as plain JSON files in a known folder so
+anyone can add their own language without code changes.
+
+**Acceptance criteria:**
+- An i18n layer for the frontend: UI strings externalized to keyed message catalogs with
+  an English fallback for missing keys. (Pick and document the mechanism — a small
+  homegrown `t(key)` + Zustand store is fine; avoid heavyweight deps if possible.)
+- Pack format: one JSON file per language (`<bcp47>.json`, e.g. `de.json`) with
+  `{ name, code, strings: { key: text } }`. Bundled packs for en/de/fr/pl/es/da ship with
+  the app; user packs are discovered from an app-data `…/languages/` folder (mirror the
+  T11 themes-folder loader: Rust `list_languages` command + validation, bad files
+  skipped). Built-in packs could alternatively be `language`-category T12 plugin
+  contributions — align with the declarative plugin model and document the decision.
+- A language selector in Settings (persisted; default = system locale when a pack
+  matches, else English). Switching applies live or after reload — decide and document.
+- Untranslated keys render the English string, never the raw key. A `docs/` note explains
+  how to author and install a pack.
+
+**Notes:**
+- The big cost is sweeping every component for hardcoded strings — consider landing the
+  i18n layer + settings + 2 languages first, then a follow-up sweep task for full
+  coverage. Date/number formatting via `Intl` with the active locale where it matters.
+- 2026-06-12 (Agent-T32): **Mechanism** — homegrown, dependency-free. Typed English
+  catalog in `src/lib/i18n.ts` (`const en = {...} as const`; `MessageKey = keyof typeof
+  en`, so `tsc` catches key typos across the sweep), `translate`/`interpolate`
+  (`{name}`-style params) and `translatePlural` (CLDR categories via
+  `Intl.PluralRules`, so Polish few/many work) as pure unit-tested fns; live state in
+  `src/store/i18n.ts` (`useI18n` + `t`/`tp` imperative and `useT`/`useTp`/
+  `useIntlLocale` hooks). **Switching applies live** — components subscribe to the
+  store's `strings` via `useT()`, so a locale change re-renders everything, no reload.
+  Missing keys fall back to the English catalog, never the raw key.
+- 2026-06-12: **Packs** — `{ name, code, strings }` as `<bcp47>.json`. Bundled en/de/fr/
+  pl/es/da in `src/locales/` (static imports); `en.json` is deliberately *thin*
+  (`strings: {}`) — English resolves from the TS catalog so the two can't drift; the
+  other five are full hand-written translations (~250 keys each).
+  `src/lib/locales.test.ts` enforces pack validity, 100% key coverage for the five
+  translations, no orphan keys (typo guard, plural-category extras excepted), and
+  placeholder preservation. User packs: app-data `…/languages/*.json` via Rust
+  `list_languages` + `languages_directory` (`src-tauri/src/commands/languages.rs`,
+  mirrors the T11 themes loader; pure `parse_language_pack`/`validate_language_pack`
+  with 8 `cargo test`s; bad files skipped). A user pack with a bundled code merges
+  per-key on top of the bundled strings (partial fix-up packs work).
+- 2026-06-12: **Decisions** — (1) *No `language` plugin category*: packs are
+  declarative text-only data files in a dedicated folder, the T11 parallel-loader
+  precedent (documented in `docs/i18n.md` + the Rust module header). (2) *Persistence
+  in localStorage* (key `locale`), like the theme — synchronous at startup, no flash,
+  no migration needed; default = system locale by primary-subtag match
+  (`matchLocale`), else English. (3) Selector = new **Language** card
+  (`src/components/settings/Language.tsx`) + `settings.nav.language` section in
+  SettingsView (list packs, Active/Use, Refresh, Show languages folder). The quick
+  window loads user packs in its own init (bundled apply synchronously there too).
+- 2026-06-12: **Sweep coverage** — externalized: TitleBar (incl. window controls +
+  theme menu), MenuBar, sidebar (Sidebar/ChatsPane/ProjectsPane/SidebarModeSwitch/
+  ThreadRow incl. incognito + favorites + delete confirms), ChatView, MessageList
+  (compaction divider, tool chips, you/ai gutter, meta), Composer (placeholder, gates,
+  palette badge, terminal confirm flow, attach/compact/canvas/stop/send), Canvas,
+  ModelChooser, QuickInput (placeholder, destination chips, screenshot), SearchOverlay
+  (incl. pluralized match counts), UsageView (summary/heatmap/table), ProjectView,
+  ConfirmDialog defaults, all settings cards (API keys, Default Model, Models, Memory,
+  Shortcut, Close-to-tray, Appearance: title bar/themes/colors/typography/chat
+  style/chat list, MCP, Skills, Plugins, Language), store-created thread titles
+  (`deriveTitle` fallback/Image/Untitled via `t`). `formatThreadDate`/`relativeTime`
+  now take locale + label templates (pure, parameterized; callers pass
+  `useIntlLocale()` + `timeLabels()` — `intlLocale` prefers the *system* regional
+  variant when its primary subtag matches the active pack).
+  **Not translated (boundary, documented in docs/i18n.md):** chat/model content,
+  provider + font proper names, the Rust-built native menu/tray labels (would need
+  strings pushed over IPC at menu build), the ErrorBoundary crash screen
+  (developer-facing), slash-command palette descriptions (incl. plugin-contributed
+  ones), `formatDuration` ("4.2s"), and backend-surfaced error strings
+  (`friendlyError`).
+- 2026-06-12: **Verified** — `npm run build`, `npm run lint`, `npm test` (307 passed,
+  incl. 30 new i18n/locales/store tests), `cargo build`, `cargo clippy`,
+  `cargo fmt --check`, `cargo test` (54 passed) all green. Note: `npm run
+  format:check` has pre-existing failures from other in-flight work (e.g.
+  `lib/mcp.ts`, `ErrorBoundary.tsx`, `UsageView.tsx` were unformatted at HEAD);
+  all files this task created or touched are Prettier-clean.
+
+---
+
+## T33 — Appearance: font family + size for UI and chat
+
+- **Status:** done
+- **Owner:** Agent-T30-T33
+- **Priority:** P3
+- **Layer:** Frontend
+- **Depends on:** —
+
+(IDEAS 6.) Let the user choose fonts and font sizes from the Appearance panel — separately
+for the **app UI** and for **chat content** (messages), since reading prose and scanning
+chrome have different needs.
+
+**Acceptance criteria:**
+- Settings → Appearance gains a typography section with: UI font family, chat font
+  family, UI font size, and chat font size (sizes as a small step range, e.g. S/M/L/XL or
+  a px slider with sane bounds), each with reset-to-default.
+- Font family options: the bundled default plus system/common fonts. Decide and document
+  the source — a curated list (safe) vs. enumerating installed system fonts (needs a Rust
+  command; `font-kit`/`fontdb` or platform tooling). A free-text family input is an
+  acceptable escape hatch.
+- Applied via CSS variables (e.g. `--font-sans` for UI, a new `--font-chat` consumed by
+  `MessageList`/`Markdown` content, and a root font-size token) so it composes with
+  themes (T11) and light/dark; persisted in localStorage and applied synchronously at
+  startup, no flash (mirror `lib/theme.ts`).
+- Chat font settings affect message rendering (including Markdown body, but **not** code
+  blocks' monospace) without breaking layout; UI size changes keep the title bar,
+  sidebar, and composer usable at min/max.
+
+**Notes:**
+- Mind WebKitGTK font rendering quirks on Linux; verify the chosen mechanism there.
+- Code blocks keep their mono stack — only consider a separate mono override if cheap.
+- 2026-06-12 (Agent-T30-T33): Implemented. New "Typography" card in `Appearance.tsx`
+  (UI font, chat font, UI size, chat size — each with Reset); CSS builders/persistence
+  in `src/lib/appearance.ts` (unit-tested), state in `src/store/appearance.ts`, applied
+  via `<style id="custom-typography">` (separate element from the T30 colors one).
+- 2026-06-12: **Decisions** — (1) Font source is a **curated list** (`FONT_OPTIONS`:
+  System default, Inter, Roboto, Open Sans, Noto Sans, Lato, Source Sans 3, Georgia,
+  Noto Serif, system serif, JetBrains Mono, system monospace) + a **free-text input**
+  ("Custom…") as the escape hatch — no Rust font enumeration. Free text is sanitized
+  (`cssFontFamily`: strips CSS-breaking chars, quotes names, appends a generic
+  fallback). (2) Sizes are **px sliders**: UI 13–18px (default 16) applied as the root
+  `html { font-size }` so all rem-based sizing scales; chat 14–20px (default 14).
+  (3) UI family sets `--font-sans` **and** explicit `font-family` on
+  `html, body, .font-sans, .font-heading` — required because Tailwind v4's
+  `@theme inline` inlines token values into utilities, so overriding the variable alone
+  wouldn't restyle them.
+- 2026-06-12: Chat font/size apply through new tokens `--font-chat` /
+  `--chat-font-size`, consumed by a `.chat-content` class added (one-line touch) to the
+  message-content wrapper in `MessageList.tsx` — inert when nothing is customized, so
+  the upcoming MessageList restyle (T34) only needs to keep that class on the content
+  wrapper. Inner `text-sm` utilities are neutralized to `inherit` (and
+  `text-base`/`text-lg` markdown headings remapped to em) so the pick reaches the
+  prose; code blocks keep `font-mono` (own declaration wins over inheritance).
+  Persisted in localStorage key `custom-typography`; module-level startup apply (same
+  path as T30), no flash. Verified: `npm run build`, `npm run lint`, `npm test`
+  (243 passed, incl. 23 new appearance tests) all green.
+
+---
+
+## T34 — Chat layout styles (bubbles & friends)
+
+- **Status:** done
+- **Owner:** Agent-T34-T35
+- **Priority:** P3
+- **Layer:** Frontend
+- **Depends on:** —
+
+(IDEAS 7.) An Appearance option choosing how messages render in the chat. The current
+style stays the default; add a few distinct, genuinely useful alternatives.
+
+**Acceptance criteria:**
+- An Appearance "Chat style" selector with (at least) these modes:
+  - **Default** — the current flat full-width layout, unchanged.
+  - **Bubbles** — messenger-style: user messages right-aligned in accent-tinted bubbles,
+    assistant left-aligned in muted bubbles, capped bubble width.
+  - **Compact** — dense, IRC-like: minimal padding, small role prefix on one line with
+    the text, tight markdown spacing; for small windows / long sessions.
+  - **Document** — distraction-light reading mode: user prompts render as section
+    headings/quotes, assistant prose flows full-width like an article.
+- Implemented as a presentation concern only in `src/components/chat/MessageList.tsx`
+  (+ a wrapper class consumed by styles) — no store/DB/message-shape changes; streaming,
+  images, code blocks, copy buttons, and the scroll-to-search-hit flash (T19) work
+  identically in every mode.
+- Persisted like the other appearance prefs (localStorage, synchronous at startup);
+  switching modes re-renders live without losing scroll position (best-effort).
+- Each mode is usable in light + dark and with installed themes (use tokens, not
+  hardcoded colors).
+
+**Notes:**
+- Keep modes few and distinct — a mode should change reading ergonomics, not just
+  decoration. Bubble mode interacts with wide content (tables/code): let such blocks
+  break out of the capped width rather than squish.
+- 2026-06-12 (Agent-T34-T35): Implemented. Pref `chatStyle`
+  (default/bubbles/compact/document) lives with the other appearance prefs:
+  persistence helpers in `src/lib/appearance.ts` (localStorage key `chat-style`,
+  absent/unknown → "default", unit-tested), state + setter on `useAppearance`
+  (`src/store/appearance.ts`, seeded synchronously — no flash, no CSS injection
+  needed since it's a pure render-mode pref). Appearance gains a "Chat style"
+  card (ToggleGroup) in `settings/Appearance.tsx`.
+- 2026-06-12: `MessageList.tsx` restyle is presentation-only: the non-summary
+  branch moved into a `ChatMessage` helper (same ref/id wiring for the T19
+  scroll/flash, same images/tool-chips/Markdown/meta children in every mode,
+  `chat-content` T33 font hook kept on the content wrapper; the T28 summary
+  divider renders identically in all modes). Per-mode classes via
+  `styleClasses()`; the scroll container gets a `chat-style-<mode>` hook class.
+  **Bubbles:** user right in `bg-primary/10`, assistant left in `bg-muted`, both
+  capped at 75%; an unlayered `:has(pre, table)` rule in `index.css` lets an
+  assistant bubble with code/tables break out to full width instead of
+  squishing. **Compact:** gap-1/p-2 container, fixed-width "you"/"ai" gutter
+  prefix, Markdown margins tightened by `.chat-style-compact` rules in
+  `index.css` targeting the my-/mt-/mb- utility classes (same trick as T33's
+  `:where(.text-sm)` overrides — unlayered beats Tailwind's layered utilities).
+  **Document:** user prompts as full-width `border-l-2 border-primary/60
+  text-base font-semibold` section headings, assistant prose full-width, gap-6.
+  All colors are tokens (`bg-primary/10`, `bg-muted`, `border-primary/60`), so
+  modes follow light/dark + installed themes. Mode switches don't touch the
+  scroll effect's deps, so scroll position survives (best-effort).
+  Verified: `npm run build`, `npm run lint`, `npm test` (274 passed) green.
+
+---
+
+## T35 — Sidebar chat-list row styles
+
+- **Status:** done
+- **Owner:** Agent-T34-T35
+- **Priority:** P3
+- **Layer:** Frontend
+- **Depends on:** —
+
+(IDEAS 8.) Customize what a thread row in the sidebar chat list shows. Default stays
+title-only; offer richer variants for users who want more context per row.
+
+**Acceptance criteria:**
+- An Appearance "Chat list" selector with 4 modes:
+  - **Title** (default) — exactly today's single-line row.
+  - **Title + date** — second line with the thread's last-activity date (relative for
+    recent, e.g. "2h ago", absolute beyond a week; `Intl`-formatted).
+  - **Detailed** — title, date, and the thread's provider/model (resolve the model id to
+    its configured label where possible).
+  - **Preview** — title + a one-line snippet of the last message (truncated, no markdown
+    artifacts — strip/flatten formatting).
+- Applies to `ThreadRow`/`ChatsPane` (and the Favorites group) without breaking
+  double-click-rename, the star toggle, delete, or selection highlighting; row height
+  adapts per mode and the list stays smooth with many threads.
+- Preview mode sources the last message efficiently — one query for the visible list
+  (e.g. a `lastMessage` join helper in `src/lib/db.ts`), not per-row queries; incognito
+  (T29, if landed) and empty threads degrade gracefully.
+- Persisted like the other appearance prefs (localStorage); the picker shows a small
+  inline preview of each style.
+
+**Notes:**
+- Composes with T24 (Chats/Projects panes) — Projects mode's thread lists should follow
+  the same row style for consistency.
+- 2026-06-12 (Agent-T34-T35): Implemented. Pref `chatListStyle`
+  (title/title-date/detailed/preview) follows the same pattern as T34: helpers
+  in `src/lib/appearance.ts` (localStorage key `chat-list-style`, default
+  "title", unit-tested), state on `useAppearance`. `ThreadRow.tsx` renders an
+  optional second line under the title (title button became a two-line column;
+  rename input, star, delete, selection highlight, and the T29 Ghost
+  badge/italic are untouched; row height adapts naturally). Date via new pure
+  `formatThreadDate(updatedAt, now)` in `src/lib/time.ts` (relative `relativeTime`
+  under 7 days, `Intl.DateTimeFormat` absolute beyond — year only when it
+  differs; unit-tested incl. the 7-day boundary). Detailed mode resolves
+  provider/model labels via the existing `currentModelLabel`
+  (`lib/modelOptions.ts`) against `useProviders()` + the `useModels` store
+  (falls back to raw ids).
+- 2026-06-12: **Preview sourcing** — new `lastMessages(threadIds)` in
+  `src/lib/db.ts`: ONE query joining `messages` on a `MAX(rowid) GROUP BY
+  thread_id` subquery filtered to `kind = 'normal'` (decision: T28 summary rows
+  are skipped — the last real turn is the useful preview; rowid is used because
+  message ids are random UUIDs and created_at has only second resolution).
+  Fetched by the shared `useThreadSnippets(threads, enabled)` hook
+  (`src/components/sidebar/useThreadSnippets.ts`) — runs ONLY when the style is
+  "preview", refreshes when the store's thread list reloads, best-effort on
+  error; used by both `ChatsPane` (incl. Favorites group) and `ProjectsPane`
+  (`ProjectView` has no thread list, so the two panes cover all renders). The
+  snippet is flattened by new pure `flattenSnippet` in `src/lib/markdown.ts`
+  (regex flattener: strips fences/headings/lists/quotes/table chrome/inline
+  markers, keeps code + link text, collapses to one line, ellipsis-truncates;
+  unit-tested). Empty threads get no row → title-only; incognito threads behave
+  normally until purge.
+- 2026-06-12: Appearance "Chat list" card shows the four options as buttons
+  with a tiny static mock row each (`ChatListRowMock` in
+  `settings/Appearance.tsx`). Verified: `npm run build`, `npm run lint`,
+  `npm test` (274 passed, incl. 22 new T34/T35 tests) green.

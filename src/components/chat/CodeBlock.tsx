@@ -3,6 +3,7 @@ import { Check, Copy, SquareTerminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { codeText, languageFromClassName } from "@/lib/markdown";
 import { isShellLanguage, openInTerminal } from "@/lib/terminal";
+import { useT } from "@/store/i18n";
 
 interface CodeBlockProps {
   className?: string;
@@ -19,6 +20,7 @@ interface CodeBlockProps {
  * match on `data-language` to decide whether to offer its action.
  */
 export function CodeBlock({ className, children }: CodeBlockProps) {
+  const t = useT();
   const language = languageFromClassName(className);
   const text = codeText(children);
   const [copied, setCopied] = useState(false);
@@ -56,26 +58,26 @@ export function CodeBlock({ className, children }: CodeBlockProps) {
             <button
               type="button"
               onClick={onOpenInTerminal}
-              aria-label="Open in terminal"
-              title="Open in terminal (staged, not run — review and press Enter)"
+              aria-label={t("chat.openInTerminal")}
+              title={t("chat.openInTerminalTitle")}
               className="hover:text-foreground inline-flex items-center gap-1 transition-colors"
             >
-              <SquareTerminal className="size-3" /> Open in terminal
+              <SquareTerminal className="size-3" /> {t("chat.openInTerminal")}
             </button>
           )}
           <button
             type="button"
             onClick={onCopy}
-            aria-label="Copy code"
+            aria-label={t("chat.copyCode")}
             className="hover:text-foreground inline-flex items-center gap-1 transition-colors"
           >
             {copied ? (
               <>
-                <Check className="size-3" /> Copied
+                <Check className="size-3" /> {t("chat.copied")}
               </>
             ) : (
               <>
-                <Copy className="size-3" /> Copy
+                <Copy className="size-3" /> {t("chat.copy")}
               </>
             )}
           </button>

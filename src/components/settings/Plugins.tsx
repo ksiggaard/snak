@@ -9,14 +9,24 @@ import {
 } from "@/components/ui/card";
 import { usePlugins } from "@/store/plugins";
 import { confirmDialog } from "@/store/confirm";
+import { t as tNow, useT, type MessageKey } from "@/store/i18n";
 import {
-  CATEGORY_LABELS,
   PLUGIN_CATEGORIES,
   type PluginCategory,
   type PluginInfo,
 } from "@/types/plugins";
 
+/** i18n keys for the plugin category headings (replaces `CATEGORY_LABELS`
+ *  at this render site so they translate live). */
+const CATEGORY_KEYS: Record<PluginCategory, MessageKey> = {
+  provider: "plugins.category.provider",
+  theme: "plugins.category.theme",
+  skill: "plugins.category.skill",
+  "slash-command": "plugins.category.slashCommand",
+};
+
 function PluginRow({ p }: { p: PluginInfo }) {
+  const t = useT();
   const setEnabled = usePlugins((s) => s.setEnabled);
   const uninstall = usePlugins((s) => s.uninstall);
   const { id, name, version, description, author } = p.manifest;
@@ -29,7 +39,7 @@ function PluginRow({ p }: { p: PluginInfo }) {
           <span className="text-muted-foreground text-xs">v{version}</span>
           {p.source === "builtin" && (
             <span className="text-muted-foreground rounded border px-1 text-[10px] uppercase">
-              built-in
+              {t("common.builtIn")}
             </span>
           )}
         </div>
@@ -37,7 +47,9 @@ function PluginRow({ p }: { p: PluginInfo }) {
           <span className="text-muted-foreground text-xs">{description}</span>
         )}
         {author && (
-          <span className="text-muted-foreground text-[11px]">by {author}</span>
+          <span className="text-muted-foreground text-[11px]">
+            {t("common.byAuthor", { author })}
+          </span>
         )}
       </div>
       <div className="flex shrink-0 items-center gap-2">
@@ -46,7 +58,7 @@ function PluginRow({ p }: { p: PluginInfo }) {
           variant={p.enabled ? "default" : "outline"}
           onClick={() => void setEnabled(id, !p.enabled)}
         >
-          {p.enabled ? "Enabled" : "Disabled"}
+          {p.enabled ? t("common.enabled") : t("common.disabled")}
         </Button>
         {p.source === "user" && (
           <Button
@@ -54,15 +66,15 @@ function PluginRow({ p }: { p: PluginInfo }) {
             variant="outline"
             onClick={() => {
               void confirmDialog({
-                title: `Uninstall "${name}"?`,
-                confirmText: "Uninstall",
+                title: tNow("plugins.uninstallTitle", { name }),
+                confirmText: tNow("common.uninstall"),
                 destructive: true,
               }).then((ok) => {
                 if (ok) void uninstall(id);
               });
             }}
           >
-            Uninstall
+            {t("common.uninstall")}
           </Button>
         )}
       </div>
@@ -71,6 +83,7 @@ function PluginRow({ p }: { p: PluginInfo }) {
 }
 
 export function Plugins() {
+  const t = useT();
   const plugins = usePlugins((s) => s.plugins);
   const loaded = usePlugins((s) => s.loaded);
   const error = usePlugins((s) => s.error);
@@ -86,27 +99,28 @@ export function Plugins() {
   return (
     <Card className="w-full max-w-lg">
       <CardHeader>
-        <CardTitle>Plugins</CardTitle>
-        <CardDescription>
-          Extend the app with providers, themes, skills, and slash commands.
-          Built-in plugins ship with the app and can be disabled but not
-          removed. User plugins live in the app data <code>plugins/</code>{" "}
-          folder.
-        </CardDescription>
+        <CardTitle>{t("plugins.title")}</CardTitle>
+        <CardDescription>{t("plugins.description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
-        {!loaded && <p className="text-muted-foreground text-sm">Loading…</p>}
+        {!loaded && (
+          <p className="text-muted-foreground text-sm">{t("common.loading")}</p>
+        )}
         {loaded &&
           PLUGIN_CATEGORIES.map((cat) => {
             const items = byCategory(cat);
             return (
               <div key={cat} className="flex flex-col gap-1">
                 <h3 className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">
-                  {CATEGORY_LABELS[cat]}
+                  {t(CATEGORY_KEYS[cat])}
                 </h3>
                 {items.length === 0 ? (
                   <p className="text-muted-foreground text-sm">
-                    No {CATEGORY_LABELS[cat].toLowerCase()} installed.
+                    {/* The category label is passed untransformed — casing
+                        rules differ per language (German capitalizes nouns). */}
+                    {t("plugins.noneInCategory", {
+                      category: t(CATEGORY_KEYS[cat]),
+                    })}
                   </p>
                 ) : (
                   <div className="flex flex-col">

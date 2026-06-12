@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // here (the store imports them but these tests don't exercise those paths).
 vi.mock("@/lib/db", () => ({
   listThreads: vi.fn(async () => []),
+  purgeEphemeralThreads: vi.fn(async () => {}),
   getSetting: vi.fn(async (key: string) =>
     key === "default_provider"
       ? "openai"

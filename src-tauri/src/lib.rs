@@ -1,5 +1,6 @@
 mod commands;
 mod mcp;
+mod menu;
 mod plugins;
 mod providers;
 
@@ -107,6 +108,19 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/008_message_duration.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 9,
+            description:
+                "compaction: messages.kind ('normal' | 'summary') marking compaction points",
+            sql: include_str!("../migrations/009_compaction.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 10,
+            description: "incognito: threads.ephemeral flag for session-only chats (T29)",
+            sql: include_str!("../migrations/010_incognito.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -146,10 +160,15 @@ pub fn run() {
             let _ = app.global_shortcut().register(DEFAULT_SHORTCUT);
 
             // Remove the OS title bar on all platforms so the app renders its
-            // own compact one.
+            // own compact one (the default). If the user saved the "native"
+            // title-bar preference, the frontend re-enables decorations on
+            // startup (see the effect in App.tsx).
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_decorations(false);
             }
+
+            // Native application menu (macOS menu bar / Linux global menu).
+            menu::install(app)?;
 
             // System tray: icon + menu (Show/Hide, Quit) and click-to-toggle.
             let show_hide = MenuItem::with_id(app, "show_hide", "Show / Hide", true, None::<&str>)?;
@@ -158,8 +177,10 @@ pub fn run() {
 
             // Embed the icon at compile time so it's always available on Linux
             // (default_window_icon() can return None in dev mode on Linux).
+            // 128px source: KDE panels render trays above 32px (panel size ×
+            // display scale), and upscaling a 32px pixmap looks blurry.
             TrayIconBuilder::new()
-                .icon(tauri::include_image!("icons/32x32.png"))
+                .icon(tauri::include_image!("icons/128x128.png"))
                 .icon_as_template(false)
                 .tooltip("snak")
                 .menu(&menu)
@@ -183,6 +204,7 @@ pub fn run() {
 
             Ok(())
         })
+        .on_menu_event(menu::on_menu_event)
         .on_window_event(|window, event| {
             // Close-to-tray: when enabled (default), closing `main` hides it so
             // the app keeps running for the global shortcut. Tray "Quit" calls
@@ -211,7 +233,11 @@ pub fn run() {
             commands::terminal::open_in_terminal,
             commands::themes::list_themes,
             commands::themes::themes_directory,
+            commands::languages::list_languages,
+            commands::languages::languages_directory,
             set_close_to_tray,
+            menu::set_menu_visible,
+            menu::quit_app,
             plugins::list_plugins,
             plugins::set_plugin_enabled,
             plugins::uninstall_plugin,

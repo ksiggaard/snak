@@ -2,17 +2,24 @@ import { useThreads } from "@/store/threads";
 import { useProjects } from "@/store/projects";
 import { useSearch } from "@/store/search";
 import { useView } from "@/store/view";
+import { useAppearance } from "@/store/appearance";
+import { useT } from "@/store/i18n";
 import { ThreadRow } from "./ThreadRow";
+import { useThreadSnippets } from "./useThreadSnippets";
 
 /** Chats mode (T24): a flat list of all threads — project-less and in-project
  *  alike — with a Favorites group (T23) pinned on top. */
 export function ChatsPane() {
+  const t = useT();
   const threads = useThreads((s) => s.threads);
   const currentId = useThreads((s) => s.currentThreadId);
   const selectThread = useThreads((s) => s.selectThread);
   const closeProject = useProjects((s) => s.close);
   const clearSearch = useSearch((s) => s.clear);
   const showChat = useView((s) => s.showChat);
+  const listStyle = useAppearance((s) => s.chatListStyle);
+  // One query for the whole visible list, only in "preview" mode (T35).
+  const snippets = useThreadSnippets(threads, listStyle === "preview");
 
   // Selecting a chat returns the main pane to the chat view (clear search,
   // close any open project, leave settings/usage).
@@ -26,7 +33,7 @@ export function ChatsPane() {
   if (threads.length === 0) {
     return (
       <p className="text-muted-foreground px-2 py-4 text-xs">
-        No conversations yet.
+        {t("sidebar.noConversations")}
       </p>
     );
   }
@@ -41,7 +48,7 @@ export function ChatsPane() {
       {favorites.length > 0 && (
         <section>
           <p className="text-muted-foreground px-2 py-1 text-xs font-medium">
-            Favorites
+            {t("sidebar.favorites")}
           </p>
           {favorites.map((t) => (
             <ThreadRow
@@ -49,6 +56,7 @@ export function ChatsPane() {
               thread={t}
               active={t.id === currentId}
               onSelect={() => select(t.id)}
+              snippet={snippets.get(t.id)}
             />
           ))}
         </section>
@@ -56,7 +64,7 @@ export function ChatsPane() {
       <section>
         {favorites.length > 0 && rest.length > 0 && (
           <p className="text-muted-foreground px-2 py-1 text-xs font-medium">
-            All chats
+            {t("sidebar.allChats")}
           </p>
         )}
         {rest.map((t) => (
@@ -65,6 +73,7 @@ export function ChatsPane() {
             thread={t}
             active={t.id === currentId}
             onSelect={() => select(t.id)}
+            snippet={snippets.get(t.id)}
           />
         ))}
       </section>

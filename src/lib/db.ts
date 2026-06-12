@@ -4,6 +4,7 @@ import type {
   Attachment,
   AttachmentKind,
   Message,
+  MessageKind,
   Model,
   Project,
   ProjectFile,
@@ -41,18 +42,21 @@ export async function createThread(input: {
   title?: string;
   /** Optional project to create the thread inside. */
   projectId?: string | null;
+  /** Incognito (T29): session-only — purged on the next app launch. */
+  ephemeral?: boolean;
 }): Promise<Thread> {
   const db = await getDb();
   const id = newId();
   await db.execute(
-    `INSERT INTO threads (id, title, provider, model, project_id)
-     VALUES ($1, $2, $3, $4, $5)`,
+    `INSERT INTO threads (id, title, provider, model, project_id, ephemeral)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
     [
       id,
       input.title ?? "New chat",
       input.provider,
       input.model,
       input.projectId ?? null,
+      input.ephemeral ? 1 : 0,
     ],
   );
   const thread = await getThread(id);
@@ -147,6 +151,34 @@ export async function deleteThread(id: string): Promise<void> {
   await db.execute(`DELETE FROM threads WHERE id = $1`, [id]);
 }
 
+/**
+ * Purge all incognito threads (T29): delete every `ephemeral = 1` thread plus
+ * its messages, attachments, and usage rows. Children are deleted explicitly,
+ * mirroring `deleteThread` (FK CASCADE is not relied upon). The FTS5 index is
+ * cleaned automatically: the migration-004 delete triggers fire per deleted
+ * message/thread row and remove the matching `search_fts` entries.
+ *
+ * Called at the START of `init()` (the authoritative, crash-safe purge) and
+ * best-effort on window close when close-to-tray is off.
+ */
+export async function purgeEphemeralThreads(): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `DELETE FROM attachments WHERE message_id IN
+       (SELECT id FROM messages WHERE thread_id IN
+          (SELECT id FROM threads WHERE ephemeral = 1))`,
+  );
+  await db.execute(
+    `DELETE FROM usage WHERE thread_id IN
+       (SELECT id FROM threads WHERE ephemeral = 1)`,
+  );
+  await db.execute(
+    `DELETE FROM messages WHERE thread_id IN
+       (SELECT id FROM threads WHERE ephemeral = 1)`,
+  );
+  await db.execute(`DELETE FROM threads WHERE ephemeral = 1`);
+}
+
 // ---------------------------------------------------------------------------
 // Messages
 // ---------------------------------------------------------------------------
@@ -155,14 +187,23 @@ export async function addMessage(input: {
   thread_id: string;
   role: Role;
   content: string;
+  /** 'normal' (default) or 'summary' for a compaction-point row (T28). */
+  kind?: MessageKind;
   duration_ms?: number | null;
 }): Promise<Message> {
   const db = await getDb();
   const id = newId();
   await db.execute(
-    `INSERT INTO messages (id, thread_id, role, content, duration_ms)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [id, input.thread_id, input.role, input.content, input.duration_ms ?? null],
+    `INSERT INTO messages (id, thread_id, role, content, kind, duration_ms)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [
+      id,
+      input.thread_id,
+      input.role,
+      input.content,
+      input.kind ?? "normal",
+      input.duration_ms ?? null,
+    ],
   );
   await touchThread(input.thread_id);
   const rows = await db.select<Message[]>(
@@ -177,6 +218,41 @@ export async function listMessages(threadId: string): Promise<Message[]> {
   return db.select<Message[]>(
     `SELECT * FROM messages WHERE thread_id = $1 ORDER BY created_at ASC`,
     [threadId],
+  );
+}
+
+/** The latest message of one thread, for the sidebar preview rows (T35). */
+export interface LastMessage {
+  thread_id: string;
+  role: Role;
+  content: string;
+}
+
+/**
+ * Latest **normal** message per thread, in ONE query for the whole visible
+ * list (T35 preview rows) — never per-row queries. `kind = 'summary'` rows
+ * (T28 compaction points) are skipped: the last real turn is the useful
+ * preview, not the synthetic summary. "Latest" is resolved via `MAX(rowid)`
+ * (insertion order) because message ids are random UUIDs and `created_at`
+ * only has second resolution, so neither orders reliably within a thread.
+ * Threads with no messages simply return no row.
+ */
+export async function lastMessages(
+  threadIds: string[],
+): Promise<LastMessage[]> {
+  if (threadIds.length === 0) return [];
+  const db = await getDb();
+  const placeholders = threadIds.map((_, i) => `$${i + 1}`).join(", ");
+  return db.select<LastMessage[]>(
+    `SELECT m.thread_id AS thread_id, m.role AS role, m.content AS content
+       FROM messages m
+       JOIN (SELECT thread_id, MAX(rowid) AS last_rowid
+               FROM messages
+              WHERE kind = 'normal'
+              GROUP BY thread_id) latest
+         ON m.rowid = latest.last_rowid
+      WHERE m.thread_id IN (${placeholders})`,
+    threadIds,
   );
 }
 
@@ -564,7 +640,9 @@ async function searchHistoryLike(
   const terms = searchTerms(query);
   if (terms.length === 0) return [];
 
-  const titleWhere = terms.map((_, i) => `t.title LIKE $${i + 1}`).join(" AND ");
+  const titleWhere = terms
+    .map((_, i) => `t.title LIKE $${i + 1}`)
+    .join(" AND ");
   const msgWhere = terms
     .map((_, i) => `m.content LIKE $${i + 1}`)
     .join(" AND ");

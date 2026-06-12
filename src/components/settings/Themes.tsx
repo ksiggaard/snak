@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/card";
 import { useTheme } from "@/store/theme";
 import { selectRegistry, usePlugins } from "@/store/plugins";
+import { useT } from "@/store/i18n";
 import { themesDirectory, type InstalledTheme } from "@/lib/themes";
 
 /**
@@ -20,6 +21,7 @@ import { themesDirectory, type InstalledTheme } from "@/lib/themes";
  * synthetic id so both sources share the one selector.
  */
 export function Themes() {
+  const t = useT();
   const installed = useTheme((s) => s.installed);
   const themeId = useTheme((s) => s.themeId);
   const loaded = useTheme((s) => s.loaded);
@@ -58,7 +60,9 @@ export function Themes() {
 
   // Re-compose the theme list whenever the set of plugin themes changes. A
   // stable key over the contributions keeps the dependency primitive.
-  const pluginKey = pluginThemes.map((t) => `${t.id}=${t.css.length}`).join("|");
+  const pluginKey = pluginThemes
+    .map((t) => `${t.id}=${t.css.length}`)
+    .join("|");
   useEffect(() => {
     void loadInstalled(pluginThemes);
     // pluginThemes is recomputed each render; pluginKey captures its identity.
@@ -71,43 +75,41 @@ export function Themes() {
   return (
     <Card className="w-full max-w-lg">
       <CardHeader>
-        <CardTitle>Themes</CardTitle>
-        <CardDescription>
-          Install a theme by dropping a folder (with <code>theme.json</code> +{" "}
-          <code>theme.css</code>) into the themes directory, then select it
-          below. Themes recolor the app on top of the light/dark setting. See
-          <code> docs/theming.md</code> to author your own.
-        </CardDescription>
+        <CardTitle>{t("themes.title")}</CardTitle>
+        <CardDescription>{t("themes.description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {!loaded && <p className="text-muted-foreground text-sm">Loading…</p>}
+        {!loaded && (
+          <p className="text-muted-foreground text-sm">{t("common.loading")}</p>
+        )}
 
         {loaded && (
           <div className="flex flex-col">
             <ThemeRow
-              name="Default"
-              meta="built-in palette"
+              name={t("themes.default")}
+              meta={t("themes.defaultMeta")}
               selected={themeId === null}
               onSelect={() => selectTheme(null)}
             />
-            {installed.map((t) => (
+            {installed.map((theme) => (
               <ThemeRow
-                key={t.id}
-                name={t.name}
+                key={theme.id}
+                name={theme.name}
                 meta={[
-                  t.version && `v${t.version}`,
-                  t.author && `by ${t.author}`,
-                  t.id.startsWith("plugin:") && "plugin",
+                  theme.version && `v${theme.version}`,
+                  theme.author &&
+                    t("common.byAuthor", { author: theme.author }),
+                  theme.id.startsWith("plugin:") && t("themes.pluginBadge"),
                 ]
                   .filter(Boolean)
                   .join(" · ")}
-                selected={themeId === t.id}
-                onSelect={() => selectTheme(t.id)}
+                selected={themeId === theme.id}
+                onSelect={() => selectTheme(theme.id)}
               />
             ))}
             {installed.length === 0 && (
               <p className="text-muted-foreground py-2 text-sm">
-                No installed themes yet.
+                {t("themes.none")}
               </p>
             )}
           </div>
@@ -119,15 +121,15 @@ export function Themes() {
             variant="outline"
             onClick={() => void loadInstalled(pluginThemes)}
           >
-            Refresh
+            {t("common.refresh")}
           </Button>
           <Button size="sm" variant="outline" onClick={() => void reveal()}>
-            Show themes folder
+            {t("themes.showFolder")}
           </Button>
         </div>
         {dir && (
           <p className="text-muted-foreground text-xs break-all">
-            Themes directory: <code>{dir}</code>
+            {t("themes.directory")} <code>{dir}</code>
           </p>
         )}
         {error && <p className="text-destructive text-sm">{error}</p>}
@@ -147,6 +149,7 @@ function ThemeRow({
   selected: boolean;
   onSelect: () => void;
 }) {
+  const t = useT();
   return (
     <div className="flex items-center justify-between gap-3 border-t py-3 first:border-t-0 first:pt-0">
       <div className="flex flex-col gap-0.5">
@@ -158,7 +161,7 @@ function ThemeRow({
         variant={selected ? "default" : "outline"}
         onClick={onSelect}
       >
-        {selected ? "Active" : "Use"}
+        {selected ? t("common.active") : t("common.use")}
       </Button>
     </div>
   );
