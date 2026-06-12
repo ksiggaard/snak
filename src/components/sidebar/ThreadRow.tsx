@@ -72,9 +72,12 @@ export function ThreadRow({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(thread.title);
 
-  // Second line per row style (T35). null = single-line row ("title", or a
-  // preview row whose thread has no messages yet).
+  // Per row style (T35): an optional second line under the title, an optional
+  // right-aligned date on the title line, and an optional leading provider
+  // monogram. null = not shown (e.g. a snippet row whose thread is empty).
   let subline: string | null = null;
+  let trailingDate: string | null = null;
+  let monogram: string | null = null;
   // Date formatting follows the active language (T32).
   const dateOpts = { locale, labels: timeLabels() };
   if (listStyle === "title-date") {
@@ -89,7 +92,21 @@ export function ThreadRow({
     subline = `${formatThreadDate(thread.updated_at, new Date(), dateOpts)} · ${providerLabel} · ${label}`;
   } else if (listStyle === "preview") {
     subline = snippet ?? null;
+  } else if (listStyle === "inline") {
+    trailingDate = formatThreadDate(thread.updated_at, new Date(), dateOpts);
+  } else if (listStyle === "full") {
+    trailingDate = formatThreadDate(thread.updated_at, new Date(), dateOpts);
+    subline = snippet ?? null;
+  } else if (listStyle === "icon") {
+    const { providerLabel } = currentModelLabel(
+      providers,
+      models,
+      thread.provider,
+      thread.model,
+    );
+    monogram = providerLabel.slice(0, 1).toUpperCase();
   }
+  const compact = listStyle === "compact";
 
   function beginEdit() {
     setDraft(thread.title);
@@ -106,7 +123,8 @@ export function ThreadRow({
   return (
     <div
       className={cn(
-        "group flex items-center gap-1 rounded-md px-2 py-1.5",
+        "group flex items-center gap-1 rounded-md px-2",
+        compact ? "py-0.5" : "py-1.5",
         active ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/50",
       )}
     >
@@ -135,6 +153,15 @@ export function ThreadRow({
           }
         >
           <span className="flex w-full min-w-0 items-center gap-1.5">
+            {/* Provider monogram for the "icon" row style (T35). */}
+            {monogram !== null && (
+              <span
+                className="bg-primary/10 text-primary grid size-5 shrink-0 place-items-center rounded-full text-[10px] font-bold select-none"
+                aria-hidden
+              >
+                {monogram}
+              </span>
+            )}
             {/* Incognito badge (T29): session-only thread, purged on exit. */}
             {!!thread.ephemeral && (
               <Ghost
@@ -151,12 +178,19 @@ export function ThreadRow({
             )}
             <span
               className={cn(
-                "truncate text-sm",
+                "truncate",
+                compact ? "text-xs" : "text-sm",
                 !!thread.ephemeral && "text-muted-foreground italic",
               )}
             >
               {thread.title}
             </span>
+            {/* Right-aligned date for the "inline" / "full" row styles. */}
+            {trailingDate !== null && (
+              <span className="text-muted-foreground ml-auto shrink-0 pl-1 text-[10px] tabular-nums">
+                {trailingDate}
+              </span>
+            )}
           </span>
           {subline !== null && (
             <span className="text-muted-foreground w-full truncate text-xs">

@@ -10,7 +10,11 @@ import { Markdown } from "@/components/chat/Markdown";
 import { useSearch } from "@/store/search";
 import { useAppearance } from "@/store/appearance";
 import { timeLabels, useIntlLocale, useT } from "@/store/i18n";
-import type { ChatStyle } from "@/lib/appearance";
+import {
+  CHAT_CONTAINER_CLASSES,
+  styleClasses,
+  type ChatStyle,
+} from "@/lib/appearance";
 import { formatDuration, parseDbTime, relativeTime } from "@/lib/time";
 
 interface MessageListProps {
@@ -97,43 +101,6 @@ function AssistantMeta({
       </button>
     </div>
   );
-}
-
-/** Per-chat-style classes for the message row + its content wrapper (T34).
- * Compact has its own markup (gutter prefix) and doesn't use this table. */
-function styleClasses(
-  style: ChatStyle,
-  isUser: boolean,
-): { row: string; content: string } {
-  switch (style) {
-    case "bubbles":
-      // Messenger-style. The assistant bubble carries `bubble-assistant` so
-      // wide content (code/tables) lets it break out of the 75% cap — see the
-      // `:has(pre, table)` rule in index.css — instead of squishing.
-      return {
-        row: isUser ? "justify-end" : "justify-start",
-        content: isUser
-          ? "bg-primary/10 max-w-[75%] rounded-2xl rounded-br-md px-3.5 py-2.5 text-sm"
-          : "bubble-assistant bg-muted text-foreground max-w-[75%] rounded-2xl rounded-bl-md px-3.5 py-2.5 text-sm",
-      };
-    case "document":
-      // Reading mode: user prompts as section headings/quotes, assistant
-      // prose flows full-width like an article.
-      return {
-        row: "justify-start",
-        content: isUser
-          ? "border-primary/60 w-full max-w-full border-l-2 py-0.5 pl-3 text-base font-semibold"
-          : "text-foreground w-full max-w-full text-sm",
-      };
-    default:
-      // "default": the original flat full-width layout, unchanged.
-      return {
-        row: isUser ? "justify-end" : "justify-start",
-        content: isUser
-          ? "bg-primary text-primary-foreground max-w-[80%] rounded-lg px-3 py-2 text-sm"
-          : "text-foreground w-full max-w-full text-sm",
-      };
-  }
 }
 
 /** One normal (non-summary) chat message, rendered per the active chat style.
@@ -227,6 +194,76 @@ function ChatMessage({
     );
   }
 
+  if (chatStyle === "cozy") {
+    // Slack/Discord-style: a round avatar monogram and a bold role name above
+    // each message, everything left-aligned.
+    return (
+      <div ref={innerRef} data-mid={m.id} className="flex scroll-mt-4 gap-2.5">
+        <span
+          className={cn(
+            "grid size-7 shrink-0 place-items-center rounded-full text-[10px] font-bold uppercase select-none",
+            isUser
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted text-muted-foreground",
+          )}
+          aria-hidden
+        >
+          {(isUser ? t("chat.you") : t("chat.ai")).slice(0, 1)}
+        </span>
+        <div
+          className={cn(
+            "chat-content flex min-w-0 flex-1 flex-col gap-1 text-sm",
+            flashRing,
+          )}
+        >
+          <span
+            className={cn(
+              "text-xs leading-7 font-semibold capitalize",
+              isUser ? "text-primary" : "text-muted-foreground",
+            )}
+            aria-hidden
+          >
+            {isUser ? t("chat.you") : t("chat.ai")}
+          </span>
+          {images}
+          {tools}
+          {body}
+          {meta}
+        </div>
+      </div>
+    );
+  }
+
+  if (chatStyle === "terminal") {
+    // CLI-session look: everything monospace; user messages read as typed
+    // commands (a ❯ prompt, accent-colored text), assistant replies as plain
+    // output. Markdown rhythm is tightened by the same index.css rules as
+    // compact.
+    return (
+      <div ref={innerRef} data-mid={m.id} className="flex scroll-mt-4">
+        <div
+          className={cn(
+            "chat-content flex w-full max-w-full gap-2 font-mono text-sm",
+            isUser && "text-primary",
+            flashRing,
+          )}
+        >
+          {isUser && (
+            <span className="shrink-0 font-bold select-none" aria-hidden>
+              ❯
+            </span>
+          )}
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            {images}
+            {tools}
+            {body}
+            {meta}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const { row, content } = styleClasses(chatStyle, isUser);
   return (
     <div ref={innerRef} data-mid={m.id} className={cn("flex scroll-mt-4", row)}>
@@ -309,13 +346,9 @@ export function MessageList({ messages, pending }: MessageListProps) {
       className={cn(
         "flex flex-1 flex-col overflow-y-auto",
         // Style hook consumed by the T34 rules in index.css (bubble break-out,
-        // compact Markdown spacing).
+        // compact/terminal Markdown spacing).
         `chat-style-${chatStyle}`,
-        chatStyle === "compact"
-          ? "gap-1 p-2"
-          : chatStyle === "document"
-            ? "gap-6 p-4"
-            : "gap-4 p-4",
+        CHAT_CONTAINER_CLASSES[chatStyle],
       )}
     >
       {messages.map((m) =>

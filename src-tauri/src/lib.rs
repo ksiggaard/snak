@@ -237,8 +237,6 @@ pub fn run() {
             commands::quick::take_screenshot,
             commands::quick::set_quick_height,
             commands::terminal::open_in_terminal,
-            commands::themes::list_themes,
-            commands::themes::themes_directory,
             commands::languages::list_languages,
             commands::languages::languages_directory,
             set_close_to_tray,

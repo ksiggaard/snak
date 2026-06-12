@@ -9,6 +9,7 @@ import { useAppearance } from "@/store/appearance";
 import { t as tNow, useT } from "@/store/i18n";
 import { ThreadRow } from "./ThreadRow";
 import { useThreadSnippets } from "./useThreadSnippets";
+import { listStyleShowsSnippet } from "@/lib/appearance";
 
 /** Chats mode (T24): a flat list of all threads — project-less and in-project
  *  alike — with a Favorites group (T23) pinned on top. */
@@ -22,8 +23,8 @@ export function ChatsPane() {
   const clearSearch = useSearch((s) => s.clear);
   const showChat = useView((s) => s.showChat);
   const listStyle = useAppearance((s) => s.chatListStyle);
-  // One query for the whole visible list, only in "preview" mode (T35).
-  const snippets = useThreadSnippets(threads, listStyle === "preview");
+  // One query for the whole visible list, only for snippet row styles (T35).
+  const snippets = useThreadSnippets(threads, listStyleShowsSnippet(listStyle));
   // Archive group disclosure — collapsed by default, per-session only.
   const [archiveOpen, setArchiveOpen] = useState(false);
 

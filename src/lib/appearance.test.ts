@@ -418,6 +418,10 @@ describe("chat style persistence (T34)", () => {
     expect(getStoredChatStyle()).toBe("bubbles");
     storeChatStyle("document");
     expect(getStoredChatStyle()).toBe("document");
+    storeChatStyle("terminal");
+    expect(getStoredChatStyle()).toBe("terminal");
+    storeChatStyle("zebra");
+    expect(getStoredChatStyle()).toBe("zebra");
   });
 
   it("falls back to 'default' for an unknown stored value", () => {
@@ -442,6 +446,10 @@ describe("chat list style persistence (T35)", () => {
     expect(getStoredChatListStyle()).toBe("preview");
     storeChatListStyle("title-date");
     expect(getStoredChatListStyle()).toBe("title-date");
+    storeChatListStyle("inline");
+    expect(getStoredChatListStyle()).toBe("inline");
+    storeChatListStyle("full");
+    expect(getStoredChatListStyle()).toBe("full");
   });
 
   it("falls back to 'title' for an unknown stored value", () => {

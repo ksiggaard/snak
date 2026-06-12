@@ -15,6 +15,7 @@ import { confirmDialog } from "@/store/confirm";
 import { t as tNow, useT } from "@/store/i18n";
 import { ThreadRow } from "./ThreadRow";
 import { useThreadSnippets } from "./useThreadSnippets";
+import { listStyleShowsSnippet } from "@/lib/appearance";
 import { cn } from "@/lib/utils";
 
 /** Projects mode (T24): the project list; opening one shows its detail view in
@@ -35,8 +36,8 @@ export function ProjectsPane() {
   const clearSearch = useSearch((s) => s.clear);
   const showChat = useView((s) => s.showChat);
   const listStyle = useAppearance((s) => s.chatListStyle);
-  // One query covering every project's threads, only in "preview" mode (T35).
-  const snippets = useThreadSnippets(threads, listStyle === "preview");
+  // One query covering every project's threads, only for snippet styles (T35).
+  const snippets = useThreadSnippets(threads, listStyleShowsSnippet(listStyle));
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 

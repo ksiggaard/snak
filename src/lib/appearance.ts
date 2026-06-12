@@ -3,14 +3,14 @@
 // Both features persist in localStorage (mirroring `lib/theme.ts` — pure UI
 // concerns, read synchronously at startup with no flash) and apply as CSS
 // injected into dedicated `<style>` elements (`#custom-colors` and
-// `#custom-typography`), the same mechanism as `applyInstalledThemeCss`.
+// `#custom-typography`).
 //
-// Precedence — custom picks override the active installed/plugin theme. The
-// color overrides use doubled-specificity selectors (`:root:not(.dark)` /
-// `:root.dark`, mirrored on `body` for the WebKitGTK portal quirk — see
-// `applyTheme`), which beat a theme's single-class `:root` / `.dark` rules
-// regardless of `<style>` element order. Typography rules are unlayered, so
-// they also beat Tailwind's layered base/utility declarations.
+// Precedence — custom picks override the base palette. The color overrides use
+// doubled-specificity selectors (`:root:not(.dark)` / `:root.dark`, mirrored
+// on `body` for the WebKitGTK portal quirk — see `applyTheme`), which beat
+// single-class `:root` / `.dark` rules regardless of `<style>` element order.
+// Typography rules are unlayered, so they also beat Tailwind's layered
+// base/utility declarations.
 //
 // Color picks are **per-mode**: a pick made while light mode is active is
 // stored under `light` and only emitted for the light scope (and vice versa),
@@ -76,16 +76,36 @@ const RADIUS_STYLE_ID = "custom-radius";
 // and seeded synchronously at store init, like every other appearance pref.
 
 /** How chat messages render in `MessageList` (T34). */
-export type ChatStyle = "default" | "bubbles" | "compact" | "document";
+export type ChatStyle =
+  | "default"
+  | "bubbles"
+  | "compact"
+  | "document"
+  | "cards"
+  | "cozy"
+  | "terminal"
+  | "zebra";
 
 /** What a sidebar thread row shows (T35). */
-export type ChatListStyle = "title" | "title-date" | "detailed" | "preview";
+export type ChatListStyle =
+  | "title"
+  | "title-date"
+  | "detailed"
+  | "preview"
+  | "inline"
+  | "icon"
+  | "compact"
+  | "full";
 
 export const CHAT_STYLES: { value: ChatStyle; label: string }[] = [
   { value: "default", label: "Default" },
   { value: "bubbles", label: "Bubbles" },
   { value: "compact", label: "Compact" },
   { value: "document", label: "Document" },
+  { value: "cards", label: "Cards" },
+  { value: "cozy", label: "Cozy" },
+  { value: "terminal", label: "Terminal" },
+  { value: "zebra", label: "Zebra" },
 ];
 
 export const CHAT_LIST_STYLES: { value: ChatListStyle; label: string }[] = [
@@ -93,10 +113,90 @@ export const CHAT_LIST_STYLES: { value: ChatListStyle; label: string }[] = [
   { value: "title-date", label: "Title + date" },
   { value: "detailed", label: "Detailed" },
   { value: "preview", label: "Preview" },
+  { value: "inline", label: "Inline date" },
+  { value: "icon", label: "Icon" },
+  { value: "compact", label: "Compact" },
+  { value: "full", label: "Full" },
 ];
+
+/** Row styles whose subline shows a last-message snippet — drives the one
+ * sidebar-wide snippet query (see `useThreadSnippets`). */
+export function listStyleShowsSnippet(style: ChatListStyle): boolean {
+  return style === "preview" || style === "full";
+}
 
 const CHAT_STYLE_KEY = "chat-style";
 const CHAT_LIST_STYLE_KEY = "chat-list-style";
+
+/** Scroll-column gap/padding per chat style, shared by `MessageList` and the
+ * settings chat-style preview so the message rhythm matches. */
+export const CHAT_CONTAINER_CLASSES: Record<ChatStyle, string> = {
+  default: "gap-4 p-4",
+  bubbles: "gap-4 p-4",
+  compact: "gap-1 p-2",
+  document: "gap-6 p-4",
+  cards: "gap-3 p-4",
+  cozy: "gap-5 p-4",
+  terminal: "gap-2 p-3",
+  zebra: "gap-2 p-3",
+};
+
+/** Per-chat-style classes for a message row + its content wrapper (T34).
+ * Compact, cozy, and terminal have their own markup (gutter/avatar/prompt
+ * prefixes) and don't use this table. Shared by `MessageList` and the settings
+ * chat-style preview (`ChatStylePreview` in `Appearance.tsx`) so the preview
+ * can't drift. */
+export function styleClasses(
+  style: ChatStyle,
+  isUser: boolean,
+): { row: string; content: string } {
+  switch (style) {
+    case "bubbles":
+      // Messenger-style. The assistant bubble carries `bubble-assistant` so
+      // wide content (code/tables) lets it break out of the 75% cap — see the
+      // `:has(pre, table)` rule in index.css — instead of squishing.
+      return {
+        row: isUser ? "justify-end" : "justify-start",
+        content: isUser
+          ? "bg-primary/10 max-w-[75%] rounded-2xl rounded-br-md px-3.5 py-2.5 text-sm"
+          : "bubble-assistant bg-muted text-foreground max-w-[75%] rounded-2xl rounded-bl-md px-3.5 py-2.5 text-sm",
+      };
+    case "document":
+      // Reading mode: user prompts as section headings/quotes, assistant
+      // prose flows full-width like an article.
+      return {
+        row: "justify-start",
+        content: isUser
+          ? "border-primary/60 w-full max-w-full border-l-2 py-0.5 pl-3 text-base font-semibold"
+          : "text-foreground w-full max-w-full text-sm",
+      };
+    case "cards":
+      // Forum/email-thread feel: every message is a full-width bordered card;
+      // user cards are accent-tinted so roles stay distinguishable.
+      return {
+        row: "justify-start",
+        content: isUser
+          ? "border-primary/35 bg-primary/5 w-full max-w-full rounded-lg border px-3.5 py-2.5 text-sm"
+          : "bg-card shadow-xs w-full max-w-full rounded-lg border px-3.5 py-2.5 text-sm",
+      };
+    case "zebra":
+      // Striped log: full-width rows with no bubbles or borders — user
+      // messages sit on a soft tinted band, assistant replies on the plain
+      // background. Content padding matches the band's so text stays aligned.
+      return {
+        row: isUser ? "bg-muted/60 rounded-md" : "",
+        content: "w-full max-w-full px-3 py-2 text-sm",
+      };
+    default:
+      // "default": the original flat full-width layout, unchanged.
+      return {
+        row: isUser ? "justify-end" : "justify-start",
+        content: isUser
+          ? "bg-primary text-primary-foreground max-w-[80%] rounded-lg px-3 py-2 text-sm"
+          : "text-foreground w-full max-w-full text-sm",
+      };
+  }
+}
 
 export function getStoredChatStyle(): ChatStyle {
   const raw = localStorage.getItem(CHAT_STYLE_KEY);
@@ -500,8 +600,7 @@ export function buildTypographyCss(t: TypographyPrefs): string {
 
 // ── Injection ────────────────────────────────────────────────────────────────
 
-/** Inject (or replace) CSS in a `<style id=…>`; empty CSS removes it. Mirrors
- * `applyInstalledThemeCss` in `lib/theme.ts`. */
+/** Inject (or replace) CSS in a `<style id=…>`; empty CSS removes it. */
 function injectStyle(id: string, css: string): void {
   let el = document.getElementById(id) as HTMLStyleElement | null;
   if (!css) {

@@ -335,21 +335,10 @@ export const en = {
   "appearance.menuBar.hint":
     "System shows the native menu — on KDE it appears in the global menu when appmenu-gtk-module is installed, otherwise as a bar above the title bar. Below title bar uses the app's own menu instead.",
 
-  // --- Settings: appearance — themes card -----------------------------------------------------------------------
-  "themes.title": "Themes",
-  "themes.description":
-    "Install a theme by dropping a folder (with theme.json + theme.css) into the themes directory, then select it below. Themes recolor the app on top of the light/dark setting. See docs/theming.md to author your own.",
-  "themes.default": "Default",
-  "themes.defaultMeta": "built-in palette",
-  "themes.none": "No installed themes yet.",
-  "themes.showFolder": "Show themes folder",
-  "themes.directory": "Themes directory:",
-  "themes.pluginBadge": "plugin",
-
   // --- Settings: appearance — colors card ----------------------------------------------------------------------------
   "colors.title": "Colors",
   "colors.description":
-    "Custom accent and background colors. Picks apply to the active mode (you are editing the {mode} palette) and override the selected theme; light and dark are stored separately. Text on top of a custom color is adjusted automatically for contrast. A custom background also re-tints the sidebar, title bar, cards, and input fields with matching darker or lighter tones.",
+    "Custom accent and background colors. Picks apply to the active mode (you are editing the {mode} palette); light and dark are stored separately. Text on top of a custom color is adjusted automatically for contrast. A custom background also re-tints the sidebar, title bar, cards, and input fields with matching darker or lighter tones.",
   "colors.light": "light",
   "colors.dark": "dark",
   "colors.accent": "Accent",
@@ -386,21 +375,34 @@ export const en = {
   // --- Settings: appearance — chat style card --------------------------------------------------------------------------------
   "chatStyle.title": "Chat style",
   "chatStyle.description":
-    "How messages are laid out in a conversation: the default flat view, messenger-style bubbles, a dense compact view, or a document-like reading mode.",
+    "How messages are laid out in a conversation — from flat, bubble, or card layouts to dense, document, or terminal-like views.",
   "chatStyle.layout": "Layout",
   "chatStyle.default": "Default",
   "chatStyle.bubbles": "Bubbles",
   "chatStyle.compact": "Compact",
   "chatStyle.document": "Document",
+  "chatStyle.cards": "Cards",
+  "chatStyle.cozy": "Cozy",
+  "chatStyle.terminal": "Terminal",
+  "chatStyle.zebra": "Zebra",
+  "chatStyle.preview": "Preview",
+  "chatStyle.mockUser1": "How will my conversations look with this layout?",
+  "chatStyle.mockAssistant":
+    "Like this! Your messages are on one side, and replies like this one flow below them.",
+  "chatStyle.mockUser2": "Nice, that works for me.",
 
   // --- Settings: appearance — chat list card -----------------------------------------------------------------------------------
   "chatList.title": "Chat list",
   "chatList.description":
-    "What each conversation row in the sidebar shows: just the title, or a second line with the date, model details, or a preview of the last message.",
+    "What each conversation row in the sidebar shows: just the title, or extra details like the date, the model, a provider icon, or a preview of the last message.",
   "chatList.titleOption": "Title",
   "chatList.titleDate": "Title + date",
   "chatList.detailed": "Detailed",
   "chatList.preview": "Preview",
+  "chatList.inline": "Inline date",
+  "chatList.icon": "Icon",
+  "chatList.compact": "Compact",
+  "chatList.full": "Full",
   "chatList.mockTitle": "Weekend plans",
   "chatList.mockPreview": "Here's the packing list you asked for…",
 

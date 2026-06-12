@@ -33,7 +33,6 @@ import { usePlugins } from "@/store/plugins";
 import { useI18n, useT } from "@/store/i18n";
 import { useModels } from "@/store/models";
 import { useKeys } from "@/store/keys";
-import { useTheme } from "@/store/theme";
 import { useView } from "@/store/view";
 import { useLayout } from "@/store/layout";
 import { useTitleBar } from "@/store/titlebar";
@@ -46,7 +45,6 @@ function App() {
   const init = useThreads((s) => s.init);
   const initProjects = useProjects((s) => s.init);
   const loadPlugins = usePlugins((s) => s.load);
-  const loadInstalledThemes = useTheme((s) => s.loadInstalled);
   const loadModels = useModels((s) => s.load);
   const loadKeys = useKeys((s) => s.load);
   const loadUserLanguagePacks = useI18n((s) => s.loadUserPacks);
@@ -78,7 +76,6 @@ function App() {
     void initProjects();
     void loadKeys();
     void loadPlugins();
-    void loadInstalledThemes();
     void loadModels();
     // Bundled language packs apply synchronously at module load (no flash);
     // this folds in user packs from the app-data languages folder (T32).
@@ -88,7 +85,6 @@ function App() {
     initProjects,
     loadKeys,
     loadPlugins,
-    loadInstalledThemes,
     loadModels,
     loadUserLanguagePacks,
   ]);

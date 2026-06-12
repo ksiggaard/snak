@@ -169,34 +169,34 @@ html.overlay #root {
   max-width: 100%;
 }
 
-/* Compact: tighten the Markdown rhythm inside messages. The margins come from
-   the my-/mt-/mb- utilities in Markdown.tsx and CodeBlock.tsx; targeting the
-   utility classes (like the T33 `:where(.text-sm)` overrides) keeps this a
-   pure wrapper-class concern with no component changes. */
-.chat-style-compact .chat-content {
+/* Compact & terminal: tighten the Markdown rhythm inside messages. The margins
+   come from the my-/mt-/mb- utilities in Markdown.tsx and CodeBlock.tsx;
+   targeting the utility classes (like the T33 `:where(.text-sm)` overrides)
+   keeps this a pure wrapper-class concern with no component changes. */
+:is(.chat-style-compact, .chat-style-terminal) .chat-content {
   line-height: 1.45;
 }
-.chat-style-compact .chat-content :where(.leading-relaxed) {
+:is(.chat-style-compact, .chat-style-terminal) .chat-content :where(.leading-relaxed) {
   line-height: inherit;
 }
-.chat-style-compact .chat-content :where(.my-1) {
+:is(.chat-style-compact, .chat-style-terminal) .chat-content :where(.my-1) {
   margin-block: 0.125rem;
 }
-.chat-style-compact .chat-content :where(.my-2) {
+:is(.chat-style-compact, .chat-style-terminal) .chat-content :where(.my-2) {
   margin-block: 0.25rem;
 }
-.chat-style-compact .chat-content :where(.my-3) {
+:is(.chat-style-compact, .chat-style-terminal) .chat-content :where(.my-3) {
   margin-block: 0.375rem;
 }
-.chat-style-compact .chat-content :where(.mt-2) {
+:is(.chat-style-compact, .chat-style-terminal) .chat-content :where(.mt-2) {
   margin-top: 0.25rem;
 }
-.chat-style-compact .chat-content :where(.mt-3) {
+:is(.chat-style-compact, .chat-style-terminal) .chat-content :where(.mt-3) {
   margin-top: 0.375rem;
 }
-.chat-style-compact .chat-content :where(.mb-1) {
+:is(.chat-style-compact, .chat-style-terminal) .chat-content :where(.mb-1) {
   margin-bottom: 0.125rem;
 }
-.chat-style-compact .chat-content :where(.mb-2) {
+:is(.chat-style-compact, .chat-style-terminal) .chat-content :where(.mb-2) {
   margin-bottom: 0.25rem;
 }
