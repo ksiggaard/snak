@@ -22,12 +22,10 @@
     "common.uninstall": "Afinstaller",
     "common.builtIn": "indbygget",
     "common.byAuthor": "af {author}",
-
     "time.justNow": "lige nu",
     "time.minutesAgo": "{n} min. siden",
     "time.hoursAgo": "{n} t. siden",
     "time.daysAgo": "{n} d. siden",
-
     "titleBar.openSidebar": "Åbn sidepanelet",
     "titleBar.hideSidebar": "Skjul sidepanelet",
     "titleBar.showSidebar": "Vis sidepanelet",
@@ -42,7 +40,6 @@
     "titleBar.minimize": "Minimer",
     "titleBar.maximize": "Maksimer",
     "titleBar.close": "Luk",
-
     "menu.file": "Filer",
     "menu.view": "Vis",
     "menu.newChat": "Ny chat",
@@ -51,7 +48,6 @@
     "menu.searchChats": "Søg i chats…",
     "menu.toggleSidebar": "Slå sidepanelet til/fra",
     "menu.usage": "Forbrug",
-
     "sidebar.newChat": "Ny chat",
     "sidebar.newIncognitoChat": "Ny inkognito-chat",
     "sidebar.newIncognitoChatTitle": "Ny inkognito-chat — slettes, når appen lukkes",
@@ -82,7 +78,6 @@
     "sidebar.deleteThreadTitle": "Slet “{title}”?",
     "sidebar.navigation": "Navigation",
     "sidebar.resize": "Tilpas sidepanelets bredde",
-
     "chat.empty": "Send en besked for at starte samtalen.",
     "chat.thinking": "Tænker…",
     "chat.incognitoHint": "Inkognito — denne chat slettes, når appen lukkes.",
@@ -96,7 +91,6 @@
     "chat.copyCode": "Kopiér koden",
     "chat.openInTerminal": "Åbn i terminalen",
     "chat.openInTerminalTitle": "Åbn i terminalen (klargjort, ikke kørt — gennemse og tryk Enter)",
-
     "composer.placeholder": "Skriv en besked…  ( / for kommandoer · Enter sender · Shift+Enter giver ny linje )",
     "composer.attachImage": "Vedhæft billede",
     "composer.removeImage": "Fjern billede",
@@ -119,7 +113,6 @@
     "composer.terminalOpenError": "Kunne ikke åbne en terminal: {error}",
     "composer.pluginCommandNote": "Kommandoen `{command}` leveres af et plugin, men har ingen indbygget handling i denne app, så den kan ikke køres her.",
     "composer.terminalStagedNote": "Kommandoen er klargjort i din terminal — gennemse den, og tryk Enter dér for at køre den (den blev ikke kørt automatisk):",
-
     "canvas.title": "Lærred",
     "canvas.subtitle": "Markdown-editor med live forhåndsvisning",
     "canvas.aria": "Lærredseditor",
@@ -129,17 +122,14 @@
     "canvas.placeholder": "Skriv en lang Markdown-besked…",
     "canvas.empty": "Intet at forhåndsvise endnu.",
     "canvas.hint": "Cmd/Ctrl+Enter sender · Esc lukker (kladden bevares)",
-
     "model.choose": "Vælg model",
     "model.aria": "Model",
     "model.unavailable": "utilgængelig",
-
     "quick.placeholder": "Spørg om hvad som helst…  (Enter sender, Tab vælger destination, Esc lukker)",
     "quick.newChat": "Ny chat",
     "quick.startChat": "Start chat",
     "quick.destination": "Destination",
     "quick.takeScreenshot": "Tag skærmbillede",
-
     "search.placeholder": "Søg i chats…",
     "search.aria": "Søg i chats",
     "search.clear": "Ryd søgningen",
@@ -153,7 +143,6 @@
     "search.kindTitle": "Titel",
     "search.kindUser": "Dig",
     "search.kindAssistant": "Assistent",
-
     "usage.loading": "Indlæser forbrug…",
     "usage.emptyTitle": "Der er ikke registreret tokenforbrug endnu.",
     "usage.emptyHint": "Send en besked, så vises forbruget her.",
@@ -173,7 +162,6 @@
     "usage.noActivity": "Ingen aktivitet",
     "usage.responseCount.one": "{n} svar",
     "usage.responseCount.other": "{n} svar",
-
     "settings.nav.apiKeys": "API-nøgler",
     "settings.nav.defaultModel": "Standardmodel",
     "settings.nav.models": "Modeller",
@@ -185,7 +173,6 @@
     "settings.nav.mcp": "MCP-servere",
     "settings.nav.skills": "Færdigheder",
     "settings.nav.plugins": "Plugins",
-
     "apiKeys.title": "API-nøgler",
     "apiKeys.description": "Nøgler gemmes i styresystemets nøglering og forlader aldrig denne maskine.",
     "apiKeys.noProviders": "Ingen udbydere er slået til. Slå et udbyder-plugin til i afsnittet Plugins for at tilføje dets API-nøgle.",
@@ -193,18 +180,15 @@
     "apiKeys.saved": "Gemt ✓",
     "apiKeys.notSet": "Ikke angivet",
     "apiKeys.storedPlaceholder": "•••••••• (gemt)",
-
     "defaultModel.title": "Standardmodel",
     "defaultModel.description": "Den udbyder og model, som nye chats (og hurtig-indtastningsvinduet) starter med. Du kan stadig ændre det pr. chat fra den øverste bjælke og styre listen under Indstillinger → Modeller.",
     "defaultModel.none": "Ingen modeller sat op — tilføj nogle under Indstillinger → Modeller.",
-
     "models.title": "Modeller",
     "models.description": "De modeller, der tilbydes pr. udbyder i chatvælgeren. Hver har et model-id (sendes til API'et) og et venligt navn.",
     "models.noProviders": "Ingen udbydere slået til — slå en til under Indstillinger → Plugins.",
     "models.noModels": "Ingen modeller endnu — tilføj en nedenfor.",
     "models.labelPlaceholder": "Navn (f.eks. Opus 4.8)",
     "models.idPlaceholder": "model-id",
-
     "memory.title": "Systemprompt og hukommelse",
     "memory.description": "Tilføjes til systemkonteksten i hver chat, før eventuelle projektinstruktioner (rækkefølge: global → projekt → tråd).",
     "memory.addendumLabel": "Tillæg til systemprompten",
@@ -213,16 +197,13 @@
     "memory.aboutYou": "Hukommelse om dig",
     "memory.aboutYouHint": "Fakta og præferencer, som assistenten skal huske på tværs af chats.",
     "memory.addPlaceholder": "Tilføj noget at huske, f.eks. Jeg er TypeScript-udvikler og arbejder på en desktop-app.",
-
     "shortcut.title": "Global genvej",
     "shortcut.description": "Fremkalder hurtig-indtastningsvinduet hvor som helst fra. Brug modifikatorer som Alt, CmdOrControl, Shift forbundet med + (f.eks. Alt+Space, CmdOrControl+Shift+K).",
     "shortcut.saved": "Genvej registreret ✓",
-
     "tray.title": "Luk til systembakken",
     "tray.description": "Når slået til, skjules vinduet i systembakken, når det lukkes, og appen kører videre til den globale genvej. Afslut helt via systembakkens menu.",
     "tray.hides": "Luk skjuler til systembakken",
     "tray.quits": "Luk afslutter appen",
-
     "appearance.titleBar.title": "Titellinje",
     "appearance.titleBar.description": "Brug systemets egen titellinje eller appens kompakte med valgfri placering og stil for vinduesknapperne.",
     "appearance.titleBar.label": "Titellinje",
@@ -237,7 +218,6 @@
     "appearance.menuBar.inline": "Under titellinjen",
     "appearance.menuBar.hidden": "Skjult",
     "appearance.menuBar.hint": "“System” viser den native menu — i KDE vises den i den globale menu, når appmenu-gtk-module er installeret, ellers som en bjælke over titellinjen. “Under titellinjen” bruger i stedet appens egen menu.",
-
     "themes.title": "Temaer",
     "themes.description": "Installer et tema ved at lægge en mappe (med theme.json + theme.css) i temamappen, og vælg det derefter nedenfor. Temaer omfarver appen oven på lys/mørk-indstillingen. Se docs/theming.md for at lave dit eget.",
     "themes.default": "Standard",
@@ -246,15 +226,14 @@
     "themes.showFolder": "Vis temamappen",
     "themes.directory": "Temamappe:",
     "themes.pluginBadge": "plugin",
-
     "colors.title": "Farver",
-    "colors.description": "Tilpassede accent- og baggrundsfarver. Valgene gælder den aktive tilstand (du redigerer den {mode} palet) og tilsidesætter det valgte tema; lys og mørk gemmes hver for sig. Tekst oven på en tilpasset farve justeres automatisk for kontrast.",
+    "colors.description": "Tilpassede accent- og baggrundsfarver. Valgene gælder den aktive tilstand (du redigerer den {mode} palet) og tilsidesætter det valgte tema; lys og mørk gemmes hver for sig. Tekst oven på en tilpasset farve justeres automatisk for kontrast. En tilpasset baggrund toner også sidepanelet, titellinjen, kort og inputfelter i matchende mørkere eller lysere nuancer.",
     "colors.light": "lyse",
     "colors.dark": "mørke",
     "colors.accent": "Accent",
     "colors.background": "Baggrund",
     "colors.colorAria": "Farve for {label}",
-
+    "colors.resetAll": "Nulstil alle farver",
     "typography.title": "Typografi",
     "typography.description": "Skrifttyper og størrelser, hver for sig for appens flade og for chatbeskeder. De viste skrifttyper skal være installeret på dit system; vælg “Tilpasset…” for at skrive et vilkårligt navn. Kodeblokke beholder deres monospace-skrift.",
     "typography.uiFont": "UI-skrift",
@@ -270,7 +249,6 @@
     "typography.familyAria": "Familie for {label}",
     "typography.customFamilyAria": "Tilpasset familie for {label}",
     "typography.sizeAria": "{label} i pixels",
-
     "chatStyle.title": "Chatstil",
     "chatStyle.description": "Hvordan beskeder vises i en samtale: den flade standardvisning, bobler som i en messenger, en tæt kompakt visning eller en dokumentagtig læsetilstand.",
     "chatStyle.layout": "Layout",
@@ -278,7 +256,6 @@
     "chatStyle.bubbles": "Bobler",
     "chatStyle.compact": "Kompakt",
     "chatStyle.document": "Dokument",
-
     "chatList.title": "Chatliste",
     "chatList.description": "Hvad hver samtalerække i sidepanelet viser: kun titlen eller en ekstra linje med dato, modeldetaljer eller et uddrag af den seneste besked.",
     "chatList.titleOption": "Titel",
@@ -287,13 +264,11 @@
     "chatList.preview": "Uddrag",
     "chatList.mockTitle": "Weekendplaner",
     "chatList.mockPreview": "Her er pakkelisten, du bad om…",
-
     "language.title": "Sprog",
     "language.description": "Sproget i appens brugerflade. Medfølgende sprog er en del af appen; tilføj dit eget ved at lægge en JSON-sprogpakke i sprogmappen (se docs/i18n.md). Skiftet gælder med det samme.",
     "language.userBadge": "brugerpakke",
     "language.showFolder": "Vis sprogmappen",
     "language.directory": "Sprogmappe:",
-
     "mcp.title": "MCP-servere",
     "mcp.description": "Forbind Model Context Protocol-servere for at give modellen værktøjer. Den indbyggede webbrowsing-server virker med det samme. Tilføj egne servere via stdio (en kommando) eller HTTP (en URL). Værktøjer fra aktiverede servere tilbydes modellen ved hver besked.",
     "mcp.removeTitle": "Fjern “{label}”?",
@@ -302,11 +277,9 @@
     "mcp.addServer": "Tilføj server",
     "mcp.availableTools": "Tilgængelige værktøjer",
     "mcp.refreshHint": "Genindlæs for at vise værktøjer fra aktiverede servere.",
-
     "skills.title": "Færdigheder",
     "skills.description": "Færdigheder er genbrugelige instruktionspakker, som modellen kan trække på. Slå en færdighed til for at få dens vejledning ind i systemkonteksten i hver chat. Installer flere som skill-plugins (se Plugins-kortet).",
     "skills.none": "Ingen færdigheder installeret endnu.",
-
     "plugins.title": "Plugins",
     "plugins.description": "Udvid appen med udbydere, temaer, færdigheder og skråstregskommandoer. Indbyggede plugins følger med appen og kan slås fra, men ikke fjernes. Bruger-plugins ligger i appdata-mappen plugins/.",
     "plugins.category.provider": "Udbydere",
@@ -315,7 +288,6 @@
     "plugins.category.slashCommand": "Skråstregskommandoer",
     "plugins.noneInCategory": "Ingen {category} installeret.",
     "plugins.uninstallTitle": "Afinstaller “{name}”?",
-
     "project.notFound": "Projektet blev ikke fundet.",
     "project.name": "Projektnavn",
     "project.instructions": "Instruktioner",
@@ -331,7 +303,6 @@
     "project.removeFile": "Fjern {name}",
     "project.truncated": "“{name}” blev beskåret til {n} tegn.",
     "project.readError": "Kunne ikke læse “{name}” som tekst.",
-
     "thread.newChat": "Ny chat",
     "thread.image": "Billede",
     "thread.untitled": "Uden titel"

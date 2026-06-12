@@ -326,12 +326,13 @@ export const en = {
   // --- Settings: appearance — colors card ----------------------------------------------------------------------------
   "colors.title": "Colors",
   "colors.description":
-    "Custom accent and background colors. Picks apply to the active mode (you are editing the {mode} palette) and override the selected theme; light and dark are stored separately. Text on top of a custom color is adjusted automatically for contrast.",
+    "Custom accent and background colors. Picks apply to the active mode (you are editing the {mode} palette) and override the selected theme; light and dark are stored separately. Text on top of a custom color is adjusted automatically for contrast. A custom background also re-tints the sidebar, title bar, cards, and input fields with matching darker or lighter tones.",
   "colors.light": "light",
   "colors.dark": "dark",
   "colors.accent": "Accent",
   "colors.background": "Background",
   "colors.colorAria": "{label} color",
+  "colors.resetAll": "Reset all colors",
 
   // --- Settings: appearance — typography card ------------------------------------------------------------------------------
   "typography.title": "Typography",

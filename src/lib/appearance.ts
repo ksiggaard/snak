@@ -229,6 +229,72 @@ export function contrastForeground(hex: string): string {
   return contrastWhite >= contrastDark ? "#ffffff" : DARK_FOREGROUND;
 }
 
+/** Mix two #rrggbb colors in sRGB: t = 0 → `a`, t = 1 → `b`. */
+export function mixHex(a: string, b: string, t: number): string {
+  const ch = (hex: string, i: number) => parseInt(hex.slice(i, i + 2), 16);
+  const out = [1, 3, 5].map((i) => {
+    const v = Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t);
+    return Math.min(255, Math.max(0, v)).toString(16).padStart(2, "0");
+  });
+  return `#${out.join("")}`;
+}
+
+// Fractions mixed from the picked background toward its tonal pole (black for
+// a light background, white for a dark one), approximating the ratios between
+// the built-in palette's neutral tokens (e.g. light: bg 1.0 / sidebar 0.985 /
+// muted 0.97 / border 0.922; dark: bg 0.145 / sidebar 0.205 / muted 0.269).
+const SURFACE_TONES = {
+  card: 0.03,
+  sidebar: 0.05,
+  muted: 0.08,
+  border: 0.12,
+  ring: 0.3,
+} as const;
+
+/** How far `--muted-foreground` sits from the foreground back toward the
+ * background (light default: fg 0.145 → muted-fg 0.556 over bg 1.0 ≈ 45%). */
+const MUTED_FG_TONE = 0.4;
+
+/**
+ * Surface tokens derived from a picked background so the whole chrome —
+ * sidebar, title/menu bar, cards, popovers, inputs, borders — follows the
+ * pick as darker (light background) or lighter (dark background) tones,
+ * instead of keeping the theme's surfaces and clashing.
+ */
+export function derivedSurfaceDecls(background: string): string[] {
+  const pole =
+    contrastForeground(background) === "#ffffff" ? "#ffffff" : "#000000";
+  const tone = (t: number) => mixHex(background, pole, t);
+  const fg = contrastForeground(background);
+  const card = tone(SURFACE_TONES.card);
+  const sidebar = tone(SURFACE_TONES.sidebar);
+  const muted = tone(SURFACE_TONES.muted);
+  const border = tone(SURFACE_TONES.border);
+  const ring = tone(SURFACE_TONES.ring);
+  const mutedFg = mixHex(fg, background, MUTED_FG_TONE);
+  return [
+    `--card: ${card};`,
+    `--card-foreground: ${contrastForeground(card)};`,
+    `--popover: ${card};`,
+    `--popover-foreground: ${contrastForeground(card)};`,
+    `--secondary: ${muted};`,
+    `--secondary-foreground: ${contrastForeground(muted)};`,
+    `--muted: ${muted};`,
+    `--muted-foreground: ${mutedFg};`,
+    `--accent: ${muted};`,
+    `--accent-foreground: ${contrastForeground(muted)};`,
+    `--border: ${border};`,
+    `--input: ${border};`,
+    `--ring: ${ring};`,
+    `--sidebar: ${sidebar};`,
+    `--sidebar-foreground: ${contrastForeground(sidebar)};`,
+    `--sidebar-accent: ${muted};`,
+    `--sidebar-accent-foreground: ${contrastForeground(muted)};`,
+    `--sidebar-border: ${border};`,
+    `--sidebar-ring: ${ring};`,
+  ];
+}
+
 // ── Color override CSS (T30) ─────────────────────────────────────────────────
 
 // Specificity (0,2,0) / (0,1,1) — beats a theme's `:root` / `.dark` (0,1,0)
@@ -245,15 +311,17 @@ function colorDecls(mc: ModeColors): string[] {
   if (mc.background) {
     d.push(`--background: ${mc.background};`);
     d.push(`--foreground: ${contrastForeground(mc.background)};`);
+    d.push(...derivedSurfaceDecls(mc.background));
   }
   return d;
 }
 
 /**
- * Build the CSS overriding the color tokens for any stored picks. Only the
- * picked tokens (plus their computed readable foregrounds) are emitted;
- * derived surfaces (`--card`, `--muted`, `--sidebar`, …) keep their theme
- * values — a documented limit of the simple picker.
+ * Build the CSS overriding the color tokens for any stored picks, plus their
+ * computed readable foregrounds. A background pick additionally re-derives
+ * the surface family (`--sidebar` incl. title/menu bar, `--card`/`--popover`,
+ * `--muted`/`--secondary`/`--accent`, `--border`/`--input`, `--ring`) as
+ * darker or lighter tones of the pick — see `derivedSurfaceDecls`.
  */
 export function buildColorCss(colors: CustomColors): string {
   const blocks: string[] = [];

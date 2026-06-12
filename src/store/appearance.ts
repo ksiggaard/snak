@@ -33,6 +33,8 @@ interface AppearanceState {
   setColor: (mode: ColorMode, key: ColorKey, hex: string) => void;
   /** Clear one color pick for one mode (back to the theme's value). */
   resetColor: (mode: ColorMode, key: ColorKey) => void;
+  /** Clear every color pick in both modes (full back-to-theme reset). */
+  resetAllColors: () => void;
   /** Merge a partial typography update (null fields reset to default). */
   setTypography: (patch: Partial<TypographyPrefs>) => void;
   /** Switch the chat message layout style (T34). */
@@ -64,6 +66,13 @@ export const useAppearance = create<AppearanceState>((set, get) => ({
     const modeColors = { ...cur[mode] };
     delete modeColors[key];
     const colors: CustomColors = { ...cur, [mode]: modeColors };
+    storeCustomColors(colors);
+    applyCustomColors(colors);
+    set({ colors });
+  },
+
+  resetAllColors: () => {
+    const colors: CustomColors = { light: {}, dark: {} };
     storeCustomColors(colors);
     applyCustomColors(colors);
     set({ colors });

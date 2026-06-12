@@ -22,12 +22,10 @@
     "common.uninstall": "Deinstallieren",
     "common.builtIn": "integriert",
     "common.byAuthor": "von {author}",
-
     "time.justNow": "gerade eben",
     "time.minutesAgo": "vor {n} Min.",
     "time.hoursAgo": "vor {n} Std.",
     "time.daysAgo": "vor {n} T.",
-
     "titleBar.openSidebar": "Seitenleiste öffnen",
     "titleBar.hideSidebar": "Seitenleiste ausblenden",
     "titleBar.showSidebar": "Seitenleiste einblenden",
@@ -42,7 +40,6 @@
     "titleBar.minimize": "Minimieren",
     "titleBar.maximize": "Maximieren",
     "titleBar.close": "Schließen",
-
     "menu.file": "Datei",
     "menu.view": "Ansicht",
     "menu.newChat": "Neuer Chat",
@@ -51,7 +48,6 @@
     "menu.searchChats": "Chats durchsuchen…",
     "menu.toggleSidebar": "Seitenleiste umschalten",
     "menu.usage": "Nutzung",
-
     "sidebar.newChat": "Neuer Chat",
     "sidebar.newIncognitoChat": "Neuer Inkognito-Chat",
     "sidebar.newIncognitoChatTitle": "Neuer Inkognito-Chat — wird beim Beenden der App gelöscht",
@@ -82,7 +78,6 @@
     "sidebar.deleteThreadTitle": "„{title}“ löschen?",
     "sidebar.navigation": "Navigation",
     "sidebar.resize": "Seitenleiste in der Breite anpassen",
-
     "chat.empty": "Sende eine Nachricht, um die Unterhaltung zu beginnen.",
     "chat.thinking": "Denkt nach…",
     "chat.incognitoHint": "Inkognito — dieser Chat wird beim Beenden der App gelöscht.",
@@ -96,7 +91,6 @@
     "chat.copyCode": "Code kopieren",
     "chat.openInTerminal": "Im Terminal öffnen",
     "chat.openInTerminalTitle": "Im Terminal öffnen (vorbereitet, nicht ausgeführt — prüfen und Enter drücken)",
-
     "composer.placeholder": "Nachricht eingeben…  ( / für Befehle · Enter zum Senden · Umschalt+Enter für neue Zeile )",
     "composer.attachImage": "Bild anhängen",
     "composer.removeImage": "Bild entfernen",
@@ -119,7 +113,6 @@
     "composer.terminalOpenError": "Es konnte kein Terminal geöffnet werden: {error}",
     "composer.pluginCommandNote": "Der Befehl `{command}` stammt aus einem Plugin, hat aber keine integrierte Aktion in dieser App und kann hier nicht ausgeführt werden.",
     "composer.terminalStagedNote": "Dieser Befehl wurde in deinem Terminal vorbereitet — prüfe ihn und drücke dort Enter, um ihn auszuführen (er wurde nicht automatisch ausgeführt):",
-
     "canvas.title": "Canvas",
     "canvas.subtitle": "Markdown-Editor mit Live-Vorschau",
     "canvas.aria": "Canvas-Editor",
@@ -129,17 +122,14 @@
     "canvas.placeholder": "Eine lange Markdown-Nachricht verfassen…",
     "canvas.empty": "Noch nichts für die Vorschau.",
     "canvas.hint": "Cmd/Strg+Enter zum Senden · Esc zum Schließen (Entwurf bleibt erhalten)",
-
     "model.choose": "Modell wählen",
     "model.aria": "Modell",
     "model.unavailable": "nicht verfügbar",
-
     "quick.placeholder": "Frag irgendetwas…  (Enter zum Senden, Tab wählt das Ziel, Esc zum Schließen)",
     "quick.newChat": "Neuer Chat",
     "quick.startChat": "Chat starten",
     "quick.destination": "Ziel",
     "quick.takeScreenshot": "Bildschirmfoto aufnehmen",
-
     "search.placeholder": "Chats durchsuchen…",
     "search.aria": "Chats durchsuchen",
     "search.clear": "Suche leeren",
@@ -153,7 +143,6 @@
     "search.kindTitle": "Titel",
     "search.kindUser": "Du",
     "search.kindAssistant": "Assistent",
-
     "usage.loading": "Nutzung wird geladen…",
     "usage.emptyTitle": "Noch keine Token-Nutzung erfasst.",
     "usage.emptyHint": "Sende eine Nachricht, dann erscheint die Nutzung hier.",
@@ -173,7 +162,6 @@
     "usage.noActivity": "Keine Aktivität",
     "usage.responseCount.one": "{n} Antwort",
     "usage.responseCount.other": "{n} Antworten",
-
     "settings.nav.apiKeys": "API-Schlüssel",
     "settings.nav.defaultModel": "Standardmodell",
     "settings.nav.models": "Modelle",
@@ -185,7 +173,6 @@
     "settings.nav.mcp": "MCP-Server",
     "settings.nav.skills": "Skills",
     "settings.nav.plugins": "Plugins",
-
     "apiKeys.title": "API-Schlüssel",
     "apiKeys.description": "Schlüssel werden im Schlüsselbund des Betriebssystems gespeichert und verlassen diesen Rechner nie.",
     "apiKeys.noProviders": "Keine Anbieter aktiviert. Aktiviere ein Anbieter-Plugin im Bereich Plugins, um dessen API-Schlüssel hinzuzufügen.",
@@ -193,18 +180,15 @@
     "apiKeys.saved": "Gespeichert ✓",
     "apiKeys.notSet": "Nicht hinterlegt",
     "apiKeys.storedPlaceholder": "•••••••• (gespeichert)",
-
     "defaultModel.title": "Standardmodell",
     "defaultModel.description": "Anbieter und Modell, mit denen neue Chats (und das Schnelleingabe-Overlay) starten. Du kannst es weiterhin pro Chat in der oberen Leiste ändern und die Liste unter Einstellungen → Modelle verwalten.",
     "defaultModel.none": "Keine Modelle konfiguriert — füge welche unter Einstellungen → Modelle hinzu.",
-
     "models.title": "Modelle",
     "models.description": "Die Modelle, die pro Anbieter in der Chat-Auswahl angeboten werden. Jedes hat eine Modell-ID (wird an die API gesendet) und einen Anzeigenamen.",
     "models.noProviders": "Keine Anbieter aktiviert — aktiviere einen unter Einstellungen → Plugins.",
     "models.noModels": "Noch keine Modelle — füge unten eins hinzu.",
     "models.labelPlaceholder": "Name (z. B. Opus 4.8)",
     "models.idPlaceholder": "Modell-ID",
-
     "memory.title": "Systemprompt & Gedächtnis",
     "memory.description": "Wird dem Systemkontext jedes Chats vorangestellt, vor allen Projektanweisungen (Vorrang: global → Projekt → Thread).",
     "memory.addendumLabel": "Systemprompt-Zusatz",
@@ -213,16 +197,13 @@
     "memory.aboutYou": "Gedächtnis über dich",
     "memory.aboutYouHint": "Fakten und Vorlieben, die sich der Assistent über Chats hinweg merken soll.",
     "memory.addPlaceholder": "Eine Erinnerung hinzufügen, z. B. Ich bin TypeScript-Entwickler und arbeite an einer Desktop-App.",
-
     "shortcut.title": "Globales Tastenkürzel",
     "shortcut.description": "Ruft das Schnelleingabe-Overlay von überall auf. Verwende Modifikatoren wie Alt, CmdOrControl, Shift, verbunden mit + (z. B. Alt+Space, CmdOrControl+Shift+K).",
     "shortcut.saved": "Tastenkürzel registriert ✓",
-
     "tray.title": "In den Infobereich schließen",
     "tray.description": "Wenn aktiviert, wird das Fenster beim Schließen in den Infobereich ausgeblendet und die App läuft für das globale Tastenkürzel weiter. Vollständig beenden über das Menü des Infobereich-Symbols.",
     "tray.hides": "Schließen blendet in den Infobereich aus",
     "tray.quits": "Schließen beendet die App",
-
     "appearance.titleBar.title": "Titelleiste",
     "appearance.titleBar.description": "Die native Titelleiste des Systems verwenden oder die kompakte der App, mit wählbarer Position und wählbarem Stil der Fensterknöpfe.",
     "appearance.titleBar.label": "Titelleiste",
@@ -237,7 +218,6 @@
     "appearance.menuBar.inline": "Unter der Titelleiste",
     "appearance.menuBar.hidden": "Ausgeblendet",
     "appearance.menuBar.hint": "„System“ zeigt das native Menü — unter KDE erscheint es im globalen Menü, wenn appmenu-gtk-module installiert ist, sonst als Leiste über der Titelleiste. „Unter der Titelleiste“ verwendet stattdessen das app-eigene Menü.",
-
     "themes.title": "Designs",
     "themes.description": "Installiere ein Design, indem du einen Ordner (mit theme.json + theme.css) in das Designverzeichnis legst, und wähle es dann unten aus. Designs färben die App zusätzlich zur Hell/Dunkel-Einstellung um. Eigene Designs: siehe docs/theming.md.",
     "themes.default": "Standard",
@@ -246,15 +226,14 @@
     "themes.showFolder": "Designordner anzeigen",
     "themes.directory": "Designverzeichnis:",
     "themes.pluginBadge": "plugin",
-
     "colors.title": "Farben",
-    "colors.description": "Eigene Akzent- und Hintergrundfarben. Die Auswahl gilt für den aktiven Modus (du bearbeitest gerade die Palette „{mode}“) und überschreibt das gewählte Design; Hell und Dunkel werden getrennt gespeichert. Text auf einer eigenen Farbe wird automatisch für ausreichenden Kontrast angepasst.",
+    "colors.description": "Eigene Akzent- und Hintergrundfarben. Die Auswahl gilt für den aktiven Modus (du bearbeitest gerade die Palette „{mode}“) und überschreibt das gewählte Design; Hell und Dunkel werden getrennt gespeichert. Text auf einer eigenen Farbe wird automatisch für ausreichenden Kontrast angepasst. Ein eigener Hintergrund färbt außerdem Seitenleiste, Titelleiste, Karten und Eingabefelder in passenden dunkleren oder helleren Tönen.",
     "colors.light": "Hell",
     "colors.dark": "Dunkel",
     "colors.accent": "Akzent",
     "colors.background": "Hintergrund",
     "colors.colorAria": "Farbe: {label}",
-
+    "colors.resetAll": "Alle Farben zurücksetzen",
     "typography.title": "Typografie",
     "typography.description": "Schriftarten und -größen, getrennt für die Oberfläche und für Chat-Nachrichten. Aufgeführte Schriften müssen auf deinem System installiert sein; wähle „Eigene…“, um einen beliebigen Namen einzugeben. Codeblöcke behalten ihre Monospace-Schrift.",
     "typography.uiFont": "UI-Schrift",
@@ -270,7 +249,6 @@
     "typography.familyAria": "Schriftfamilie: {label}",
     "typography.customFamilyAria": "Eigene Schriftfamilie: {label}",
     "typography.sizeAria": "{label} in Pixeln",
-
     "chatStyle.title": "Chat-Stil",
     "chatStyle.description": "Wie Nachrichten in einer Unterhaltung dargestellt werden: die flache Standardansicht, Messenger-Blasen, eine dichte Kompaktansicht oder ein dokumentartiger Lesemodus.",
     "chatStyle.layout": "Layout",
@@ -278,7 +256,6 @@
     "chatStyle.bubbles": "Blasen",
     "chatStyle.compact": "Kompakt",
     "chatStyle.document": "Dokument",
-
     "chatList.title": "Chatliste",
     "chatList.description": "Was jede Unterhaltungszeile in der Seitenleiste zeigt: nur den Titel oder eine zweite Zeile mit Datum, Modelldetails oder einer Vorschau der letzten Nachricht.",
     "chatList.titleOption": "Titel",
@@ -287,13 +264,11 @@
     "chatList.preview": "Vorschau",
     "chatList.mockTitle": "Wochenendpläne",
     "chatList.mockPreview": "Hier ist die gewünschte Packliste…",
-
     "language.title": "Sprache",
     "language.description": "Die Sprache der Benutzeroberfläche. Mitgelieferte Sprachen sind Teil der App; eigene fügst du hinzu, indem du ein JSON-Sprachpaket in den Sprachordner legst (siehe docs/i18n.md). Der Wechsel gilt sofort.",
     "language.userBadge": "Benutzerpaket",
     "language.showFolder": "Sprachordner anzeigen",
     "language.directory": "Sprachverzeichnis:",
-
     "mcp.title": "MCP-Server",
     "mcp.description": "Verbinde Model-Context-Protocol-Server, um dem Modell Werkzeuge zu geben. Der integrierte Web-Browsing-Server funktioniert sofort. Füge eigene Server über stdio (ein Befehl) oder HTTP (eine URL) hinzu. Die Werkzeuge aktivierter Server werden dem Modell bei jeder Nachricht angeboten.",
     "mcp.removeTitle": "„{label}“ entfernen?",
@@ -302,11 +277,9 @@
     "mcp.addServer": "Server hinzufügen",
     "mcp.availableTools": "Verfügbare Werkzeuge",
     "mcp.refreshHint": "Neu laden, um die Werkzeuge aktivierter Server aufzulisten.",
-
     "skills.title": "Skills",
     "skills.description": "Skills sind wiederverwendbare Anweisungspakete für das Modell. Aktiviere einen Skill, um seine Anleitung in den Systemkontext jedes Chats einzufügen. Weitere installierst du als skill-Plugins (siehe Plugins-Karte).",
     "skills.none": "Noch keine Skills installiert.",
-
     "plugins.title": "Plugins",
     "plugins.description": "Erweitere die App um Anbieter, Designs, Skills und Slash-Befehle. Integrierte Plugins gehören zur App und lassen sich deaktivieren, aber nicht entfernen. Benutzer-Plugins liegen im App-Datenordner plugins/.",
     "plugins.category.provider": "Anbieter",
@@ -315,7 +288,6 @@
     "plugins.category.slashCommand": "Slash-Befehle",
     "plugins.noneInCategory": "Keine {category} installiert.",
     "plugins.uninstallTitle": "„{name}“ deinstallieren?",
-
     "project.notFound": "Projekt nicht gefunden.",
     "project.name": "Projektname",
     "project.instructions": "Anweisungen",
@@ -331,7 +303,6 @@
     "project.removeFile": "{name} entfernen",
     "project.truncated": "„{name}“ wurde auf {n} Zeichen gekürzt.",
     "project.readError": "„{name}“ konnte nicht als Text gelesen werden.",
-
     "thread.newChat": "Neuer Chat",
     "thread.image": "Bild",
     "thread.untitled": "Ohne Titel"

@@ -7,11 +7,13 @@ import {
   clampSize,
   contrastForeground,
   cssFontFamily,
+  derivedSurfaceDecls,
   getStoredChatListStyle,
   getStoredChatStyle,
   getStoredCustomColors,
   getStoredTypography,
   isHexColor,
+  mixHex,
   relativeLuminance,
   storeChatListStyle,
   storeChatStyle,
@@ -94,6 +96,75 @@ describe("buildColorCss", () => {
     expect(css).toContain(":root:not(.dark)");
     expect(css).toContain(":root.dark");
     expect(css).toContain("--primary-foreground: #171717;"); // on yellow
+  });
+
+  it("derives the surface family from a background pick only", () => {
+    const accentOnly = buildColorCss({
+      light: { primary: "#1d4ed8" },
+      dark: {},
+    });
+    expect(accentOnly).not.toContain("--sidebar:");
+    const css = buildColorCss({ light: { background: "#fdf6e3" }, dark: {} });
+    for (const token of [
+      "--sidebar:",
+      "--sidebar-foreground:",
+      "--sidebar-accent:",
+      "--sidebar-border:",
+      "--card:",
+      "--popover:",
+      "--muted:",
+      "--secondary:",
+      "--accent:",
+      "--border:",
+      "--input:",
+      "--ring:",
+    ])
+      expect(css).toContain(token);
+  });
+});
+
+describe("mixHex / derivedSurfaceDecls", () => {
+  it("mixes channels linearly between the endpoints", () => {
+    expect(mixHex("#000000", "#ffffff", 0)).toBe("#000000");
+    expect(mixHex("#000000", "#ffffff", 1)).toBe("#ffffff");
+    expect(mixHex("#000000", "#ffffff", 0.5)).toBe("#808080");
+    expect(mixHex("#ff0000", "#00ff00", 0.5)).toBe("#808000");
+  });
+
+  it("derives darker tones from a light background", () => {
+    const decls = Object.fromEntries(
+      derivedSurfaceDecls("#fdf6e3").map((d) => d.replace(";", "").split(": ")),
+    );
+    // every derived surface is darker than the light background pick
+    for (const key of ["--sidebar", "--muted", "--border", "--card"])
+      expect(relativeLuminance(decls[key])).toBeLessThan(
+        relativeLuminance("#fdf6e3"),
+      );
+    // border carries more tone than the sidebar
+    expect(relativeLuminance(decls["--border"])).toBeLessThan(
+      relativeLuminance(decls["--sidebar"]),
+    );
+    expect(decls["--sidebar-foreground"]).toBe("#171717");
+  });
+
+  it("derives lighter tones from a dark background", () => {
+    const decls = Object.fromEntries(
+      derivedSurfaceDecls("#0b1220").map((d) => d.replace(";", "").split(": ")),
+    );
+    for (const key of ["--sidebar", "--muted", "--border", "--card"])
+      expect(relativeLuminance(decls[key])).toBeGreaterThan(
+        relativeLuminance("#0b1220"),
+      );
+    expect(decls["--sidebar-foreground"]).toBe("#ffffff");
+  });
+
+  it("keeps muted-foreground between foreground and background", () => {
+    const decls = Object.fromEntries(
+      derivedSurfaceDecls("#ffffff").map((d) => d.replace(";", "").split(": ")),
+    );
+    const l = relativeLuminance(decls["--muted-foreground"]);
+    expect(l).toBeGreaterThan(relativeLuminance("#171717"));
+    expect(l).toBeLessThan(relativeLuminance("#ffffff"));
   });
 });
 

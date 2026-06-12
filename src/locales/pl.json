@@ -22,12 +22,10 @@
     "common.uninstall": "Odinstaluj",
     "common.builtIn": "wbudowane",
     "common.byAuthor": "autor: {author}",
-
     "time.justNow": "przed chwilą",
     "time.minutesAgo": "{n} min temu",
     "time.hoursAgo": "{n} godz. temu",
     "time.daysAgo": "{n} dn. temu",
-
     "titleBar.openSidebar": "Otwórz pasek boczny",
     "titleBar.hideSidebar": "Ukryj pasek boczny",
     "titleBar.showSidebar": "Pokaż pasek boczny",
@@ -42,7 +40,6 @@
     "titleBar.minimize": "Minimalizuj",
     "titleBar.maximize": "Maksymalizuj",
     "titleBar.close": "Zamknij",
-
     "menu.file": "Plik",
     "menu.view": "Widok",
     "menu.newChat": "Nowy czat",
@@ -51,7 +48,6 @@
     "menu.searchChats": "Szukaj w czatach…",
     "menu.toggleSidebar": "Przełącz pasek boczny",
     "menu.usage": "Zużycie",
-
     "sidebar.newChat": "Nowy czat",
     "sidebar.newIncognitoChat": "Nowy czat incognito",
     "sidebar.newIncognitoChatTitle": "Nowy czat incognito — usuwany przy zamknięciu aplikacji",
@@ -82,7 +78,6 @@
     "sidebar.deleteThreadTitle": "Usunąć „{title}”?",
     "sidebar.navigation": "Nawigacja",
     "sidebar.resize": "Zmień szerokość paska bocznego",
-
     "chat.empty": "Wyślij wiadomość, aby rozpocząć rozmowę.",
     "chat.thinking": "Myślę…",
     "chat.incognitoHint": "Incognito — ten czat zostanie usunięty przy zamknięciu aplikacji.",
@@ -96,7 +91,6 @@
     "chat.copyCode": "Kopiuj kod",
     "chat.openInTerminal": "Otwórz w terminalu",
     "chat.openInTerminalTitle": "Otwórz w terminalu (przygotowane, nieuruchomione — przejrzyj i naciśnij Enter)",
-
     "composer.placeholder": "Napisz wiadomość…  ( / — polecenia · Enter — wyślij · Shift+Enter — nowa linia )",
     "composer.attachImage": "Załącz obraz",
     "composer.removeImage": "Usuń obraz",
@@ -119,7 +113,6 @@
     "composer.terminalOpenError": "Nie udało się otworzyć terminala: {error}",
     "composer.pluginCommandNote": "Polecenie `{command}` pochodzi z wtyczki, ale nie ma wbudowanej akcji w tej aplikacji, więc nie może tu zostać wykonane.",
     "composer.terminalStagedNote": "Przygotowano to polecenie w Twoim terminalu — przejrzyj je i naciśnij tam Enter, aby je wykonać (nie zostało uruchomione automatycznie):",
-
     "canvas.title": "Kanwa",
     "canvas.subtitle": "Edytor Markdown z podglądem na żywo",
     "canvas.aria": "Edytor kanwy",
@@ -129,17 +122,14 @@
     "canvas.placeholder": "Napisz dłuższą wiadomość w Markdown…",
     "canvas.empty": "Nie ma jeszcze nic do podglądu.",
     "canvas.hint": "Cmd/Ctrl+Enter — wyślij · Esc — zamknij (szkic zostaje zachowany)",
-
     "model.choose": "Wybierz model",
     "model.aria": "Model",
     "model.unavailable": "niedostępny",
-
     "quick.placeholder": "Zapytaj o cokolwiek…  (Enter — wyślij, Tab — wybór celu, Esc — zamknij)",
     "quick.newChat": "Nowy czat",
     "quick.startChat": "Rozpocznij czat",
     "quick.destination": "Cel",
     "quick.takeScreenshot": "Zrób zrzut ekranu",
-
     "search.placeholder": "Szukaj w czatach…",
     "search.aria": "Szukaj w czatach",
     "search.clear": "Wyczyść wyszukiwanie",
@@ -157,7 +147,6 @@
     "search.kindTitle": "Tytuł",
     "search.kindUser": "Ty",
     "search.kindAssistant": "Asystent",
-
     "usage.loading": "Wczytywanie zużycia…",
     "usage.emptyTitle": "Nie zarejestrowano jeszcze zużycia tokenów.",
     "usage.emptyHint": "Wyślij wiadomość, a zużycie pojawi się tutaj.",
@@ -179,7 +168,6 @@
     "usage.responseCount.few": "{n} odpowiedzi",
     "usage.responseCount.many": "{n} odpowiedzi",
     "usage.responseCount.other": "{n} odpowiedzi",
-
     "settings.nav.apiKeys": "Klucze API",
     "settings.nav.defaultModel": "Model domyślny",
     "settings.nav.models": "Modele",
@@ -191,7 +179,6 @@
     "settings.nav.mcp": "Serwery MCP",
     "settings.nav.skills": "Umiejętności",
     "settings.nav.plugins": "Wtyczki",
-
     "apiKeys.title": "Klucze API",
     "apiKeys.description": "Klucze są przechowywane w pęku kluczy systemu operacyjnego i nigdy nie opuszczają tego komputera.",
     "apiKeys.noProviders": "Żaden dostawca nie jest włączony. Włącz wtyczkę dostawcy w sekcji Wtyczki, aby dodać jego klucz API.",
@@ -199,18 +186,15 @@
     "apiKeys.saved": "Zapisano ✓",
     "apiKeys.notSet": "Nie ustawiono",
     "apiKeys.storedPlaceholder": "•••••••• (zapisany)",
-
     "defaultModel.title": "Model domyślny",
     "defaultModel.description": "Dostawca i model, od których zaczynają nowe czaty (oraz okno szybkiego wpisu). Nadal możesz zmienić je dla każdego czatu na górnym pasku, a listą zarządzać w Ustawienia → Modele.",
     "defaultModel.none": "Nie skonfigurowano modeli — dodaj je w Ustawienia → Modele.",
-
     "models.title": "Modele",
     "models.description": "Modele oferowane dla każdego dostawcy w wyborze czatu. Każdy ma identyfikator modelu (wysyłany do API) i przyjazną nazwę.",
     "models.noProviders": "Brak włączonych dostawców — włącz któregoś w Ustawienia → Wtyczki.",
     "models.noModels": "Nie ma jeszcze modeli — dodaj pierwszy poniżej.",
     "models.labelPlaceholder": "Nazwa (np. Opus 4.8)",
     "models.idPlaceholder": "identyfikator modelu",
-
     "memory.title": "Prompt systemowy i pamięć",
     "memory.description": "Dodawane do kontekstu systemowego każdego czatu, przed instrukcjami projektu (kolejność: globalne → projekt → wątek).",
     "memory.addendumLabel": "Dodatek do promptu systemowego",
@@ -219,16 +203,13 @@
     "memory.aboutYou": "Pamięć o Tobie",
     "memory.aboutYouHint": "Fakty i preferencje, które asystent powinien pamiętać między czatami.",
     "memory.addPlaceholder": "Dodaj wpis, np. Jestem programistą TypeScript i pracuję nad aplikacją desktopową.",
-
     "shortcut.title": "Skrót globalny",
     "shortcut.description": "Przywołuje okno szybkiego wpisu z dowolnego miejsca. Używaj modyfikatorów takich jak Alt, CmdOrControl, Shift, połączonych znakiem + (np. Alt+Space, CmdOrControl+Shift+K).",
     "shortcut.saved": "Skrót zarejestrowany ✓",
-
     "tray.title": "Zamykanie do zasobnika",
     "tray.description": "Gdy włączone, zamknięcie okna ukrywa je w zasobniku systemowym, a aplikacja działa dalej na potrzeby skrótu globalnego. Aby zakończyć całkowicie, użyj menu ikony w zasobniku.",
     "tray.hides": "Zamknięcie ukrywa do zasobnika",
     "tray.quits": "Zamknięcie kończy aplikację",
-
     "appearance.titleBar.title": "Pasek tytułu",
     "appearance.titleBar.description": "Używaj natywnego paska tytułu systemu albo kompaktowego paska aplikacji, z wyborem położenia i stylu przycisków okna.",
     "appearance.titleBar.label": "Pasek tytułu",
@@ -243,7 +224,6 @@
     "appearance.menuBar.inline": "Pod paskiem tytułu",
     "appearance.menuBar.hidden": "Ukryty",
     "appearance.menuBar.hint": "„Systemowy” pokazuje natywne menu — w KDE pojawia się w menu globalnym, gdy zainstalowano appmenu-gtk-module, w przeciwnym razie jako pasek nad paskiem tytułu. „Pod paskiem tytułu” używa zamiast tego menu aplikacji.",
-
     "themes.title": "Motywy",
     "themes.description": "Zainstaluj motyw, umieszczając folder (z plikami theme.json + theme.css) w katalogu motywów, a następnie wybierz go poniżej. Motywy przebarwiają aplikację na bazie ustawienia jasny/ciemny. Zobacz docs/theming.md, aby stworzyć własny.",
     "themes.default": "Domyślny",
@@ -252,15 +232,14 @@
     "themes.showFolder": "Pokaż folder motywów",
     "themes.directory": "Katalog motywów:",
     "themes.pluginBadge": "wtyczka",
-
     "colors.title": "Kolory",
-    "colors.description": "Własne kolory akcentu i tła. Wybory dotyczą aktywnego trybu (edytujesz paletę „{mode}”) i mają pierwszeństwo przed wybranym motywem; jasny i ciemny zapisywane są osobno. Tekst na własnym kolorze jest automatycznie dostosowywany pod kątem kontrastu.",
+    "colors.description": "Własne kolory akcentu i tła. Wybory dotyczą aktywnego trybu (edytujesz paletę „{mode}”) i mają pierwszeństwo przed wybranym motywem; jasny i ciemny zapisywane są osobno. Tekst na własnym kolorze jest automatycznie dostosowywany pod kątem kontrastu. Własne tło barwi też pasek boczny, pasek tytułu, karty i pola tekstowe na dopasowane ciemniejsze lub jaśniejsze odcienie.",
     "colors.light": "jasną",
     "colors.dark": "ciemną",
     "colors.accent": "Akcent",
     "colors.background": "Tło",
     "colors.colorAria": "Kolor: {label}",
-
+    "colors.resetAll": "Przywróć wszystkie kolory",
     "typography.title": "Typografia",
     "typography.description": "Czcionki i rozmiary, osobno dla interfejsu i dla wiadomości czatu. Wymienione czcionki muszą być zainstalowane w systemie; wybierz „Własna…”, aby wpisać dowolną nazwę. Bloki kodu zachowują czcionkę o stałej szerokości.",
     "typography.uiFont": "Czcionka interfejsu",
@@ -276,7 +255,6 @@
     "typography.familyAria": "Rodzina: {label}",
     "typography.customFamilyAria": "Własna rodzina: {label}",
     "typography.sizeAria": "{label} w pikselach",
-
     "chatStyle.title": "Styl czatu",
     "chatStyle.description": "Jak wiadomości są rozmieszczane w rozmowie: domyślny płaski widok, dymki jak w komunikatorze, gęsty widok kompaktowy albo tryb czytania przypominający dokument.",
     "chatStyle.layout": "Układ",
@@ -284,7 +262,6 @@
     "chatStyle.bubbles": "Dymki",
     "chatStyle.compact": "Kompaktowy",
     "chatStyle.document": "Dokument",
-
     "chatList.title": "Lista czatów",
     "chatList.description": "Co pokazuje każdy wiersz rozmowy na pasku bocznym: tylko tytuł albo drugą linię z datą, szczegółami modelu lub podglądem ostatniej wiadomości.",
     "chatList.titleOption": "Tytuł",
@@ -293,13 +270,11 @@
     "chatList.preview": "Podgląd",
     "chatList.mockTitle": "Plany na weekend",
     "chatList.mockPreview": "Oto lista rzeczy do spakowania, o którą prosiłeś…",
-
     "language.title": "Język",
     "language.description": "Język interfejsu aplikacji. Dołączone języki są częścią aplikacji; własny dodasz, umieszczając pakiet językowy JSON w folderze języków (zobacz docs/i18n.md). Zmiana działa natychmiast.",
     "language.userBadge": "pakiet użytkownika",
     "language.showFolder": "Pokaż folder języków",
     "language.directory": "Katalog języków:",
-
     "mcp.title": "Serwery MCP",
     "mcp.description": "Połącz serwery Model Context Protocol, aby dać modelowi narzędzia. Wbudowany serwer przeglądania internetu działa od razu. Dodawaj własne serwery przez stdio (polecenie) albo HTTP (URL). Narzędzia włączonych serwerów są oferowane modelowi przy każdej wiadomości.",
     "mcp.removeTitle": "Usunąć „{label}”?",
@@ -308,11 +283,9 @@
     "mcp.addServer": "Dodaj serwer",
     "mcp.availableTools": "Dostępne narzędzia",
     "mcp.refreshHint": "Odśwież, aby wyświetlić narzędzia włączonych serwerów.",
-
     "skills.title": "Umiejętności",
     "skills.description": "Umiejętności to wielokrotnego użytku pakiety instrukcji dla modelu. Włącz umiejętność, aby jej wskazówki trafiały do kontekstu systemowego każdego czatu. Kolejne zainstalujesz jako wtyczki typu skill (zobacz kartę Wtyczki).",
     "skills.none": "Nie zainstalowano jeszcze umiejętności.",
-
     "plugins.title": "Wtyczki",
     "plugins.description": "Rozszerzaj aplikację o dostawców, motywy, umiejętności i polecenia z ukośnikiem. Wtyczki wbudowane są częścią aplikacji — można je wyłączyć, ale nie usunąć. Wtyczki użytkownika znajdują się w folderze plugins/ danych aplikacji.",
     "plugins.category.provider": "Dostawcy",
@@ -321,7 +294,6 @@
     "plugins.category.slashCommand": "Polecenia z ukośnikiem",
     "plugins.noneInCategory": "Brak zainstalowanych: {category}.",
     "plugins.uninstallTitle": "Odinstalować „{name}”?",
-
     "project.notFound": "Nie znaleziono projektu.",
     "project.name": "Nazwa projektu",
     "project.instructions": "Instrukcje",
@@ -339,7 +311,6 @@
     "project.removeFile": "Usuń {name}",
     "project.truncated": "„{name}” został obcięty do {n} znaków.",
     "project.readError": "Nie udało się odczytać „{name}” jako tekstu.",
-
     "thread.newChat": "Nowy czat",
     "thread.image": "Obraz",
     "thread.untitled": "Bez tytułu"

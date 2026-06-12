@@ -186,7 +186,10 @@ function ColorsCard() {
   const colors = useAppearance((s) => s.colors);
   const setColor = useAppearance((s) => s.setColor);
   const resetColor = useAppearance((s) => s.resetColor);
+  const resetAllColors = useAppearance((s) => s.resetAllColors);
   const picks = colors[mode];
+  const anyPick =
+    Object.keys(colors.light).length > 0 || Object.keys(colors.dark).length > 0;
 
   return (
     <Card className="w-full max-w-lg">
@@ -213,6 +216,16 @@ function ColorsCard() {
           onChange={(hex) => setColor(mode, "background", hex)}
           onReset={() => resetColor(mode, "background")}
         />
+        <div className="flex justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!anyPick}
+            onClick={resetAllColors}
+          >
+            {t("colors.resetAll")}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
