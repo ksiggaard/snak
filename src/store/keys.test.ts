@@ -16,7 +16,15 @@ vi.mock("@/lib/keys", () => ({
 }));
 
 vi.mock("@/lib/providers", () => ({
-  KNOWN_PROVIDER_IDS: ["anthropic", "openai", "mistral", "gemini"] as const,
+  KNOWN_PROVIDER_IDS: [
+    "anthropic",
+    "openai",
+    "mistral",
+    "gemini",
+    "ollama",
+  ] as const,
+  // Keyless providers are skipped by the presence machinery (T37).
+  isKeylessProvider: (id: string) => id === "ollama",
 }));
 
 import { PRESENCE_SYNCED_KEY, presenceKey, useKeys } from "@/store/keys";

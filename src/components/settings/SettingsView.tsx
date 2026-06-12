@@ -2,6 +2,7 @@ import { useState, type ComponentType } from "react";
 import { ApiKeys } from "@/components/settings/ApiKeys";
 import { DefaultModel } from "@/components/settings/DefaultModel";
 import { Models } from "@/components/settings/Models";
+import { OllamaSettings } from "@/components/settings/OllamaSettings";
 import { Memory } from "@/components/settings/Memory";
 import { ShortcutSetting } from "@/components/settings/Shortcut";
 import { CloseToTraySetting } from "@/components/settings/CloseToTray";
@@ -31,6 +32,7 @@ const SECTIONS: Section[] = [
     Component: DefaultModel,
   },
   { id: "models", label: "settings.nav.models", Component: Models },
+  { id: "ollama", label: "settings.nav.ollama", Component: OllamaSettings },
   { id: "memory", label: "settings.nav.memory", Component: Memory },
   {
     id: "shortcut",

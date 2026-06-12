@@ -33,6 +33,7 @@ import { usePlugins } from "@/store/plugins";
 import { useI18n, useT } from "@/store/i18n";
 import { useModels } from "@/store/models";
 import { useKeys } from "@/store/keys";
+import { useOllama } from "@/store/ollama";
 import { useView } from "@/store/view";
 import { useLayout } from "@/store/layout";
 import { useTitleBar } from "@/store/titlebar";
@@ -47,6 +48,7 @@ function App() {
   const loadPlugins = usePlugins((s) => s.load);
   const loadModels = useModels((s) => s.load);
   const loadKeys = useKeys((s) => s.load);
+  const refreshOllama = useOllama((s) => s.refresh);
   const loadUserLanguagePacks = useI18n((s) => s.loadUserPacks);
   const openProjectId = useProjects((s) => s.openProjectId);
   const view = useView((s) => s.view);
@@ -77,6 +79,9 @@ function App() {
     void loadKeys();
     void loadPlugins();
     void loadModels();
+    // Probe the local Ollama daemon once at startup (T37) — fire-and-forget;
+    // the composer/settings react to the store as the answer lands.
+    void refreshOllama();
     // Bundled language packs apply synchronously at module load (no flash);
     // this folds in user packs from the app-data languages folder (T32).
     void loadUserLanguagePacks();
@@ -86,6 +91,7 @@ function App() {
     loadKeys,
     loadPlugins,
     loadModels,
+    refreshOllama,
     loadUserLanguagePacks,
   ]);
 

@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useProviders } from "@/lib/providers";
+import { isKeylessProvider, useProviders } from "@/lib/providers";
 import { deleteApiKey, setApiKey } from "@/lib/keys";
 import { useKeys } from "@/store/keys";
 import { useT } from "@/store/i18n";
@@ -20,8 +20,9 @@ type Drafts = Partial<Record<Provider, string>>;
 export function ApiKeys() {
   const t = useT();
   // Only enabled provider plugins get a key row (T18) — disabling a provider
-  // removes it from the settings list.
-  const providers = useProviders();
+  // removes it from the settings list. Keyless providers (local Ollama, T37)
+  // have no key to manage, so they get no row either.
+  const providers = useProviders().filter((p) => !isKeylessProvider(p.id));
   // Presence comes from the cached keys store (no keychain reads on open). The
   // store is loaded app-wide in App; save/remove keep its cache in sync.
   const present = useKeys((s) => s.present);

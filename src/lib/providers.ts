@@ -41,6 +41,7 @@ export const KNOWN_PROVIDER_IDS = [
   "openai",
   "mistral",
   "gemini",
+  "ollama",
 ] as const;
 
 function isKnownProvider(id: string): id is Provider {
@@ -78,10 +79,46 @@ export const FALLBACK_PROVIDERS: ProviderMeta[] = [
     defaultModel: "gemini-2.0-flash",
     keyHint: "AIza…",
   },
+  // Keyless local provider (T37). Appended LAST so PROVIDERS[0] (the draft
+  // default) stays Anthropic. keyHint is "" — no key row is ever rendered.
+  {
+    id: "ollama",
+    label: "Local (Ollama)",
+    defaultModel: "llama3.2:1b",
+    keyHint: "",
+  },
 ];
 
 /** Back-compat alias (the threads store reads `PROVIDERS[0]` at module init). */
 export const PROVIDERS = FALLBACK_PROVIDERS;
+
+/**
+ * Providers that talk to a local daemon and need no API key (T37). These are
+ * skipped by the keychain-presence machinery (`useKeys`) and the API-keys
+ * settings card; the composer gates them on daemon reachability instead.
+ */
+export const KEYLESS_PROVIDER_IDS = ["ollama"] as const;
+
+/** Whether a provider id is keyless (no API key stored or required). */
+export function isKeylessProvider(id: string): boolean {
+  return (KEYLESS_PROVIDER_IDS as readonly string[]).includes(id);
+}
+
+/**
+ * Union the key-presence set with the enabled keyless providers, so consumers
+ * gating on "has a key" (model picker) treat keyless providers as always
+ * available. Pure — returns a new set; the inputs are not mutated.
+ */
+export function withKeylessProviders(
+  present: Set<Provider>,
+  providers: ProviderMeta[],
+): Set<Provider> {
+  const out = new Set(present);
+  for (const p of providers) {
+    if (isKeylessProvider(p.id)) out.add(p.id);
+  }
+  return out;
+}
 
 /**
  * Map enabled `provider` plugin contributions to `ProviderMeta`. Pure (unit

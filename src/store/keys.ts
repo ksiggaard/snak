@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { getSetting, setSetting } from "@/lib/db";
 import { readApiKeyPresence } from "@/lib/keys";
-import { KNOWN_PROVIDER_IDS } from "@/lib/providers";
+import { isKeylessProvider, KNOWN_PROVIDER_IDS } from "@/lib/providers";
 import type { Provider } from "@/types/db";
 
 // Key *presence* ("does provider X have a stored API key?") is cached in the
@@ -40,6 +40,13 @@ interface KeysState {
   setPresent: (provider: Provider, present: boolean) => Promise<void>;
 }
 
+// Keyless providers (e.g. local Ollama, T37) have no key to cache or read —
+// they're gated on daemon reachability instead (`useOllama`), so the presence
+// machinery skips them entirely.
+const KEYED_PROVIDER_IDS = KNOWN_PROVIDER_IDS.filter(
+  (id) => !isKeylessProvider(id),
+);
+
 export const useKeys = create<KeysState>((set) => ({
   present: new Set(),
   loaded: false,
@@ -50,7 +57,7 @@ export const useKeys = create<KeysState>((set) => ({
     // the keychain again on subsequent launches).
     if ((await getSetting(PRESENCE_SYNCED_KEY)) !== "1") {
       await Promise.all(
-        KNOWN_PROVIDER_IDS.map(async (provider) => {
+        KEYED_PROVIDER_IDS.map(async (provider) => {
           const has = await readApiKeyPresence(provider);
           await setSetting(presenceKey(provider), has ? "1" : "0");
         }),
@@ -59,9 +66,12 @@ export const useKeys = create<KeysState>((set) => ({
     }
     // Read the cached flags (pure DB — no keychain access).
     const pairs = await Promise.all(
-      KNOWN_PROVIDER_IDS.map(
+      KEYED_PROVIDER_IDS.map(
         async (provider) =>
-          [provider, (await getSetting(presenceKey(provider))) === "1"] as const,
+          [
+            provider,
+            (await getSetting(presenceKey(provider))) === "1",
+          ] as const,
       ),
     );
     set({

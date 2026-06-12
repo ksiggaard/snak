@@ -15,7 +15,7 @@ import { Canvas } from "@/components/chat/Canvas";
 import { ModelPicker } from "@/components/chat/ModelPicker";
 import { canCompact } from "@/lib/compaction";
 import { prepareImage, type PreparedImage } from "@/lib/image";
-import { useProviders } from "@/lib/providers";
+import { isKeylessProvider, useProviders } from "@/lib/providers";
 import { takeScreenshot } from "@/lib/quick";
 import { openInTerminal } from "@/lib/terminal";
 import {
@@ -28,6 +28,7 @@ import {
 import { selectRegistry, usePlugins } from "@/store/plugins";
 import { useThreads } from "@/store/threads";
 import { useKeys } from "@/store/keys";
+import { useOllama } from "@/store/ollama";
 import { t as tNow, useT } from "@/store/i18n";
 import type { Provider } from "@/types/db";
 
@@ -102,7 +103,19 @@ export function Composer({
   // matches the previous "checking" state so Send isn't blocked before we know.
   const keyPresent = useKeys((s) => s.present);
   const keysLoaded = useKeys((s) => s.loaded);
-  const keyReady = keysLoaded ? keyPresent.has(provider) : null;
+  // A keyless provider (local Ollama, T37) has no key to check — readiness is
+  // the daemon's reachability instead: ok → ready, unknown → still checking
+  // (same as the keys cache loading), down → blocked with a retry notice.
+  const ollamaStatus = useOllama((s) => s.status);
+  const refreshOllama = useOllama((s) => s.refresh);
+  const keyless = isKeylessProvider(provider);
+  const keyReady = keyless
+    ? ollamaStatus === "unknown"
+      ? null
+      : ollamaStatus === "ok"
+    : keysLoaded
+      ? keyPresent.has(provider)
+      : null;
 
   // --- Compaction (T28) -------------------------------------------------------
   // Enabled only for a saved thread with at least one exchange since the last
@@ -285,11 +298,24 @@ export function Composer({
             {t("composer.noProviders")}
           </p>
         ))}
-      {noKey && (
-        <p className="text-muted-foreground text-xs">
-          {t("composer.noKey", { provider: providerLabel(provider) })}
-        </p>
-      )}
+      {noKey &&
+        (keyless ? (
+          <p className="text-muted-foreground flex items-center gap-2 text-xs">
+            {t("composer.ollamaDown")}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 px-2 text-xs"
+              onClick={() => void refreshOllama()}
+            >
+              {t("composer.ollamaCheckAgain")}
+            </Button>
+          </p>
+        ) : (
+          <p className="text-muted-foreground text-xs">
+            {t("composer.noKey", { provider: providerLabel(provider) })}
+          </p>
+        ))}
       {attachError && <p className="text-destructive text-xs">{attachError}</p>}
 
       {/* Slash-command palette (T14): discovery/autocomplete while typing `/…`. */}

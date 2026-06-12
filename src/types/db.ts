@@ -2,7 +2,7 @@
 // src-tauri/migrations/001_init.sql). Timestamps are SQLite `datetime('now')`
 // strings (UTC, "YYYY-MM-DD HH:MM:SS").
 
-export type Provider = "anthropic" | "openai" | "mistral" | "gemini";
+export type Provider = "anthropic" | "openai" | "mistral" | "gemini" | "ollama";
 
 export type Role = "user" | "assistant" | "system";
 

@@ -182,6 +182,9 @@ export const en = {
     "No providers are enabled. Enable a provider plugin in Settings → Plugins to start chatting.",
   "composer.noKey":
     "No API key set for {provider}. Add one in Settings to send messages.",
+  "composer.ollamaDown":
+    "Ollama isn't running. Start the daemon (ollama serve) to send messages.",
+  "composer.ollamaCheckAgain": "Check again",
   "composer.imageError":
     "Couldn't process that image — it may be too large or an unsupported format.",
   "composer.terminalUsage": "Usage: /terminal <shell command>",
@@ -260,6 +263,7 @@ export const en = {
   "settings.nav.apiKeys": "API Keys",
   "settings.nav.defaultModel": "Default Model",
   "settings.nav.models": "Models",
+  "settings.nav.ollama": "Local (Ollama)",
   "settings.nav.memory": "Memory",
   "settings.nav.shortcut": "Shortcut",
   "settings.nav.tray": "Close to Tray",
@@ -295,6 +299,27 @@ export const en = {
   "models.noModels": "No models yet — add one below.",
   "models.labelPlaceholder": "Label (e.g. Opus 4.8)",
   "models.idPlaceholder": "model id",
+
+  // --- Settings: local Ollama provider (T37) ---------------------------------------------------------
+  "ollama.title": "Local (Ollama)",
+  "ollama.description":
+    "Chat with models running locally via the Ollama daemon (http://localhost:11434). No API key needed — installed models appear in the model picker automatically.",
+  "ollama.statusChecking": "Checking…",
+  "ollama.statusRunning": "Running — v{version}",
+  "ollama.statusDown": "Not running",
+  "ollama.setupIntro": "Ollama wasn't found. To get started:",
+  "ollama.setupInstall": "Install Ollama (ollama.com/download)",
+  "ollama.setupStart": "Start the daemon:",
+  "ollama.setupPull": "Pull a first model, e.g.:",
+  "ollama.installedModels": "Installed models",
+  "ollama.noModels": "No models installed yet — pull one below.",
+  "ollama.modelsHint": "These models are available in the chat model picker.",
+  "ollama.pullLabel": "Pull a model",
+  "ollama.pullPlaceholder": "llama3.2:1b",
+  "ollama.pullStage": "Stage pull in terminal",
+  "ollama.pullStagedHint":
+    "Staged `ollama pull {name}` in your terminal — review it and press Enter there to run it, then Refresh here.",
+  "ollama.pullInvalidName": "That doesn't look like a valid model name.",
 
   // --- Settings: memory / system prompt --------------------------------------------------------------
   "memory.title": "System prompt & memory",

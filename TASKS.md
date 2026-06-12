@@ -1642,8 +1642,8 @@ does not protect.
 
 ## T37 — Local models via Ollama (Hugging Face) — built-in provider plugin
 
-- **Status:** todo
-- **Owner:** —
+- **Status:** done
+- **Owner:** Claude (T36–T39 wave)
 - **Priority:** P2
 - **Layer:** Rust (provider module + CLI/daemon detection) + Frontend (setup UX)
 - **Depends on:** — (T12/T18 plugin model, done)
@@ -1680,6 +1680,27 @@ are NOT bundled with snak — ship clear in-app instructions to get rolling inst
 - Rust dispatch currently only resolves the four known ids (`providers/mod.rs`) and T18
   enforced enablement frontend-only — this task adds the first new id since then; keep the
   fallback behavior coherent.
+- 2026-06-12 (Claude): Done. **Endpoint decision (documented in `providers/ollama.rs`):**
+  chat rides Ollama's OpenAI-compatible `/v1/chat/completions` through the shared
+  `openai::chat_completions_stream` (Mistral-style wrapper — SSE, cancel, images, tools,
+  and usage capture all reused; the compat layer maps `prompt_eval_count`/`eval_count` →
+  `prompt_tokens`/`completion_tokens`, cache fields 0); discovery/health use the native
+  `/api/tags` + `/api/version`. Connect failures are wrapped by `friendly_connect_error`
+  ("Ollama isn't reachable… is it installed and running?"). **Keyless:** `is_keyless()`
+  in `providers/mod.rs`; `chat_stream` skips the keychain for keyless ids;
+  frontend `KEYLESS_PROVIDER_IDS`/`isKeylessProvider`/`withKeylessProviders` —
+  `store/keys.ts` skips them, ApiKeys hides them, Composer gates send on a new
+  `useOllama` status store (down → actionable notice + "Check again"), ModelChooser
+  unions keyless ids into `keyed`. **Models:** `ollama_status`/`ollama_list_models`
+  commands (own 1.5s-timeout clients; status never errors); `useOllama.refresh()`
+  (startup + card button) reconciles daemon models into the `models` table via pure
+  `reconcileOllamaModels` (never removes rows on a failed probe). **Pull:** the
+  settings card ("Local (Ollama)", after Models) stages `ollama pull <name>` via T17's
+  `openInTerminal` behind `isValidOllamaModelName` — never auto-executed. Manifest
+  `com.snak.ollama` (builtin tests 6/5). 21 i18n keys in all five packs. Verified:
+  npm build/lint/test (333) + cargo build/clippy/fmt/test (56) all green.
+  **Live daemon test pending an Ollama install** (needs sudo; staged with Kasper) —
+  the absent-daemon UX path is the one verified so far.
 
 ---
 

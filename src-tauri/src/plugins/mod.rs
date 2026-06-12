@@ -119,6 +119,7 @@ fn builtin_manifests() -> Vec<PluginManifest> {
         include_str!("builtin/openai.json"),
         include_str!("builtin/mistral.json"),
         include_str!("builtin/gemini.json"),
+        include_str!("builtin/ollama.json"),
         include_str!("builtin/terminal.json"),
     ];
     BUILTINS
@@ -316,10 +317,10 @@ mod tests {
     #[test]
     fn all_builtins_are_valid_and_enabled_by_default() {
         let builtins = builtin_manifests();
-        // Four provider plugins (T18) + the /terminal slash-command plugin (T14).
-        assert_eq!(builtins.len(), 5, "expected 5 built-in plugins");
+        // Five provider plugins (T18/T37) + the /terminal slash-command plugin (T14).
+        assert_eq!(builtins.len(), 6, "expected 6 built-in plugins");
         let providers = builtins.iter().filter(|m| m.category == "provider").count();
-        assert_eq!(providers, 4, "expected 4 built-in providers");
+        assert_eq!(providers, 5, "expected 5 built-in providers");
         for m in &builtins {
             validate_manifest(m).expect("built-in must validate");
             assert!(m.enabled_by_default, "built-ins default enabled");
