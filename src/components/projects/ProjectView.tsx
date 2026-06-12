@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useProjects } from "@/store/projects";
 import { t as tNow, useT, useTp } from "@/store/i18n";
+import { classifyFile, extractDocumentText } from "@/lib/documents";
 import { PROJECT_CONTEXT_CHAR_BUDGET, projectFilesSize } from "@/lib/projects";
 
 /** Max size (chars) for a single uploaded project file. */
@@ -54,8 +55,23 @@ export function ProjectView() {
     if (!list || !project) return;
     setError(null);
     for (const file of Array.from(list)) {
+      // T39: binary documents (PDF/Office) are text-extracted in the backend
+      // and then follow the same char-cap path as plain text files. Legacy
+      // Office / unsupported (incl. image) files are surfaced, never dropped.
+      const cls = classifyFile(file.name, file.type);
+      if (cls === "legacy-document") {
+        setError(tNow("composer.documentLegacy", { name: file.name }));
+        continue;
+      }
+      if (cls === "image" || cls === "unsupported") {
+        setError(tNow("composer.documentUnsupported", { name: file.name }));
+        continue;
+      }
       try {
-        const text = await file.text();
+        const text =
+          cls === "binary-document"
+            ? await extractDocumentText(file)
+            : await file.text();
         const content =
           text.length > MAX_FILE_CHARS ? text.slice(0, MAX_FILE_CHARS) : text;
         await addFile(project.id, file.name, content);
@@ -67,8 +83,19 @@ export function ProjectView() {
             }),
           );
         }
-      } catch {
-        setError(tNow("project.readError", { name: file.name }));
+      } catch (err) {
+        // The extractor rejects with a user-readable string; webview reads
+        // fail without one — keep the generic notice for those.
+        if (cls === "binary-document") {
+          setError(
+            tNow("composer.documentReadError", {
+              name: file.name,
+              error: err instanceof Error ? err.message : String(err),
+            }),
+          );
+        } else {
+          setError(tNow("project.readError", { name: file.name }));
+        }
       }
     }
     if (fileInputRef.current) fileInputRef.current.value = "";

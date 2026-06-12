@@ -122,14 +122,18 @@ export interface ThreadSearchGroup {
   hits: SearchHit[];
 }
 
-export type AttachmentKind = "image" | "tool_call";
+export type AttachmentKind = "image" | "tool_call" | "document";
 
 export interface Attachment {
   id: string;
   message_id: string;
   kind: AttachmentKind;
   media_type: string;
-  /** Base64 payload or app-data file path, per `kind`/`media_type`. */
+  /** Base64 payload, extracted document text, or app-data file path, per
+   * `kind`/`media_type`. */
   data: string;
+  /** Original file name for `document` rows (T39, migration 012); null for
+   * non-document rows. */
+  filename: string | null;
   created_at: string;
 }

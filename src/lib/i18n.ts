@@ -198,6 +198,20 @@ export const en = {
     "The `{command}` command is provided by a plugin but has no built-in action in this host, so it can't run here.",
   "composer.terminalStagedNote":
     "Staged this command in your terminal — review it and press Enter there to run it (it was not auto-executed):",
+  "composer.attachFile": "Attach file",
+  "composer.removeDocument": "Remove document",
+  "composer.extracting": "Extracting text…",
+  "composer.documentReadError": "Couldn't read “{name}”: {error}",
+  "composer.documentUnsupported":
+    "“{name}” isn't a supported file type — attach an image, a text or code file, or a PDF/Office document.",
+  "composer.documentLegacy":
+    "“{name}” is a legacy Office format — save it as .docx/.pptx/.xlsx (or PDF) and try again.",
+  "composer.documentTooLarge": "“{name}” is too large to attach (max {max}).",
+  "composer.documentTruncated":
+    "“{name}” was truncated to {n} characters to fit the context budget.",
+
+  // --- Document attachments (T39) -------------------------------------------------
+  "document.chars": "{n} chars",
 
   // --- Canvas ---------------------------------------------------------------------
   "canvas.title": "Canvas",

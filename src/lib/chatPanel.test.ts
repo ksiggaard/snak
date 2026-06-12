@@ -16,6 +16,7 @@ function msg(over: Partial<MessageView>): MessageView {
     duration_ms: null,
     created_at: "2026-06-12 10:00:00",
     images: [],
+    documents: [],
     toolCalls: [],
     ...over,
   } as MessageView;

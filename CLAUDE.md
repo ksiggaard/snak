@@ -60,6 +60,12 @@ can't read modern `.relr.dyn` ELF sections (see T5 in `TASKS.md`).
 - `src/lib/messages.ts` defines `MessageView` (a `Message` + its `images`) and `loadThreadMessages` (joins attachments onto user messages); the store's `messages` are `MessageView[]`, and API history carries `images`.
 - API shape: `ChatMessage` (Rust) and `ApiMessage` (TS) have an `images: [{ media_type, data }]` field. **Nested command-arg fields are NOT camelCase-converted by Tauri** — only top-level args are — so these are sent snake_case (`media_type`). Per-provider encoding: Anthropic `image` blocks (`source.type=base64`), OpenAI/Mistral `image_url` data URLs, Gemini `inline_data`.
 
+## Document attachments (T39)
+
+- Beyond images, the Composer (and the project-files picker) accepts **documents**: clear-text/code files are read directly (`file.text()`); binary formats — pdf, docx, pptx, odt, odp, xlsx, ods — are parsed to plain text by the Rust command `extract_document_text` (`src-tauri/src/commands/documents.rs`; crates `pdf-extract`, `zip`+`quick-xml`, `calamine`). Legacy `.doc`/`.ppt`/`.xls` are rejected with a "save as .docx/…" message. Classification is extension-based (`classifyFile` in `src/lib/documents.ts`) because `File.type` is empty for code files.
+- Stored as `attachments` rows with `kind = "document"`, extracted text in `data`, original name in the `filename` column (migration 012). Budgets: 20 MB pre-extraction, 100k chars per document after (`DOCUMENT_CHAR_BUDGET`, truncated with a marker). Attachment text is intentionally not in the FTS index.
+- **API injection happens in one seam:** `compactHistory`'s MessageView→ApiMessage mapping appends labeled fenced blocks via `appendDocumentsToContent` — providers are untouched (document text rides in message `content`). Anthropic's native PDF input is deliberately deferred; extracted-text-everywhere is the v1.
+
 ## Threads & shared state (Stage 5)
 
 - App state lives in a **Zustand store**, `src/store/threads.ts` (`useThreads`) — the orchestration moved here out of `ChatView`. It owns `threads`, `currentThreadId` (null = unsaved draft), `messages`, the draft provider/model, and `busy`/`error`, plus actions `init`, `selectThread`, `startNewChat`, `setProviderModel`, `send`, `rename`, `remove`.

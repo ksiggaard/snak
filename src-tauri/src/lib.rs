@@ -127,6 +127,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/011_archive.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 12,
+            description: "document attachments: attachments.filename for kind='document' (T39)",
+            sql: include_str!("../migrations/012_document_attachments.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -237,6 +243,7 @@ pub fn run() {
             commands::quick::take_screenshot,
             commands::quick::set_quick_height,
             commands::terminal::open_in_terminal,
+            commands::documents::extract_document_text,
             commands::languages::list_languages,
             commands::languages::languages_directory,
             commands::ollama::ollama_status,

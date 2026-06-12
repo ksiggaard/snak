@@ -8,6 +8,7 @@
 // compacted history (previous summary + newer messages).
 
 import type { ApiMessage } from "@/lib/chat";
+import { appendDocumentsToContent } from "@/lib/documents";
 import type { MessageKind, Role } from "@/types/db";
 
 /** The minimal message shape compaction logic needs (MessageView satisfies it). */
@@ -16,6 +17,9 @@ export interface CompactableMessage {
   content: string;
   kind: MessageKind;
   images?: { media_type: string; data: string }[];
+  /** Attached documents (T39): their text is folded into `content` when the
+   * API history is assembled — see `compactHistory`. */
+  documents?: { name: string; text: string }[];
 }
 
 /** Index of the latest `summary` row, or -1 when the thread was never compacted. */
@@ -63,7 +67,10 @@ export function compactHistory(
   const after = messages.slice(cut + 1).map(
     (m): ApiMessage => ({
       role: m.role,
-      content: m.content,
+      // T39: attached-document text rides inside the message content as
+      // labelled fenced blocks. This mapping is THE single injection seam —
+      // it covers fresh sends, thread reloads, and compaction alike.
+      content: appendDocumentsToContent(m.content, m.documents ?? []),
       images: m.images ?? [],
     }),
   );
