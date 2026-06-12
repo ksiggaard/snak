@@ -19,6 +19,7 @@ import {
   storeChatStyle,
   storeCustomColors,
   storeTypography,
+  tintedBackground,
   CHAT_SIZE,
   CONTRAST,
   UI_SIZE,
@@ -198,6 +199,25 @@ describe("mixHex / derivedSurfaceDecls", () => {
     );
     expect(decls["--sidebar"]).toBe(mixHex("#ffffff", "#3b0764", 0.1));
     expect(decls["--border"]).toBe(mixHex("#ffffff", "#3b0764", 0.18));
+  });
+
+  it("tints the main background toward the mix color, scaled by contrast", () => {
+    expect(tintedBackground("#ffffff")).toBe("#ffffff");
+    expect(tintedBackground("#ffffff", "#3b0764")).toBe(
+      mixHex("#ffffff", "#3b0764", 0.05),
+    );
+    expect(tintedBackground("#ffffff", "#3b0764", 2)).toBe(
+      mixHex("#ffffff", "#3b0764", 0.1),
+    );
+    // buildColorCss emits the tinted background, not the raw pick
+    const css = buildColorCss({
+      light: { background: "#ffffff", surface: "#3b0764" },
+      dark: {},
+    });
+    expect(css).toContain(
+      `--background: ${mixHex("#ffffff", "#3b0764", 0.05)};`,
+    );
+    expect(css).not.toContain("--background: #ffffff;");
   });
 });
 

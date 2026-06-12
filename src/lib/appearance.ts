@@ -331,6 +331,27 @@ export function derivedSurfaceDecls(
 const LIGHT_SCOPE = ":root:not(.dark), body:not(.dark)";
 const DARK_SCOPE = ":root.dark, body.dark";
 
+/** How far a custom mix color bleeds into the main background itself. */
+const BACKGROUND_TINT = 0.05;
+
+/**
+ * The effective main background: the raw pick, or — when a mix color is set —
+ * the pick slightly blended toward it (scaled by the contrast multiplier) so
+ * the whole canvas carries the tint, not just the derived surfaces.
+ */
+export function tintedBackground(
+  background: string,
+  surface?: string,
+  contrast = 1,
+): string {
+  if (!surface) return background;
+  return mixHex(
+    background,
+    surface,
+    Math.min(1, BACKGROUND_TINT * clampContrast(contrast)),
+  );
+}
+
 function colorDecls(mc: ModeColors): string[] {
   const d: string[] = [];
   if (mc.primary) {
@@ -338,9 +359,10 @@ function colorDecls(mc: ModeColors): string[] {
     d.push(`--primary-foreground: ${contrastForeground(mc.primary)};`);
   }
   if (mc.background) {
-    d.push(`--background: ${mc.background};`);
-    d.push(`--foreground: ${contrastForeground(mc.background)};`);
-    d.push(...derivedSurfaceDecls(mc.background, mc.surface, mc.contrast));
+    const bg = tintedBackground(mc.background, mc.surface, mc.contrast);
+    d.push(`--background: ${bg};`);
+    d.push(`--foreground: ${contrastForeground(bg)};`);
+    d.push(...derivedSurfaceDecls(bg, mc.surface, mc.contrast));
   }
   return d;
 }
