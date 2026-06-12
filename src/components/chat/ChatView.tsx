@@ -65,16 +65,20 @@ export function ChatView() {
         />
       </div>
       {!panelOpen && (
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={t("panel.open")}
-          title={t("panel.open")}
-          onClick={() => setPanelOpen(true)}
-          className="text-muted-foreground hover:text-foreground absolute top-1 right-1 hidden md:inline-flex"
-        >
-          <PanelRight className="size-4" />
-        </Button>
+        // In-flow slim strip (mirrors the sidebar's reopen bar) so the toggle
+        // never overlaps messages or crowds the composer.
+        <div className="hidden w-9 shrink-0 flex-col items-center pt-0.5 md:flex">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t("panel.open")}
+            title={t("panel.open")}
+            onClick={() => setPanelOpen(true)}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <PanelRight className="size-4" />
+          </Button>
+        </div>
       )}
       {panelOpen && (
         <ChatPanel

@@ -100,6 +100,7 @@
     "panel.noMessages": "Ingen beskeder endnu.",
     "panel.media": "Medier",
     "panel.noMedia": "Ingen delte medier.",
+    "panel.goToMessage": "Gå til beskeden",
     "panel.tokenSpend": "Tokenforbrug",
     "composer.placeholder": "Skriv en besked…  ( / for kommandoer · Enter sender · Shift+Enter giver ny linje )",
     "composer.attachImage": "Vedhæft billede",

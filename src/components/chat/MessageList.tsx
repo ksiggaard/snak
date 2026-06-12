@@ -266,8 +266,11 @@ export function MessageList({ messages, pending }: MessageListProps) {
     return () => clearInterval(t);
   }, []);
 
-  // When a search result is opened, scroll to + flash the matched message
-  // instead of jumping to the bottom. Falls back to the bottom otherwise.
+  // When a search-result / chat-panel jump targets a message, scroll to +
+  // flash it instead of the bottom. Consuming the target re-runs this effect
+  // with null — skipNextBottom keeps that re-run from yanking the view back
+  // down to the bottom (the in-thread scroll-spy case).
+  const skipNextBottom = useRef(false);
   useEffect(() => {
     if (scrollToMessageId) {
       const el = messageRefs.current.get(scrollToMessageId);
@@ -275,12 +278,17 @@ export function MessageList({ messages, pending }: MessageListProps) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         setFlashId(scrollToMessageId);
         const t = setTimeout(() => setFlashId(null), 2000);
+        skipNextBottom.current = true;
         consumeScroll();
         return () => clearTimeout(t);
       }
       // Target not found (e.g. messages still loading) — consume to avoid a
       // stale jump on the next render.
       consumeScroll();
+    }
+    if (skipNextBottom.current) {
+      skipNextBottom.current = false;
+      return;
     }
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, pending, scrollToMessageId, consumeScroll]);

@@ -100,6 +100,7 @@
     "panel.noMessages": "Pas encore de messages.",
     "panel.media": "Médias",
     "panel.noMedia": "Aucun média partagé.",
+    "panel.goToMessage": "Aller au message",
     "panel.tokenSpend": "Consommation de tokens",
     "composer.placeholder": "Écrivez un message…  ( / pour les commandes · Entrée pour envoyer · Maj+Entrée pour un retour à la ligne )",
     "composer.attachImage": "Joindre une image",

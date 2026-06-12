@@ -143,6 +143,7 @@ export const en = {
   "panel.noMessages": "No messages yet.",
   "panel.media": "Media",
   "panel.noMedia": "No media shared.",
+  "panel.goToMessage": "Go to message",
   "panel.tokenSpend": "Token spend",
 
   // --- Composer -----------------------------------------------------------------
