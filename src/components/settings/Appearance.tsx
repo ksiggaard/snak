@@ -20,6 +20,7 @@ import {
   CHAT_LIST_STYLES,
   CHAT_SIZE,
   CHAT_STYLES,
+  CONTRAST,
   DEFAULT_PICKER_COLORS,
   FONT_OPTIONS,
   UI_SIZE,
@@ -186,8 +187,10 @@ function ColorsCard() {
   const colors = useAppearance((s) => s.colors);
   const setColor = useAppearance((s) => s.setColor);
   const resetColor = useAppearance((s) => s.resetColor);
+  const setContrast = useAppearance((s) => s.setContrast);
   const resetAllColors = useAppearance((s) => s.resetAllColors);
   const picks = colors[mode];
+  const hasBackground = picks.background !== undefined;
   const anyPick =
     Object.keys(colors.light).length > 0 || Object.keys(colors.dark).length > 0;
 
@@ -216,6 +219,48 @@ function ColorsCard() {
           onChange={(hex) => setColor(mode, "background", hex)}
           onReset={() => resetColor(mode, "background")}
         />
+        <ColorRow
+          label={t("colors.mixColor")}
+          value={picks.surface ?? DEFAULT_PICKER_COLORS[mode].surface}
+          custom={picks.surface !== undefined}
+          disabled={!hasBackground}
+          onChange={(hex) => setColor(mode, "surface", hex)}
+          onReset={() => resetColor(mode, "surface")}
+        />
+        <div className="flex items-center justify-between gap-3">
+          <span
+            className={cn(
+              "text-sm font-medium",
+              !hasBackground && "text-muted-foreground",
+            )}
+          >
+            {t("colors.contrast")}
+          </span>
+          <div className="flex items-center gap-2">
+            <input
+              type="range"
+              min={CONTRAST.min}
+              max={CONTRAST.max}
+              step={0.05}
+              disabled={!hasBackground}
+              value={picks.contrast ?? CONTRAST.fallback}
+              aria-label={t("colors.contrast")}
+              onChange={(e) => setContrast(mode, Number(e.target.value))}
+              className="accent-primary w-36 disabled:opacity-50"
+            />
+            <span className="text-muted-foreground w-12 text-right text-xs tabular-nums">
+              ×{(picks.contrast ?? CONTRAST.fallback).toFixed(2)}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={picks.contrast === undefined}
+              onClick={() => setContrast(mode, null)}
+            >
+              {t("common.reset")}
+            </Button>
+          </div>
+        </div>
         <div className="flex justify-end">
           <Button
             variant="outline"
@@ -235,6 +280,7 @@ function ColorRow({
   label,
   value,
   custom,
+  disabled = false,
   onChange,
   onReset,
 }: {
@@ -243,22 +289,37 @@ function ColorRow({
   value: string;
   /** Whether a custom pick is stored (enables Reset). */
   custom: boolean;
+  /** Grays the row out (e.g. mix color without a background pick). */
+  disabled?: boolean;
   onChange: (hex: string) => void;
   onReset: () => void;
 }) {
   const t = useT();
   return (
     <div className="flex items-center justify-between gap-3">
-      <span className="text-sm font-medium">{label}</span>
+      <span
+        className={cn(
+          "text-sm font-medium",
+          disabled && "text-muted-foreground",
+        )}
+      >
+        {label}
+      </span>
       <div className="flex items-center gap-2">
         <input
           type="color"
           value={value}
+          disabled={disabled}
           aria-label={t("colors.colorAria", { label })}
           onChange={(e) => onChange(e.target.value)}
-          className="border-input h-8 w-12 cursor-pointer rounded-md border bg-transparent p-0.5"
+          className="border-input h-8 w-12 cursor-pointer rounded-md border bg-transparent p-0.5 disabled:cursor-not-allowed disabled:opacity-50"
         />
-        <Button variant="ghost" size="sm" disabled={!custom} onClick={onReset}>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={disabled || !custom}
+          onClick={onReset}
+        >
           {t("common.reset")}
         </Button>
       </div>

@@ -20,6 +20,7 @@ import {
   storeCustomColors,
   storeTypography,
   CHAT_SIZE,
+  CONTRAST,
   UI_SIZE,
   type TypographyPrefs,
 } from "@/lib/appearance";
@@ -166,6 +167,38 @@ describe("mixHex / derivedSurfaceDecls", () => {
     expect(l).toBeGreaterThan(relativeLuminance("#171717"));
     expect(l).toBeLessThan(relativeLuminance("#ffffff"));
   });
+
+  it("scales tone steps with the contrast multiplier", () => {
+    const at = (contrast: number) =>
+      Object.fromEntries(
+        derivedSurfaceDecls("#ffffff", undefined, contrast).map((d) =>
+          d.replace(";", "").split(": "),
+        ),
+      );
+    const low = at(0.5);
+    const base = at(1);
+    const high = at(2);
+    expect(relativeLuminance(low["--sidebar"])).toBeGreaterThan(
+      relativeLuminance(base["--sidebar"]),
+    );
+    expect(relativeLuminance(high["--sidebar"])).toBeLessThan(
+      relativeLuminance(base["--sidebar"]),
+    );
+    // out-of-range multipliers clamp to CONTRAST bounds
+    expect(derivedSurfaceDecls("#ffffff", undefined, 99)).toEqual(
+      derivedSurfaceDecls("#ffffff", undefined, CONTRAST.max),
+    );
+  });
+
+  it("mixes toward a custom surface pole instead of black/white", () => {
+    const decls = Object.fromEntries(
+      derivedSurfaceDecls("#ffffff", "#3b0764").map((d) =>
+        d.replace(";", "").split(": "),
+      ),
+    );
+    expect(decls["--sidebar"]).toBe(mixHex("#ffffff", "#3b0764", 0.1));
+    expect(decls["--border"]).toBe(mixHex("#ffffff", "#3b0764", 0.18));
+  });
 });
 
 describe("cssFontFamily", () => {
@@ -258,6 +291,15 @@ describe("storage round-trips", () => {
     expect(getStoredCustomColors()).toEqual({
       light: { primary: "#3b82f6" },
       dark: { background: "#0a0a0a" },
+    });
+
+    storeCustomColors({
+      light: { background: "#ffffff", surface: "#3B0764", contrast: 9 },
+      dark: { contrast: Number.NaN },
+    });
+    expect(getStoredCustomColors()).toEqual({
+      light: { background: "#ffffff", surface: "#3b0764", contrast: 2 },
+      dark: {},
     });
 
     localStorage.setItem(

@@ -332,6 +332,8 @@ export const en = {
   "colors.accent": "Accent",
   "colors.background": "Background",
   "colors.colorAria": "{label} color",
+  "colors.mixColor": "Mix color",
+  "colors.contrast": "Surface contrast",
   "colors.resetAll": "Reset all colors",
 
   // --- Settings: appearance — typography card ------------------------------------------------------------------------------

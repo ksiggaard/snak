@@ -17,13 +17,18 @@
 // so light and dark can be customized independently.
 
 export type ColorMode = "light" | "dark";
-export type ColorKey = "primary" | "background";
+export type ColorKey = "primary" | "background" | "surface";
 
 export interface ModeColors {
   /** Accent (`--primary`) hex pick, e.g. "#3b82f6". */
   primary?: string;
   /** Background (`--background`) hex pick. */
   background?: string;
+  /** Secondary mix color the derived surfaces blend toward (defaults to the
+   * background's tonal pole — black on a light pick, white on a dark one). */
+  surface?: string;
+  /** Multiplier on the derived-surface tone steps (see `CONTRAST`). */
+  contrast?: number;
 }
 
 export interface CustomColors {
@@ -118,10 +123,20 @@ export function storeChatListStyle(style: ChatListStyle): void {
  * can't display an oklch() string). If an installed theme changes the palette,
  * the seed may not match it — a known display-only limitation.
  */
-export const DEFAULT_PICKER_COLORS: Record<ColorMode, Required<ModeColors>> = {
-  light: { primary: "#171717", background: "#ffffff" },
-  dark: { primary: "#e5e5e5", background: "#0a0a0a" },
+export const DEFAULT_PICKER_COLORS: Record<
+  ColorMode,
+  Record<ColorKey, string>
+> = {
+  light: { primary: "#171717", background: "#ffffff", surface: "#000000" },
+  dark: { primary: "#e5e5e5", background: "#0a0a0a", surface: "#ffffff" },
 };
+
+/** Bounds for the surface-contrast multiplier (1 = the built-in steps). */
+export const CONTRAST = { min: 0.25, max: 2, fallback: 1 } as const;
+
+export function clampContrast(n: number): number {
+  return Math.min(CONTRAST.max, Math.max(CONTRAST.min, n));
+}
 
 export function isHexColor(v: unknown): v is string {
   return typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v);
@@ -135,6 +150,9 @@ function sanitizeModeColors(v: unknown): ModeColors {
   const out: ModeColors = {};
   if (isHexColor(m.primary)) out.primary = m.primary.toLowerCase();
   if (isHexColor(m.background)) out.background = m.background.toLowerCase();
+  if (isHexColor(m.surface)) out.surface = m.surface.toLowerCase();
+  if (typeof m.contrast === "number" && Number.isFinite(m.contrast))
+    out.contrast = clampContrast(m.contrast);
   return out;
 }
 
@@ -262,11 +280,20 @@ const MUTED_FG_TONE = 0.4;
  * sidebar, title/menu bar, cards, popovers, inputs, borders — follows the
  * pick as darker (light background) or lighter (dark background) tones,
  * instead of keeping the theme's surfaces and clashing.
+ *
+ * `surface` replaces the default black/white pole with a custom mix color
+ * (tinted surfaces); `contrast` scales the tone steps (1 = built-in).
  */
-export function derivedSurfaceDecls(background: string): string[] {
+export function derivedSurfaceDecls(
+  background: string,
+  surface?: string,
+  contrast = 1,
+): string[] {
   const pole =
-    contrastForeground(background) === "#ffffff" ? "#ffffff" : "#000000";
-  const tone = (t: number) => mixHex(background, pole, t);
+    surface ??
+    (contrastForeground(background) === "#ffffff" ? "#ffffff" : "#000000");
+  const c = clampContrast(contrast);
+  const tone = (t: number) => mixHex(background, pole, Math.min(1, t * c));
   const fg = contrastForeground(background);
   const card = tone(SURFACE_TONES.card);
   const sidebar = tone(SURFACE_TONES.sidebar);
@@ -313,7 +340,7 @@ function colorDecls(mc: ModeColors): string[] {
   if (mc.background) {
     d.push(`--background: ${mc.background};`);
     d.push(`--foreground: ${contrastForeground(mc.background)};`);
-    d.push(...derivedSurfaceDecls(mc.background));
+    d.push(...derivedSurfaceDecls(mc.background, mc.surface, mc.contrast));
   }
   return d;
 }

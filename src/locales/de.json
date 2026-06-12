@@ -233,6 +233,8 @@
     "colors.accent": "Akzent",
     "colors.background": "Hintergrund",
     "colors.colorAria": "Farbe: {label}",
+    "colors.mixColor": "Mischfarbe",
+    "colors.contrast": "Flächenkontrast",
     "colors.resetAll": "Alle Farben zurücksetzen",
     "typography.title": "Typografie",
     "typography.description": "Schriftarten und -größen, getrennt für die Oberfläche und für Chat-Nachrichten. Aufgeführte Schriften müssen auf deinem System installiert sein; wähle „Eigene…“, um einen beliebigen Namen einzugeben. Codeblöcke behalten ihre Monospace-Schrift.",

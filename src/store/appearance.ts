@@ -2,6 +2,7 @@ import { create } from "zustand";
 import {
   applyCustomColors,
   applyCustomTypography,
+  clampContrast,
   getStoredChatListStyle,
   getStoredChatStyle,
   getStoredCustomColors,
@@ -33,6 +34,8 @@ interface AppearanceState {
   setColor: (mode: ColorMode, key: ColorKey, hex: string) => void;
   /** Clear one color pick for one mode (back to the theme's value). */
   resetColor: (mode: ColorMode, key: ColorKey) => void;
+  /** Set (or clear with null) the derived-surface contrast for one mode. */
+  setContrast: (mode: ColorMode, value: number | null) => void;
   /** Clear every color pick in both modes (full back-to-theme reset). */
   resetAllColors: () => void;
   /** Merge a partial typography update (null fields reset to default). */
@@ -65,6 +68,17 @@ export const useAppearance = create<AppearanceState>((set, get) => ({
     const cur = get().colors;
     const modeColors = { ...cur[mode] };
     delete modeColors[key];
+    const colors: CustomColors = { ...cur, [mode]: modeColors };
+    storeCustomColors(colors);
+    applyCustomColors(colors);
+    set({ colors });
+  },
+
+  setContrast: (mode, value) => {
+    const cur = get().colors;
+    const modeColors = { ...cur[mode] };
+    if (value === null) delete modeColors.contrast;
+    else modeColors.contrast = clampContrast(value);
     const colors: CustomColors = { ...cur, [mode]: modeColors };
     storeCustomColors(colors);
     applyCustomColors(colors);

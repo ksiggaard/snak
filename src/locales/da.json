@@ -233,6 +233,8 @@
     "colors.accent": "Accent",
     "colors.background": "Baggrund",
     "colors.colorAria": "Farve for {label}",
+    "colors.mixColor": "Blandingsfarve",
+    "colors.contrast": "Fladekontrast",
     "colors.resetAll": "Nulstil alle farver",
     "typography.title": "Typografi",
     "typography.description": "Skrifttyper og størrelser, hver for sig for appens flade og for chatbeskeder. De viste skrifttyper skal være installeret på dit system; vælg “Tilpasset…” for at skrive et vilkårligt navn. Kodeblokke beholder deres monospace-skrift.",

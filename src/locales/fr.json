@@ -233,6 +233,8 @@
     "colors.accent": "Accent",
     "colors.background": "Arrière-plan",
     "colors.colorAria": "Couleur {label}",
+    "colors.mixColor": "Couleur de mélange",
+    "colors.contrast": "Contraste des surfaces",
     "colors.resetAll": "Réinitialiser toutes les couleurs",
     "typography.title": "Typographie",
     "typography.description": "Polices et tailles, séparément pour l'interface et pour les messages. Les polices listées doivent être installées sur votre système ; choisissez « Personnalisée… » pour saisir n'importe quel nom de famille. Les blocs de code gardent leur police à chasse fixe.",

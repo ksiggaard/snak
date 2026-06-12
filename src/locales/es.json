@@ -233,6 +233,8 @@
     "colors.accent": "Acento",
     "colors.background": "Fondo",
     "colors.colorAria": "Color de {label}",
+    "colors.mixColor": "Color de mezcla",
+    "colors.contrast": "Contraste de superficies",
     "colors.resetAll": "Restablecer todos los colores",
     "typography.title": "Tipografía",
     "typography.description": "Fuentes y tamaños, por separado para la interfaz y para los mensajes del chat. Las fuentes listadas deben estar instaladas en tu sistema; elige «Personalizada…» para escribir cualquier nombre de familia. Los bloques de código mantienen su fuente monoespaciada.",
