@@ -118,21 +118,35 @@ pub fn set_global_shortcut(app: AppHandle, accelerator: String) -> Result<(), St
 }
 
 /// Interactive region screenshot, returned as base64. `None` if the user
-/// cancelled. The overlay is hidden during capture so it isn't in the shot.
+/// cancelled. The *invoking* window (quick overlay or main chat) is hidden
+/// during capture so it isn't in the shot, then restored.
 #[tauri::command]
-pub fn take_screenshot(app: AppHandle) -> Result<Option<String>, String> {
-    let was_visible = app
-        .get_webview_window("quick")
-        .and_then(|w| w.is_visible().ok())
-        .unwrap_or(false);
+pub fn take_screenshot(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<Option<String>, String> {
+    let is_quick = window.label() == "quick";
+    let was_visible = window.is_visible().unwrap_or(false);
     if was_visible {
-        hide_quick_inner(&app);
+        if is_quick {
+            hide_quick_inner(&app);
+        } else {
+            let _ = window.hide();
+        }
+        // Give the compositor a beat to unmap the window before the capture
+        // tool freezes the screen.
+        std::thread::sleep(std::time::Duration::from_millis(150));
     }
 
     let result = capture_interactive();
 
     if was_visible {
-        show_quick(&app);
+        if is_quick {
+            show_quick(&app);
+        } else {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
     }
     result
 }

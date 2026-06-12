@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import {
+  Camera,
   FoldVertical,
   Loader2,
   Maximize2,
@@ -15,6 +16,7 @@ import { ModelPicker } from "@/components/chat/ModelPicker";
 import { canCompact } from "@/lib/compaction";
 import { prepareImage, type PreparedImage } from "@/lib/image";
 import { useProviders } from "@/lib/providers";
+import { takeScreenshot } from "@/lib/quick";
 import { openInTerminal } from "@/lib/terminal";
 import {
   availableCommands,
@@ -58,6 +60,7 @@ export function Composer({
   const [text, setText] = useState("");
   const [images, setImages] = useState<PreparedImage[]>([]);
   const [attachError, setAttachError] = useState<string | null>(null);
+  const [shooting, setShooting] = useState(false);
   const [canvasOpen, setCanvasOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -134,6 +137,25 @@ export function Composer({
 
   function removeImage(index: number) {
     setImages((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  /** Interactive region screenshot (same path as the quick overlay): the
+   * main window hides during capture, the PNG attaches to the draft. */
+  async function screenshot() {
+    setShooting(true);
+    setAttachError(null);
+    try {
+      const base64 = await takeScreenshot();
+      if (base64) {
+        const res = await fetch(`data:image/png;base64,${base64}`);
+        const img = await prepareImage(await res.blob());
+        setImages((prev) => [...prev, img]);
+      }
+    } catch (err) {
+      setAttachError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setShooting(false);
+    }
   }
 
   function resetDraft() {
@@ -422,6 +444,20 @@ export function Composer({
           onClick={() => fileInputRef.current?.click()}
         >
           <Paperclip className="size-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={t("quick.takeScreenshot")}
+          title={t("quick.takeScreenshot")}
+          disabled={composeDisabled || shooting}
+          onClick={() => void screenshot()}
+        >
+          {shooting ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Camera className="size-4" />
+          )}
         </Button>
         <Button
           variant="ghost"
