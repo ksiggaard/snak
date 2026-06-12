@@ -171,7 +171,7 @@ export function McpServers() {
           />
           <div className="flex gap-2">
             <select
-              className="border-input bg-background h-9 rounded-md border px-2 text-sm"
+              className="border-input bg-background text-foreground h-9 rounded-md border px-2 text-sm"
               value={draftTransport}
               onChange={(e) =>
                 setDraftTransport(e.target.value as McpTransport)

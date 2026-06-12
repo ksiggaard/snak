@@ -362,7 +362,7 @@ function FontRow({
               setCustomOpen(false);
               onChange(v === FONT_DEFAULT ? null : v);
             }}
-            className="border-input bg-background h-8 max-w-44 rounded-md border px-2 text-sm"
+            className="border-input bg-background text-foreground h-8 max-w-44 rounded-md border px-2 text-sm"
           >
             <option value={FONT_DEFAULT}>{t("typography.default")}</option>
             {FONT_OPTIONS.map((o) => (
