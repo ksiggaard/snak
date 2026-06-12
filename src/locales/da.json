@@ -58,6 +58,8 @@
     "sidebar.allChats": "Alle chats",
     "sidebar.archive": "Arkiv",
     "sidebar.archiveChat": "Luk chatten (til arkivet)",
+    "sidebar.chatMenu": "Chatindstillinger",
+    "sidebar.moveToProject": "Flyt til projekt",
     "sidebar.noConversations": "Ingen samtaler endnu.",
     "sidebar.noProjects": "Ingen projekter endnu. Opret et med “Nyt projekt”.",
     "sidebar.noChatsInProject": "Ingen chats endnu.",

@@ -1,6 +1,24 @@
-import { useState } from "react";
-import { Ghost, Star, Trash2, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  FolderInput,
+  Ghost,
+  MoreHorizontal,
+  Star,
+  Trash2,
+  X,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useProjects } from "@/store/projects";
 import { useThreads } from "@/store/threads";
 import { useModels } from "@/store/models";
 import { useAppearance } from "@/store/appearance";
@@ -37,6 +55,16 @@ export function ThreadRow({
   const remove = useThreads((s) => s.remove);
   const toggleFavorite = useThreads((s) => s.toggleFavorite);
   const setArchived = useThreads((s) => s.setArchived);
+  const assignThreadProject = useThreads((s) => s.assignThreadProject);
+  const projects = useProjects((s) => s.projects);
+  const projectsInitialized = useProjects((s) => s.initialized);
+  const initProjects = useProjects((s) => s.init);
+
+  // The move-to-project submenu needs the project list even when the
+  // Projects pane was never opened this session.
+  useEffect(() => {
+    if (!projectsInitialized) void initProjects();
+  }, [projectsInitialized, initProjects]);
   const listStyle = useAppearance((s) => s.chatListStyle);
   const providers = useProviders();
   const models = useModels((s) => s.models);
@@ -114,6 +142,13 @@ export function ThreadRow({
                 aria-label={t("sidebar.incognitoBadge")}
               />
             )}
+            {/* Favorite indicator — the toggle itself lives in the row menu. */}
+            {fav && (
+              <Star
+                className="size-3 shrink-0 fill-yellow-500 text-yellow-500"
+                aria-label={t("sidebar.favorites")}
+              />
+            )}
             <span
               className={cn(
                 "truncate text-sm",
@@ -130,22 +165,67 @@ export function ThreadRow({
           )}
         </button>
       )}
-      <button
-        type="button"
-        aria-label={
-          fav ? t("sidebar.unfavoriteAria") : t("sidebar.favoriteAria")
-        }
-        title={fav ? t("sidebar.unfavorite") : t("sidebar.favorite")}
-        onClick={() => void toggleFavorite(thread.id)}
-        className={cn(
-          "shrink-0",
-          fav
-            ? "text-yellow-500"
-            : "text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100",
-        )}
-      >
-        <Star className={cn("size-4", fav && "fill-current")} />
-      </button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label={t("sidebar.chatMenu")}
+            title={t("sidebar.chatMenu")}
+            className="text-muted-foreground hover:text-foreground shrink-0 opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100"
+          >
+            <MoreHorizontal className="size-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuItem onClick={() => void toggleFavorite(thread.id)}>
+            <Star className={cn(fav && "fill-yellow-500 text-yellow-500")} />
+            {fav ? t("sidebar.unfavorite") : t("sidebar.favorite")}
+          </DropdownMenuItem>
+          {projects.length > 0 && (
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <FolderInput />
+                {t("sidebar.moveToProject")}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                <DropdownMenuItem
+                  disabled={thread.project_id === null}
+                  onClick={() => void assignThreadProject(thread.id, null)}
+                >
+                  {t("panel.noProject")}
+                </DropdownMenuItem>
+                {projects.map((p) => (
+                  <DropdownMenuItem
+                    key={p.id}
+                    disabled={thread.project_id === p.id}
+                    onClick={() => void assignThreadProject(thread.id, p.id)}
+                  >
+                    {p.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            variant="destructive"
+            onClick={() => {
+              void confirmDialog({
+                title: tNow("sidebar.deleteThreadTitle", {
+                  title: thread.title,
+                }),
+                confirmText: tNow("common.delete"),
+                destructive: true,
+              }).then((ok) => {
+                if (ok) void remove(thread.id);
+              });
+            }}
+          >
+            <Trash2 />
+            {t("common.delete")}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       {!thread.archived && (
         <button
           type="button"
@@ -157,22 +237,6 @@ export function ThreadRow({
           <X className="size-4" />
         </button>
       )}
-      <button
-        type="button"
-        aria-label={t("sidebar.deleteConversation")}
-        onClick={() => {
-          void confirmDialog({
-            title: tNow("sidebar.deleteThreadTitle", { title: thread.title }),
-            confirmText: tNow("common.delete"),
-            destructive: true,
-          }).then((ok) => {
-            if (ok) void remove(thread.id);
-          });
-        }}
-        className="text-muted-foreground hover:text-destructive shrink-0 opacity-0 group-hover:opacity-100"
-      >
-        <Trash2 className="size-4" />
-      </button>
     </div>
   );
 }

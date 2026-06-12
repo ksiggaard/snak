@@ -93,6 +93,8 @@ export const en = {
   "sidebar.allChats": "All chats",
   "sidebar.archive": "Archive",
   "sidebar.archiveChat": "Close chat (move to Archive)",
+  "sidebar.chatMenu": "Chat options",
+  "sidebar.moveToProject": "Move to project",
   "sidebar.noConversations": "No conversations yet.",
   "sidebar.noProjects": "No projects yet. Create one with “New project”.",
   "sidebar.noChatsInProject": "No chats yet.",

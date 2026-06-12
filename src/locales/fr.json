@@ -58,6 +58,8 @@
     "sidebar.allChats": "Toutes les discussions",
     "sidebar.archive": "Archives",
     "sidebar.archiveChat": "Fermer la discussion (vers les archives)",
+    "sidebar.chatMenu": "Options de la discussion",
+    "sidebar.moveToProject": "Déplacer vers un projet",
     "sidebar.noConversations": "Aucune conversation pour l'instant.",
     "sidebar.noProjects": "Aucun projet pour l'instant. Créez-en un avec « Nouveau projet ».",
     "sidebar.noChatsInProject": "Aucune discussion pour l'instant.",
