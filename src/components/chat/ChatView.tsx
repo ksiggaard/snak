@@ -7,6 +7,30 @@ import { Button } from "@/components/ui/button";
 import { useThreads } from "@/store/threads";
 import { useT } from "@/store/i18n";
 import { useProviders } from "@/lib/providers";
+import { cn } from "@/lib/utils";
+
+/** Pre-first-message explainer for an incognito chat (T36): states what the
+ * mode does (session-only, purged on exit) and — just as importantly — what
+ * it does NOT do: messages still go to the model's provider. */
+function IncognitoExplainer() {
+  const t = useT();
+  return (
+    <div className="flex flex-1 items-center justify-center overflow-y-auto p-4">
+      <div className="border-muted-foreground/40 bg-muted/30 max-w-md rounded-xl border border-dashed p-6 text-center">
+        <Ghost className="text-muted-foreground mx-auto size-10" aria-hidden />
+        <h2 className="mt-3 text-base font-semibold">
+          {t("chat.incognitoExplainerTitle")}
+        </h2>
+        <p className="text-muted-foreground mt-3 text-sm">
+          {t("chat.incognitoExplainerIs")}
+        </p>
+        <p className="text-foreground/90 mt-3 text-sm font-medium">
+          {t("chat.incognitoExplainerIsnt")}
+        </p>
+      </div>
+    </div>
+  );
+}
 
 export function ChatView() {
   const t = useT();
@@ -46,15 +70,32 @@ export function ChatView() {
 
   return (
     <div className="relative flex flex-1 flex-row gap-3 overflow-hidden">
-      <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden">
-        <MessageList messages={messages} pending={pending} />
-        {error && <p className="text-destructive px-1 text-sm">{error}</p>}
-        {incognito && (
-          <p className="text-muted-foreground flex items-center gap-1.5 px-1 text-xs">
-            <Ghost className="size-3.5 shrink-0" aria-hidden />
-            {t("chat.incognitoHint")}
-          </p>
+      <div
+        className={cn(
+          "flex min-w-0 flex-1 flex-col gap-3 overflow-hidden",
+          // Incognito identity (T36): the whole chat surface reads as a
+          // distinct, temporary space — dashed border + muted tint.
+          incognito &&
+            "border-muted-foreground/40 bg-muted/20 rounded-lg border border-dashed p-2",
         )}
+      >
+        {incognito && (
+          <div className="border-muted-foreground/40 bg-muted/40 text-muted-foreground flex items-center gap-2 rounded-md border border-dashed px-3 py-1.5 text-xs">
+            <Ghost className="size-4 shrink-0" aria-hidden />
+            <span className="text-foreground font-medium">
+              {t("chat.incognitoHeader")}
+            </span>
+            <span className="hidden truncate sm:inline">
+              {t("chat.incognitoHint")}
+            </span>
+          </div>
+        )}
+        {incognito && messages.length === 0 && !pending ? (
+          <IncognitoExplainer />
+        ) : (
+          <MessageList messages={messages} pending={pending} />
+        )}
+        {error && <p className="text-destructive px-1 text-sm">{error}</p>}
         <Composer
           onSend={(text, images) => void send(text, images)}
           onCancel={() => void cancel()}

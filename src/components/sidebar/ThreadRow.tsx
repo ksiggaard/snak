@@ -126,6 +126,11 @@ export function ThreadRow({
         "group flex items-center gap-1 rounded-md px-2",
         compact ? "py-0.5" : "py-1.5",
         active ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/50",
+        // Incognito identity (T36): a dashed left edge + tint so the row
+        // reads as temporary at a glance, beyond the Ghost badge.
+        !!thread.ephemeral &&
+          "border-muted-foreground/40 rounded-l-none border-l-2 border-dashed",
+        !!thread.ephemeral && !active && "bg-muted/40",
       )}
     >
       {editing ? (
