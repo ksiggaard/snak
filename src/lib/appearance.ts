@@ -240,15 +240,17 @@ export function mixHex(a: string, b: string, t: number): string {
 }
 
 // Fractions mixed from the picked background toward its tonal pole (black for
-// a light background, white for a dark one), approximating the ratios between
-// the built-in palette's neutral tokens (e.g. light: bg 1.0 / sidebar 0.985 /
-// muted 0.97 / border 0.922; dark: bg 0.145 / sidebar 0.205 / muted 0.269).
+// a light background, white for a dark one). Deliberately stronger than the
+// built-in palette's near-flat ratios so the UI groupings stay visually
+// separated on an arbitrary pick: the main background, the composer/cards
+// (`--card`), and the sidebar + title/menu bar (`--sidebar`) each get a
+// clearly distinct tone step.
 const SURFACE_TONES = {
-  card: 0.03,
-  sidebar: 0.05,
-  muted: 0.08,
-  border: 0.12,
-  ring: 0.3,
+  card: 0.06,
+  sidebar: 0.1,
+  muted: 0.14,
+  border: 0.18,
+  ring: 0.32,
 } as const;
 
 /** How far `--muted-foreground` sits from the foreground back toward the
