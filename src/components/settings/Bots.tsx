@@ -65,7 +65,14 @@ export function Bots() {
                     className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm"
                   >
                     <BotAvatar bot={bot} className="size-8 shrink-0" />
-                    <span className="min-w-0 flex-1 truncate">{bot.name}</span>
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate">{bot.name}</span>
+                      {bot.tagline && (
+                        <span className="text-muted-foreground truncate text-xs">
+                          {bot.tagline}
+                        </span>
+                      )}
+                    </span>
                     <span className="text-muted-foreground text-xs">
                       {parseDbTime(bot.created_at).toLocaleDateString(locale)}
                     </span>

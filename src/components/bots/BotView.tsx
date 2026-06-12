@@ -41,9 +41,14 @@ export function BotView() {
     <div className="bg-card flex flex-1 flex-col gap-5 overflow-y-auto rounded-lg border p-5">
       <div className="flex items-center gap-3">
         <BotAvatar bot={bot} className="size-8 shrink-0 text-base" />
-        <h2 className="min-w-0 flex-1 truncate text-lg font-semibold">
-          {bot.name}
-        </h2>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <h2 className="truncate text-lg font-semibold">{bot.name}</h2>
+          {bot.tagline && (
+            <p className="text-muted-foreground truncate text-sm">
+              {bot.tagline}
+            </p>
+          )}
+        </div>
         <Button variant="outline" size="sm" onClick={newChat}>
           <Plus className="size-4" />
           {t("bots.newChat", { name: bot.name })}

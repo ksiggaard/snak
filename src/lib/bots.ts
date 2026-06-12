@@ -17,15 +17,18 @@ import type { Bot, BotMemory } from "@/types/db";
  * adding a system message in that case.
  */
 export function buildBotSystemText(
-  bot: Pick<Bot, "name" | "instructions">,
+  bot: Pick<Bot, "name" | "instructions" | "tagline">,
   memory: Pick<BotMemory, "content">[],
 ): string {
   const sections: string[] = [];
 
   const name = bot.name.trim();
+  const tagline = bot.tagline.trim();
   if (name) {
+    // The tagline ("The IT architect") is part of who the persona is.
+    const who = tagline ? `${name} (${tagline})` : name;
     sections.push(
-      `You are ${name}, a persona the user created. Stay in character as ${name}.`,
+      `You are ${who}, a persona the user created. Stay in character as ${name}.`,
     );
   }
 

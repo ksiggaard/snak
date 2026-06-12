@@ -713,6 +713,18 @@ export async function setBotInstructions(
   );
 }
 
+export async function setBotTagline(
+  id: string,
+  tagline: string,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE bots SET tagline = $1, updated_at = datetime('now')
+     WHERE id = $2`,
+    [tagline, id],
+  );
+}
+
 /** Set (or clear, with nulls) a bot's uploaded avatar. `data` is base64
  * without a data: prefix; both fields are set or cleared together. */
 export async function setBotAvatar(

@@ -389,6 +389,8 @@
     "bots.instructions": "Personalidad",
     "bots.instructionsHint": "¿Quién es este bot? Tono, especialidad, manías — se inyecta en cada chat con él.",
     "bots.instructionsPlaceholder": "p. ej. John es un ingeniero de software sénior muy profesional que siempre cuestiona tu arquitectura.",
+    "bots.tagline": "Subtítulo",
+    "bots.taglinePlaceholder": "p. ej. El arquitecto de TI",
     "bots.avatar": "Avatar",
     "bots.uploadAvatar": "Subir imagen",
     "bots.removeAvatar": "Quitar",

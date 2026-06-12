@@ -33,6 +33,7 @@ const AVATAR_MAX_DIM = 256;
 export function BotEditor({ bot }: { bot: Bot }) {
   const t = useT();
   const rename = useBots((s) => s.rename);
+  const setTagline = useBots((s) => s.setTagline);
   const setInstructions = useBots((s) => s.setInstructions);
   const setAvatar = useBots((s) => s.setAvatar);
   const setDefaultModel = useBots((s) => s.setDefaultModel);
@@ -53,11 +54,13 @@ export function BotEditor({ bot }: { bot: Bot }) {
   // at render when the edited bot changes (render-time sync pattern, not an
   // effect — matches ProjectView/ModelPicker).
   const [nameDraft, setNameDraft] = useState(bot.name);
+  const [taglineDraft, setTaglineDraft] = useState(bot.tagline);
   const [instrDraft, setInstrDraft] = useState(bot.instructions);
   const [syncedId, setSyncedId] = useState(bot.id);
   if (bot.id !== syncedId) {
     setSyncedId(bot.id);
     setNameDraft(bot.name);
+    setTaglineDraft(bot.tagline);
     setInstrDraft(bot.instructions);
     setAvatarError(null);
     setNewMemory("");
@@ -166,6 +169,21 @@ export function BotEditor({ bot }: { bot: Bot }) {
             if (nameDraft.trim() && nameDraft !== bot.name)
               void rename(bot.id, nameDraft);
           }}
+          className="max-w-md"
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`bot-tagline-${bot.id}`}>{t("bots.tagline")}</Label>
+        <Input
+          id={`bot-tagline-${bot.id}`}
+          value={taglineDraft}
+          onChange={(e) => setTaglineDraft(e.target.value)}
+          onBlur={() => {
+            if (taglineDraft.trim() !== bot.tagline)
+              void setTagline(bot.id, taglineDraft);
+          }}
+          placeholder={t("bots.taglinePlaceholder")}
           className="max-w-md"
         />
       </div>

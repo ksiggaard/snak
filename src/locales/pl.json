@@ -397,6 +397,8 @@
     "bots.instructions": "Osobowość",
     "bots.instructionsHint": "Kim jest ten bot? Ton, specjalizacja, dziwactwa — wstrzykiwane do każdego czatu z nim.",
     "bots.instructionsPlaceholder": "np. John to bardzo profesjonalny starszy inżynier oprogramowania, który zawsze kwestionuje Twoją architekturę.",
+    "bots.tagline": "Podtytuł",
+    "bots.taglinePlaceholder": "np. Architekt IT",
     "bots.avatar": "Awatar",
     "bots.uploadAvatar": "Prześlij obraz",
     "bots.removeAvatar": "Usuń",

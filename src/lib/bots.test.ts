@@ -5,21 +5,43 @@ const mem = (...contents: string[]) => contents.map((content) => ({ content }));
 
 describe("buildBotSystemText", () => {
   it("returns empty string when name, instructions, and memory are all blank", () => {
-    expect(buildBotSystemText({ name: "", instructions: "" }, [])).toBe("");
     expect(
-      buildBotSystemText({ name: "   ", instructions: "  " }, mem("  ", "")),
+      buildBotSystemText({ name: "", tagline: "", instructions: "" }, []),
+    ).toBe("");
+    expect(
+      buildBotSystemText(
+        { name: "   ", tagline: "", instructions: "  " },
+        mem("  ", ""),
+      ),
     ).toBe("");
   });
 
   it("includes only the persona header for a name-only bot", () => {
-    expect(buildBotSystemText({ name: "John", instructions: "" }, [])).toBe(
+    expect(
+      buildBotSystemText({ name: "John", tagline: "", instructions: "" }, []),
+    ).toBe(
       "You are John, a persona the user created. Stay in character as John.",
+    );
+  });
+
+  it("folds the tagline into the persona header", () => {
+    expect(
+      buildBotSystemText(
+        { name: "Bjarne", tagline: "The IT architect", instructions: "" },
+        [],
+      ),
+    ).toBe(
+      "You are Bjarne (The IT architect), a persona the user created. Stay in character as Bjarne.",
     );
   });
 
   it("composes header, instructions, and memory, separated by blank lines", () => {
     const out = buildBotSystemText(
-      { name: "John", instructions: "Challenge the architecture." },
+      {
+        name: "John",
+        tagline: "",
+        instructions: "Challenge the architecture.",
+      },
       mem("Prefers TypeScript"),
     );
     expect(out).toBe(
@@ -33,7 +55,7 @@ describe("buildBotSystemText", () => {
 
   it("orders sections header → instructions → memory", () => {
     const out = buildBotSystemText(
-      { name: "Maria", instructions: "Care about food." },
+      { name: "Maria", tagline: "", instructions: "Care about food." },
       mem("Skips breakfast"),
     );
     expect(out.indexOf("You are Maria")).toBeLessThan(
@@ -44,7 +66,7 @@ describe("buildBotSystemText", () => {
 
   it("trims memory entries and drops blank rows", () => {
     const out = buildBotSystemText(
-      { name: "John", instructions: "" },
+      { name: "John", tagline: "", instructions: "" },
       mem("  kept  ", "   ", ""),
     );
     expect(out).toBe(
@@ -57,7 +79,7 @@ describe("buildBotSystemText", () => {
 
   it("includes instructions and memory even when the name is blank", () => {
     const out = buildBotSystemText(
-      { name: "  ", instructions: "Be terse." },
+      { name: "  ", tagline: "", instructions: "Be terse." },
       mem("A fact"),
     );
     expect(out).toBe(

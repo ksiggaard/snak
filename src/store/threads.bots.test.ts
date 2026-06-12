@@ -60,6 +60,7 @@ import type { Bot, Thread } from "@/types/db";
 const bot = (over: Partial<Bot>): Bot => ({
   id: "b1",
   name: "John",
+  tagline: "",
   instructions: "Challenge the architecture.",
   avatar_media_type: null,
   avatar_data: null,

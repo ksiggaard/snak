@@ -389,6 +389,8 @@
     "bots.instructions": "Persönlichkeit",
     "bots.instructionsHint": "Wer ist dieser Bot? Ton, Fachwissen, Eigenheiten — wird in jeden Chat mit ihm eingefügt.",
     "bots.instructionsPlaceholder": "z. B. John ist ein sehr professioneller Senior-Softwareentwickler, der deine Architektur immer hinterfragt.",
+    "bots.tagline": "Untertitel",
+    "bots.taglinePlaceholder": "z. B. Der IT-Architekt",
     "bots.avatar": "Avatar",
     "bots.uploadAvatar": "Bild hochladen",
     "bots.removeAvatar": "Entfernen",

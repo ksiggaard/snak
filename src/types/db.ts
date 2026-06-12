@@ -32,6 +32,8 @@ export interface Thread {
 export interface Bot {
   id: string;
   name: string;
+  /** Short subtitle shown next to the name (e.g. "The IT architect"). */
+  tagline: string;
   /** Personality/instructions injected into every chat with this bot. */
   instructions: string;
   /** Uploaded avatar MIME type; null (with avatar_data) = monogram fallback. */

@@ -534,6 +534,8 @@ export const en = {
     "Who is this bot? Tone, expertise, quirks — injected into every chat with it.",
   "bots.instructionsPlaceholder":
     "e.g. John is a very professional senior software engineer who always challenges your architecture.",
+  "bots.tagline": "Subtitle",
+  "bots.taglinePlaceholder": "e.g. The IT architect",
   "bots.avatar": "Avatar",
   "bots.uploadAvatar": "Upload image",
   "bots.removeAvatar": "Remove",

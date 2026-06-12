@@ -389,6 +389,8 @@
     "bots.instructions": "Personlighed",
     "bots.instructionsHint": "Hvem er denne bot? Tone, ekspertise, særheder — indsættes i hver chat med den.",
     "bots.instructionsPlaceholder": "f.eks. John er en meget professionel senior softwareudvikler, der altid udfordrer din arkitektur.",
+    "bots.tagline": "Undertitel",
+    "bots.taglinePlaceholder": "f.eks. IT-arkitekten",
     "bots.avatar": "Avatar",
     "bots.uploadAvatar": "Upload billede",
     "bots.removeAvatar": "Fjern",

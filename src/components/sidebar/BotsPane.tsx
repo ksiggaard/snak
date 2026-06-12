@@ -109,7 +109,14 @@ export function BotsPane() {
                 title={t("sidebar.editBot")}
               >
                 <BotAvatar bot={bot} className="size-5 shrink-0" />
-                <span className="min-w-0 flex-1 truncate">{bot.name}</span>
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate">{bot.name}</span>
+                  {bot.tagline && (
+                    <span className="text-muted-foreground truncate text-xs font-normal">
+                      {bot.tagline}
+                    </span>
+                  )}
+                </span>
               </button>
               <button
                 type="button"

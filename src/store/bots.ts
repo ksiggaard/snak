@@ -7,6 +7,7 @@ import {
   setBotAvatar,
   setBotDefaultModel,
   setBotInstructions,
+  setBotTagline,
 } from "@/lib/db";
 import { useThreads } from "@/store/threads";
 import type { Bot, Provider } from "@/types/db";
@@ -25,6 +26,7 @@ interface BotsState {
   create: () => Promise<Bot>;
   rename: (id: string, name: string) => Promise<void>;
   setInstructions: (id: string, instructions: string) => Promise<void>;
+  setTagline: (id: string, tagline: string) => Promise<void>;
   setAvatar: (
     id: string,
     mediaType: string | null,
@@ -69,6 +71,11 @@ export const useBots = create<BotsState>((set, get) => ({
 
   setInstructions: async (id, instructions) => {
     await setBotInstructions(id, instructions);
+    await get().refresh();
+  },
+
+  setTagline: async (id, tagline) => {
+    await setBotTagline(id, tagline.trim());
     await get().refresh();
   },
 
