@@ -60,6 +60,8 @@
     "sidebar.archiveChat": "Zamknij czat (do archiwum)",
     "sidebar.chatMenu": "Opcje czatu",
     "sidebar.moveToProject": "Przenieś do projektu",
+    "sidebar.clearArchive": "Wyczyść archiwum",
+    "sidebar.clearArchiveTitle": "Usunąć wszystkie zarchiwizowane czaty ({count})?",
     "sidebar.noConversations": "Nie ma jeszcze żadnych rozmów.",
     "sidebar.noProjects": "Nie ma jeszcze projektów. Utwórz pierwszy przyciskiem „Nowy projekt”.",
     "sidebar.noChatsInProject": "Nie ma jeszcze czatów.",

@@ -192,6 +192,26 @@ export async function purgeEphemeralThreads(): Promise<void> {
   await db.execute(`DELETE FROM threads WHERE ephemeral = 1`);
 }
 
+/** Delete every archived thread (the "clear archive" action), with explicit
+ * child deletes mirroring `deleteThread` — FK cascade is not relied upon. */
+export async function deleteArchivedThreads(): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `DELETE FROM attachments WHERE message_id IN
+       (SELECT id FROM messages WHERE thread_id IN
+          (SELECT id FROM threads WHERE archived = 1))`,
+  );
+  await db.execute(
+    `DELETE FROM usage WHERE thread_id IN
+       (SELECT id FROM threads WHERE archived = 1)`,
+  );
+  await db.execute(
+    `DELETE FROM messages WHERE thread_id IN
+       (SELECT id FROM threads WHERE archived = 1)`,
+  );
+  await db.execute(`DELETE FROM threads WHERE archived = 1`);
+}
+
 // ---------------------------------------------------------------------------
 // Messages
 // ---------------------------------------------------------------------------

@@ -60,6 +60,8 @@
     "sidebar.archiveChat": "Cerrar el chat (al archivo)",
     "sidebar.chatMenu": "Opciones del chat",
     "sidebar.moveToProject": "Mover a un proyecto",
+    "sidebar.clearArchive": "Vaciar el archivo",
+    "sidebar.clearArchiveTitle": "¿Eliminar los {count} chats archivados?",
     "sidebar.noConversations": "Todavía no hay conversaciones.",
     "sidebar.noProjects": "Todavía no hay proyectos. Crea uno con «Nuevo proyecto».",
     "sidebar.noChatsInProject": "Todavía no hay chats.",

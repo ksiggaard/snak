@@ -60,6 +60,8 @@
     "sidebar.archiveChat": "Fermer la discussion (vers les archives)",
     "sidebar.chatMenu": "Options de la discussion",
     "sidebar.moveToProject": "Déplacer vers un projet",
+    "sidebar.clearArchive": "Vider les archives",
+    "sidebar.clearArchiveTitle": "Supprimer les {count} discussions archivées ?",
     "sidebar.noConversations": "Aucune conversation pour l'instant.",
     "sidebar.noProjects": "Aucun projet pour l'instant. Créez-en un avec « Nouveau projet ».",
     "sidebar.noChatsInProject": "Aucune discussion pour l'instant.",

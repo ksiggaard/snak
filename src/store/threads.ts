@@ -4,6 +4,7 @@ import {
   addMessage,
   addUsage,
   createThread,
+  deleteArchivedThreads,
   deleteThread,
   getProject,
   getSetting,
@@ -149,6 +150,8 @@ interface ThreadsState {
   /** Archive ("close the tab") or un-archive a thread. Archiving the current
    * thread moves the view to the next open thread (or a fresh draft). */
   setArchived: (id: string, archived: boolean) => Promise<void>;
+  /** Permanently delete every archived thread. */
+  clearArchive: () => Promise<void>;
   remove: (id: string) => Promise<void>;
 }
 
@@ -663,6 +666,19 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       } else {
         get().startNewChat();
       }
+    }
+  },
+
+  clearArchive: async () => {
+    const wasViewingArchived = get().threads.some(
+      (t) => t.id === get().currentThreadId && t.archived,
+    );
+    await deleteArchivedThreads();
+    const threads = await listThreads();
+    set({ threads });
+    if (wasViewingArchived) {
+      if (threads.length > 0) await get().selectThread(threads[0].id);
+      else get().startNewChat();
     }
   },
 }));

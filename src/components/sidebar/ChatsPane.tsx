@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import { useThreads } from "@/store/threads";
+import { confirmDialog } from "@/store/confirm";
 import { useProjects } from "@/store/projects";
 import { useSearch } from "@/store/search";
 import { useView } from "@/store/view";
 import { useAppearance } from "@/store/appearance";
-import { useT } from "@/store/i18n";
+import { t as tNow, useT } from "@/store/i18n";
 import { ThreadRow } from "./ThreadRow";
 import { useThreadSnippets } from "./useThreadSnippets";
 
@@ -16,6 +17,7 @@ export function ChatsPane() {
   const threads = useThreads((s) => s.threads);
   const currentId = useThreads((s) => s.currentThreadId);
   const selectThread = useThreads((s) => s.selectThread);
+  const clearArchive = useThreads((s) => s.clearArchive);
   const closeProject = useProjects((s) => s.close);
   const clearSearch = useSearch((s) => s.clear);
   const showChat = useView((s) => s.showChat);
@@ -87,21 +89,42 @@ export function ChatsPane() {
       </section>
       {archived.length > 0 && (
         <section>
-          <button
-            type="button"
-            onClick={() => setArchiveOpen((v) => !v)}
-            className="text-muted-foreground hover:text-foreground flex w-full items-center gap-1 px-2 py-1 text-xs font-medium"
-          >
-            {archiveOpen ? (
-              <ChevronDown className="size-3.5" aria-hidden />
-            ) : (
-              <ChevronRight className="size-3.5" aria-hidden />
-            )}
-            {t("sidebar.archive")}
-            <span className="text-muted-foreground/70 ml-auto tabular-nums">
-              {archived.length}
-            </span>
-          </button>
+          <div className="group/archive flex items-center gap-1 px-2 py-1">
+            <button
+              type="button"
+              onClick={() => setArchiveOpen((v) => !v)}
+              className="text-muted-foreground hover:text-foreground flex min-w-0 flex-1 items-center gap-1 text-xs font-medium"
+            >
+              {archiveOpen ? (
+                <ChevronDown className="size-3.5" aria-hidden />
+              ) : (
+                <ChevronRight className="size-3.5" aria-hidden />
+              )}
+              {t("sidebar.archive")}
+              <span className="text-muted-foreground/70 ml-auto tabular-nums">
+                {archived.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              aria-label={t("sidebar.clearArchive")}
+              title={t("sidebar.clearArchive")}
+              onClick={() => {
+                void confirmDialog({
+                  title: tNow("sidebar.clearArchiveTitle", {
+                    count: archived.length,
+                  }),
+                  confirmText: tNow("common.delete"),
+                  destructive: true,
+                }).then((ok) => {
+                  if (ok) void clearArchive();
+                });
+              }}
+              className="text-muted-foreground hover:text-destructive shrink-0 opacity-0 group-hover/archive:opacity-100"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          </div>
           {archiveOpen &&
             archived.map((t) => (
               <ThreadRow
