@@ -13,6 +13,7 @@ import {
   purgeEphemeralThreads,
   renameThread,
   setSetting,
+  setThreadArchived,
   setThreadFavorite,
   setThreadProject,
   setThreadProviderModel,
@@ -145,6 +146,9 @@ interface ThreadsState {
   rename: (id: string, title: string) => Promise<void>;
   /** Pin/unpin a thread to the sidebar Favorites group (T23). */
   toggleFavorite: (id: string) => Promise<void>;
+  /** Archive ("close the tab") or un-archive a thread. Archiving the current
+   * thread moves the view to the next open thread (or a fresh draft). */
+  setArchived: (id: string, archived: boolean) => Promise<void>;
   remove: (id: string) => Promise<void>;
 }
 
@@ -254,9 +258,14 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   selectThread: async (id) => {
     const messages = await loadThreadMessages(id);
     set({ currentThreadId: id, messages, error: null });
+    const thread = get().threads.find((t) => t.id === id);
+    // Tabs metaphor: opening an archived chat promotes it back to open.
+    if (thread?.archived) {
+      await setThreadArchived(id, false);
+      await get().refreshThreads();
+    }
     // Incognito threads are never remembered as last_thread_id (T29) — the
     // startup purge would have deleted them before restore anyway.
-    const thread = get().threads.find((t) => t.id === id);
     if (shouldRememberThread(thread)) await setSetting(LAST_THREAD_KEY, id);
   },
 
@@ -630,6 +639,18 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     if (!t) return;
     await setThreadFavorite(id, !t.favorite);
     await get().refreshThreads();
+  },
+
+  setArchived: async (id, archived) => {
+    await setThreadArchived(id, archived);
+    await get().refreshThreads();
+    // Tabs metaphor: closing the active tab switches to the next open one
+    // (or an empty draft when none are left).
+    if (archived && get().currentThreadId === id) {
+      const next = get().threads.find((x) => !x.archived);
+      if (next) await get().selectThread(next.id);
+      else get().startNewChat();
+    }
   },
 
   remove: async (id) => {

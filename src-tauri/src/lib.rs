@@ -121,6 +121,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/010_incognito.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 11,
+            description: "chats as tabs: threads.archived flag (close-to-archive)",
+            sql: include_str!("../migrations/011_archive.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

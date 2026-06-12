@@ -17,6 +17,9 @@ export interface Thread {
   favorite: number;
   /** 1 for an incognito (session-only) thread purged on next launch (T29). */
   ephemeral: number;
+  /** 1 for an archived (closed-tab) thread: out of the open list until it's
+   * opened from the Archive group, which promotes it back to 0. */
+  archived: number;
   created_at: string;
   updated_at: string;
 }

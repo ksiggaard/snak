@@ -32,6 +32,7 @@ const thread = (over: Partial<Thread>): Thread => ({
   project_id: null,
   favorite: 0,
   ephemeral: 0,
+  archived: 0,
   created_at: "2026-06-12 00:00:00",
   updated_at: "2026-06-12 00:00:00",
   ...over,

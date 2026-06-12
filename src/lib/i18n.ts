@@ -91,6 +91,8 @@ export const en = {
   "sidebar.projects": "Projects",
   "sidebar.favorites": "Favorites",
   "sidebar.allChats": "All chats",
+  "sidebar.archive": "Archive",
+  "sidebar.archiveChat": "Close chat (move to Archive)",
   "sidebar.noConversations": "No conversations yet.",
   "sidebar.noProjects": "No projects yet. Create one with “New project”.",
   "sidebar.noChatsInProject": "No chats yet.",
@@ -145,6 +147,10 @@ export const en = {
   "panel.noMedia": "No media shared.",
   "panel.goToMessage": "Go to message",
   "panel.tokenSpend": "Token spend",
+  "panel.chatSection": "This chat",
+  "panel.renamePlaceholder": "Chat title",
+  "panel.project": "Project",
+  "panel.noProject": "No project",
 
   // --- Composer -----------------------------------------------------------------
   "composer.placeholder":

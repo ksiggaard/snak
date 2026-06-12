@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Ghost, Star, Trash2 } from "lucide-react";
+import { Ghost, Star, Trash2, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useThreads } from "@/store/threads";
 import { useModels } from "@/store/models";
@@ -36,6 +36,7 @@ export function ThreadRow({
   const rename = useThreads((s) => s.rename);
   const remove = useThreads((s) => s.remove);
   const toggleFavorite = useThreads((s) => s.toggleFavorite);
+  const setArchived = useThreads((s) => s.setArchived);
   const listStyle = useAppearance((s) => s.chatListStyle);
   const providers = useProviders();
   const models = useModels((s) => s.models);
@@ -145,6 +146,17 @@ export function ThreadRow({
       >
         <Star className={cn("size-4", fav && "fill-current")} />
       </button>
+      {!thread.archived && (
+        <button
+          type="button"
+          aria-label={t("sidebar.archiveChat")}
+          title={t("sidebar.archiveChat")}
+          onClick={() => void setArchived(thread.id, true)}
+          className="text-muted-foreground hover:text-foreground shrink-0 opacity-0 group-hover:opacity-100"
+        >
+          <X className="size-4" />
+        </button>
+      )}
       <button
         type="button"
         aria-label={t("sidebar.deleteConversation")}

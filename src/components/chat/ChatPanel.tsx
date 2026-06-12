@@ -15,11 +15,14 @@ import {
   userMessageEntries,
   type MediaEntry,
 } from "@/lib/chatPanel";
+import { NativeSelect } from "@/components/NativeSelect";
 import { threadUsageTotals, type ThreadUsageTotals } from "@/lib/db";
 import { imageDataUrl, type MessageView } from "@/lib/messages";
 import { highlightSegments } from "@/lib/search";
 import { formatTokens } from "@/lib/usage";
+import { useProjects } from "@/store/projects";
 import { useSearch } from "@/store/search";
+import { useThreads } from "@/store/threads";
 import { useT } from "@/store/i18n";
 
 /**
@@ -135,6 +138,7 @@ export function ChatPanel({
           </Section>
         ) : (
           <>
+            {threadId && <ThreadSection threadId={threadId} />}
             <Section
               title={t("panel.myMessages")}
               icon={<ListOrdered className="size-3.5" aria-hidden />}
@@ -268,6 +272,76 @@ function Lightbox({
         </Button>
       </div>
     </div>
+  );
+}
+
+/** Chat management for the open thread: rename and move to a project. */
+function ThreadSection({ threadId }: { threadId: string }) {
+  const t = useT();
+  const thread = useThreads((s) => s.threads.find((x) => x.id === threadId));
+  const rename = useThreads((s) => s.rename);
+  const assignThreadProject = useThreads((s) => s.assignThreadProject);
+  const projects = useProjects((s) => s.projects);
+  const projectsInitialized = useProjects((s) => s.initialized);
+  const initProjects = useProjects((s) => s.init);
+  const [title, setTitle] = useState(thread?.title ?? "");
+  // Re-seed the local draft when switching threads (render-time adjustment).
+  const [seededFor, setSeededFor] = useState(threadId);
+  if (seededFor !== threadId) {
+    setSeededFor(threadId);
+    setTitle(thread?.title ?? "");
+  }
+
+  useEffect(() => {
+    if (!projectsInitialized) void initProjects();
+  }, [projectsInitialized, initProjects]);
+
+  if (!thread) return null;
+
+  const commitTitle = () => {
+    const next = title.trim();
+    if (next && next !== thread.title) void rename(threadId, next);
+    else setTitle(thread.title);
+  };
+
+  return (
+    <Section title={t("panel.chatSection")}>
+      <div className="flex flex-col gap-2 px-2">
+        <Input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={commitTitle}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            if (e.key === "Escape") setTitle(thread.title);
+          }}
+          placeholder={t("panel.renamePlaceholder")}
+          aria-label={t("panel.renamePlaceholder")}
+          className="h-8 text-sm"
+        />
+        {projects.length > 0 && (
+          <label className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground text-xs">
+              {t("panel.project")}
+            </span>
+            <NativeSelect
+              className="h-8 w-40"
+              value={thread.project_id ?? ""}
+              onChange={(e) =>
+                void assignThreadProject(threadId, e.target.value || null)
+              }
+            >
+              <option value="">{t("panel.noProject")}</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </NativeSelect>
+          </label>
+        )}
+      </div>
+    </Section>
   );
 }
 

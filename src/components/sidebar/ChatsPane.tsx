@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useThreads } from "@/store/threads";
 import { useProjects } from "@/store/projects";
 import { useSearch } from "@/store/search";
@@ -20,6 +22,8 @@ export function ChatsPane() {
   const listStyle = useAppearance((s) => s.chatListStyle);
   // One query for the whole visible list, only in "preview" mode (T35).
   const snippets = useThreadSnippets(threads, listStyle === "preview");
+  // Archive group disclosure — collapsed by default, per-session only.
+  const [archiveOpen, setArchiveOpen] = useState(false);
 
   // Selecting a chat returns the main pane to the chat view (clear search,
   // close any open project, leave settings/usage).
@@ -38,10 +42,14 @@ export function ChatsPane() {
     );
   }
 
-  // Compute the Favorites group from the live thread list (stale-safe: a thread
-  // removed elsewhere simply drops out of both groups).
-  const favorites = threads.filter((t) => t.favorite);
-  const rest = threads.filter((t) => !t.favorite);
+  // Compute the groups from the live thread list (stale-safe: a thread
+  // removed elsewhere simply drops out). Tabs metaphor: archived chats leave
+  // the open groups and collect in a collapsible Archive at the bottom;
+  // opening one (selectThread) promotes it back to open.
+  const open = threads.filter((t) => !t.archived);
+  const favorites = open.filter((t) => t.favorite);
+  const rest = open.filter((t) => !t.favorite);
+  const archived = threads.filter((t) => !!t.archived);
 
   return (
     <div className="flex flex-col gap-2">
@@ -77,6 +85,35 @@ export function ChatsPane() {
           />
         ))}
       </section>
+      {archived.length > 0 && (
+        <section>
+          <button
+            type="button"
+            onClick={() => setArchiveOpen((v) => !v)}
+            className="text-muted-foreground hover:text-foreground flex w-full items-center gap-1 px-2 py-1 text-xs font-medium"
+          >
+            {archiveOpen ? (
+              <ChevronDown className="size-3.5" aria-hidden />
+            ) : (
+              <ChevronRight className="size-3.5" aria-hidden />
+            )}
+            {t("sidebar.archive")}
+            <span className="text-muted-foreground/70 ml-auto tabular-nums">
+              {archived.length}
+            </span>
+          </button>
+          {archiveOpen &&
+            archived.map((t) => (
+              <ThreadRow
+                key={t.id}
+                thread={t}
+                active={t.id === currentId}
+                onSelect={() => select(t.id)}
+                snippet={snippets.get(t.id)}
+              />
+            ))}
+        </section>
+      )}
     </div>
   );
 }

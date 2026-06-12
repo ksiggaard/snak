@@ -127,6 +127,19 @@ export async function setThreadFavorite(
   ]);
 }
 
+/** Archive (close-tab) / un-archive a thread. Does not bump updated_at, so
+ * archiving and promoting never reorder the recency list. */
+export async function setThreadArchived(
+  id: string,
+  archived: boolean,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(`UPDATE threads SET archived = $1 WHERE id = $2`, [
+    archived ? 1 : 0,
+    id,
+  ]);
+}
+
 /** Bump a thread's updated_at (e.g. after a new message). */
 export async function touchThread(id: string): Promise<void> {
   const db = await getDb();
