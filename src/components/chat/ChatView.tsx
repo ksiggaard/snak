@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Ghost, PanelRight } from "lucide-react";
 import { MessageList } from "@/components/chat/MessageList";
 import { Composer } from "@/components/chat/Composer";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { Button } from "@/components/ui/button";
 import { useThreads } from "@/store/threads";
+import { useBots } from "@/store/bots";
 import { useT } from "@/store/i18n";
 import { useProviders } from "@/lib/providers";
 import { cn } from "@/lib/utils";
@@ -46,6 +47,16 @@ export function ChatView() {
   const threads = useThreads((s) => s.threads);
   const draftProvider = useThreads((s) => s.draftProvider);
   const draftIncognito = useThreads((s) => s.draftIncognito);
+  const draftBotId = useThreads((s) => s.draftBotId);
+
+  // Bots (T38): needed to resolve the active thread's persona for rendering.
+  // Lazy-init in case the Bots pane was never opened this session.
+  const bots = useBots((s) => s.bots);
+  const botsInitialized = useBots((s) => s.initialized);
+  const initBots = useBots((s) => s.init);
+  useEffect(() => {
+    if (!botsInitialized) void initBots();
+  }, [botsInitialized, initBots]);
 
   // Active providers from the enabled provider plugins (T18).
   const providers = useProviders();
@@ -57,6 +68,10 @@ export function ChatView() {
 
   // Incognito (T29): the saved thread's flag, or the draft flag while unsaved.
   const incognito = current ? !!current.ephemeral : draftIncognito;
+
+  // Bot persona (T38): the saved thread's bot, or the draft bot while unsaved.
+  const botId = current ? current.bot_id : draftBotId;
+  const bot = botId ? (bots.find((b) => b.id === botId) ?? null) : null;
 
   // The effective provider may be disabled (all providers off, or this thread
   // references a since-disabled one). Composer gates Send on this with guidance.
@@ -93,7 +108,7 @@ export function ChatView() {
         {incognito && messages.length === 0 && !pending ? (
           <IncognitoExplainer />
         ) : (
-          <MessageList messages={messages} pending={pending} />
+          <MessageList messages={messages} pending={pending} bot={bot} />
         )}
         {error && <p className="text-destructive px-1 text-sm">{error}</p>}
         <Composer

@@ -3,6 +3,8 @@ import { buildFtsMatch, searchTerms } from "@/lib/search";
 import type {
   Attachment,
   AttachmentKind,
+  Bot,
+  BotMemory,
   Message,
   MessageKind,
   Model,
@@ -44,12 +46,14 @@ export async function createThread(input: {
   projectId?: string | null;
   /** Incognito (T29): session-only — purged on the next app launch. */
   ephemeral?: boolean;
+  /** Bot (T38): the persona this thread belongs to, or null for none. */
+  botId?: string | null;
 }): Promise<Thread> {
   const db = await getDb();
   const id = newId();
   await db.execute(
-    `INSERT INTO threads (id, title, provider, model, project_id, ephemeral)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
+    `INSERT INTO threads (id, title, provider, model, project_id, ephemeral, bot_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     [
       id,
       input.title ?? "New chat",
@@ -57,6 +61,7 @@ export async function createThread(input: {
       input.model,
       input.projectId ?? null,
       input.ephemeral ? 1 : 0,
+      input.botId ?? null,
     ],
   );
   const thread = await getThread(id);
@@ -656,6 +661,147 @@ export async function updateUserMemory(
 export async function deleteUserMemory(id: string): Promise<void> {
   const db = await getDb();
   await db.execute(`DELETE FROM user_memory WHERE id = $1`, [id]);
+}
+
+// ---------------------------------------------------------------------------
+// Bots (T38) — user-created personas with avatars and per-bot memory
+// ---------------------------------------------------------------------------
+
+/** All bots, alphabetically (case-insensitive), ties broken by creation. */
+export async function listBots(): Promise<Bot[]> {
+  const db = await getDb();
+  return db.select<Bot[]>(
+    `SELECT * FROM bots ORDER BY name COLLATE NOCASE, created_at`,
+  );
+}
+
+export async function getBot(id: string): Promise<Bot | null> {
+  const db = await getDb();
+  const rows = await db.select<Bot[]>(`SELECT * FROM bots WHERE id = $1`, [id]);
+  return rows[0] ?? null;
+}
+
+export async function createBot(input?: { name?: string }): Promise<Bot> {
+  const db = await getDb();
+  const id = newId();
+  await db.execute(`INSERT INTO bots (id, name) VALUES ($1, $2)`, [
+    id,
+    input?.name ?? "New bot",
+  ]);
+  const bot = await getBot(id);
+  if (!bot) throw new Error("Failed to read back created bot");
+  return bot;
+}
+
+export async function renameBot(id: string, name: string): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE bots SET name = $1, updated_at = datetime('now') WHERE id = $2`,
+    [name, id],
+  );
+}
+
+export async function setBotInstructions(
+  id: string,
+  instructions: string,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE bots SET instructions = $1, updated_at = datetime('now')
+     WHERE id = $2`,
+    [instructions, id],
+  );
+}
+
+/** Set (or clear, with nulls) a bot's uploaded avatar. `data` is base64
+ * without a data: prefix; both fields are set or cleared together. */
+export async function setBotAvatar(
+  id: string,
+  mediaType: string | null,
+  data: string | null,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE bots SET avatar_media_type = $1, avatar_data = $2,
+            updated_at = datetime('now')
+     WHERE id = $3`,
+    [mediaType, data, id],
+  );
+}
+
+/**
+ * Set (or clear, with nulls) the default provider+model new chats with this
+ * bot inherit. The pair is both-or-neither: a half-set default could not be
+ * resolved into a concrete model, so it is normalized to NULL/NULL here.
+ */
+export async function setBotDefaultModel(
+  id: string,
+  provider: Provider | null,
+  model: string | null,
+): Promise<void> {
+  const db = await getDb();
+  const both = provider !== null && model !== null;
+  await db.execute(
+    `UPDATE bots SET default_provider = $1, default_model = $2,
+            updated_at = datetime('now')
+     WHERE id = $3`,
+    [both ? provider : null, both ? model : null, id],
+  );
+}
+
+/**
+ * Delete a bot. Its threads are **orphaned to no-bot** (bot_id set to NULL),
+ * not deleted — chat history is preserved. Memory rows are removed explicitly
+ * (we don't rely on FK ON DELETE CASCADE, mirroring deleteThread).
+ */
+export async function deleteBot(id: string): Promise<void> {
+  const db = await getDb();
+  await db.execute(`UPDATE threads SET bot_id = NULL WHERE bot_id = $1`, [id]);
+  await db.execute(`DELETE FROM bot_memory WHERE bot_id = $1`, [id]);
+  await db.execute(`DELETE FROM bots WHERE id = $1`, [id]);
+}
+
+/** A bot's memory rows, oldest first (the order they're injected). */
+export async function listBotMemory(botId: string): Promise<BotMemory[]> {
+  const db = await getDb();
+  return db.select<BotMemory[]>(
+    `SELECT * FROM bot_memory WHERE bot_id = $1 ORDER BY created_at ASC`,
+    [botId],
+  );
+}
+
+export async function addBotMemory(
+  botId: string,
+  content: string,
+): Promise<BotMemory> {
+  const db = await getDb();
+  const id = newId();
+  await db.execute(
+    `INSERT INTO bot_memory (id, bot_id, content) VALUES ($1, $2, $3)`,
+    [id, botId, content],
+  );
+  const rows = await db.select<BotMemory[]>(
+    `SELECT * FROM bot_memory WHERE id = $1`,
+    [id],
+  );
+  return rows[0];
+}
+
+export async function updateBotMemory(
+  id: string,
+  content: string,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE bot_memory SET content = $1, updated_at = datetime('now')
+     WHERE id = $2`,
+    [content, id],
+  );
+}
+
+export async function deleteBotMemory(id: string): Promise<void> {
+  const db = await getDb();
+  await db.execute(`DELETE FROM bot_memory WHERE id = $1`, [id]);
 }
 
 // ---------------------------------------------------------------------------

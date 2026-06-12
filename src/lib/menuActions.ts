@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { isMac } from "@/lib/titlebar";
 import { useThreads } from "@/store/threads";
 import { useProjects } from "@/store/projects";
+import { useBots } from "@/store/bots";
 import { useSearch } from "@/store/search";
 import { useView } from "@/store/view";
 import { useLayout } from "@/store/layout";
@@ -59,6 +60,7 @@ export function runMenuAction(action: MenuAction): void {
       useView.getState().showChat();
       useSearch.getState().clear();
       useProjects.getState().close();
+      useBots.getState().close();
       useThreads.getState().startNewChat();
       break;
     case "search": {

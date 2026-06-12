@@ -20,6 +20,38 @@ export interface Thread {
   /** 1 for an archived (closed-tab) thread: out of the open list until it's
    * opened from the Archive group, which promotes it back to 0. */
   archived: number;
+  /** Bot (persona) this thread belongs to, or null (T38). Deleting a bot
+   * orphans its threads back to null — chat history is preserved. */
+  bot_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A user-created persona with its own instructions, avatar, and memory (T38,
+ * migration 013). */
+export interface Bot {
+  id: string;
+  name: string;
+  /** Personality/instructions injected into every chat with this bot. */
+  instructions: string;
+  /** Uploaded avatar MIME type; null (with avatar_data) = monogram fallback. */
+  avatar_media_type: string | null;
+  /** Uploaded avatar, base64 (no data: prefix); null = monogram fallback. */
+  avatar_data: string | null;
+  /** Optional default provider new chats with this bot inherit (set together
+   * with default_model, or both null). */
+  default_provider: Provider | null;
+  /** Optional default model new chats with this bot inherit. */
+  default_model: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** One free-text memory row for a bot (T38), mirroring `UserMemory`. */
+export interface BotMemory {
+  id: string;
+  bot_id: string;
+  content: string;
   created_at: string;
   updated_at: string;
 }

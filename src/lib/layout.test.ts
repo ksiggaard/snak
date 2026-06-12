@@ -75,6 +75,8 @@ describe("sidebar mode persistence", () => {
   it("round-trips a mode", () => {
     storeSidebarMode("projects");
     expect(getStoredSidebarMode()).toBe("projects");
+    storeSidebarMode("bots");
+    expect(getStoredSidebarMode()).toBe("bots");
   });
 
   it("falls back to 'chats' for an unknown stored value", () => {

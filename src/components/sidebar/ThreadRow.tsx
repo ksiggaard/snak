@@ -18,6 +18,8 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { BotAvatar } from "@/components/bots/BotAvatar";
+import { useBots } from "@/store/bots";
 import { useProjects } from "@/store/projects";
 import { useThreads } from "@/store/threads";
 import { useModels } from "@/store/models";
@@ -65,6 +67,18 @@ export function ThreadRow({
   useEffect(() => {
     if (!projectsInitialized) void initProjects();
   }, [projectsInitialized, initProjects]);
+  const bots = useBots((s) => s.bots);
+  const botsInitialized = useBots((s) => s.initialized);
+  const initBots = useBots((s) => s.init);
+
+  // The bot badge needs the bot list even when the Bots pane was never
+  // opened this session (T38).
+  useEffect(() => {
+    if (!botsInitialized) void initBots();
+  }, [botsInitialized, initBots]);
+  const bot = thread.bot_id
+    ? (bots.find((b) => b.id === thread.bot_id) ?? null)
+    : null;
   const listStyle = useAppearance((s) => s.chatListStyle);
   const providers = useProviders();
   const models = useModels((s) => s.models);
@@ -180,6 +194,16 @@ export function ThreadRow({
                 className="size-3 shrink-0 fill-yellow-500 text-yellow-500"
                 aria-label={t("sidebar.favorites")}
               />
+            )}
+            {/* Bot badge (T38): the persona's avatar before the title. */}
+            {bot && (
+              <span
+                className="shrink-0"
+                title={t("sidebar.botBadge", { name: bot.name })}
+                aria-label={t("sidebar.botBadge", { name: bot.name })}
+              >
+                <BotAvatar bot={bot} className="size-4 shrink-0" />
+              </span>
             )}
             <span
               className={cn(

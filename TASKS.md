@@ -1706,8 +1706,8 @@ are NOT bundled with snak — ship clear in-app instructions to get rolling inst
 
 ## T38 — Bots: named personas with avatars and per-bot memory
 
-- **Status:** todo
-- **Owner:** —
+- **Status:** done
+- **Owner:** Claude (T36–T39 wave)
 - **Priority:** P2 (large — do a design pass before claiming)
 - **Layer:** DB (migration) + Frontend
 - **Depends on:** —
@@ -1748,6 +1748,30 @@ Infinite bots can be created.
 - FTS (T19): bot threads' messages index normally — nothing special needed.
 - Incognito (T29) + bot can compose (ephemeral thread with `bot_id`); bot-memory writes
   from incognito threads should be skipped or explicitly confirmed.
+- 2026-06-12 (Claude): Done. **Data:** migration **013** (`bots`, `bot_memory` mirroring
+  `user_memory`, nullable `threads.bot_id` + indexes); `deleteBot` orphans threads
+  explicitly (bot_id → NULL, memory deleted, no cascade reliance); ~12 db.ts helpers;
+  `createThread` takes `botId`. **Injection:** pure `buildBotSystemText`
+  (`src/lib/bots.ts`, unit-tested) — persona header + instructions + memory bullets —
+  unshifted in `send()` between global and project; documented precedence
+  **skills → global → bot → project → history** (bot = assistant identity, spans
+  projects; project stays closest to the task). Bot-less threads byte-identical.
+  **Draft flow:** lazy `draftBotId` (mirrors incognito); `startNewChatWithBot(bot)`
+  seeds the bot's default provider/model only when both set, else app default;
+  incognito always off for bot drafts in v1. **Memory:** manual-only (no automatic
+  writes — the incognito interplay is therefore moot in v1), editable from the bot
+  editor; per-entry rows like the global Memory card. **UI:** third sidebar mode
+  "Bots" (`BotsPane` mirrors ProjectsPane: collapsible per-bot groups with their
+  threads, new-chat/edit/delete hover actions), main-pane `BotView` + shared
+  `BotEditor` (name, personality, avatar upload via `prepareImage(file, 256)`,
+  default model via ModelChooser, memory list), `settings/Bots.tsx` section embedding
+  the same editor; bot/project views mutually exclusive across all navigation paths.
+  **Avatars:** `BotAvatar` (image or monogram) next to assistant messages in all
+  EIGHT chat styles (the appearance consolidation grew T34's four — cozy swaps its
+  monogram/name, compact fills the "ai" gutter, terminal a dim name marker, the rest
+  get a byline) + thread-row badge + bot empty-state hint. 38 i18n keys in all five
+  packs. Tests: `bots.test.ts`, `threads.bots.test.ts`, layout mode tests (373 total).
+  Verified: npm build/lint/test + cargo build/clippy/fmt/test (64) all green.
 
 ---
 
