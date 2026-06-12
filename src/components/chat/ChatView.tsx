@@ -45,7 +45,7 @@ export function ChatView() {
   const pending = busy && (!last || last.role === "user");
 
   return (
-    <div className="relative flex flex-1 flex-row overflow-hidden">
+    <div className="relative flex flex-1 flex-row gap-3 overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden">
         <MessageList messages={messages} pending={pending} />
         {error && <p className="text-destructive px-1 text-sm">{error}</p>}
