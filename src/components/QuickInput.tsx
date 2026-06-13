@@ -1,4 +1,10 @@
-import { type MouseEvent, useEffect, useRef, useState } from "react";
+import {
+  type MouseEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { Camera, Paperclip, X } from "lucide-react";
@@ -92,29 +98,42 @@ export function QuickInput() {
     };
   }, []);
 
-  // Focus the field whenever the overlay gains focus (i.e. each time it's shown).
+  // Size the overlay window to fit the panel (Rust clamps to [min, max]). Ceil
+  // the measured (possibly fractional) height so the window is never a sub-pixel
+  // short of the content; +16 accounts for the p-2 margin (8px top + bottom).
+  const syncHeight = useCallback(() => {
+    const el = panelRef.current;
+    if (el)
+      void setQuickHeight(Math.ceil(el.getBoundingClientRect().height) + 16);
+  }, []);
+
+  // Focus the field whenever the overlay gains focus (i.e. each time it's shown),
+  // and re-sync the height then too — the ResizeObserver only fires on content
+  // size *changes*, so an unchanged panel shown after a prior resize could
+  // otherwise stay too small on launch.
   useEffect(() => {
     textareaRef.current?.focus();
+    syncHeight();
     const unlisten = getCurrentWindow().onFocusChanged(({ payload }) => {
-      if (payload) textareaRef.current?.focus();
+      if (payload) {
+        textareaRef.current?.focus();
+        syncHeight();
+      }
     });
     return () => {
       void unlisten.then((fn) => fn());
     };
-  }, []);
+  }, [syncHeight]);
 
-  // Grow the overlay window to fit the panel (Rust clamps to [min, max]). Fires
-  // on mount and on every content change (textarea growth, previews, error).
+  // Grow/shrink the overlay on every content change (textarea growth, previews,
+  // error, recents arriving after show).
   useEffect(() => {
     const el = panelRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => {
-      // +16 accounts for the p-2 margin around the panel (8px top + bottom).
-      void setQuickHeight(el.offsetHeight + 16);
-    });
+    const ro = new ResizeObserver(syncHeight);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [syncHeight]);
 
   async function addFiles(files: Iterable<File>) {
     const imageFiles = Array.from(files).filter((f) =>

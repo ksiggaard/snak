@@ -158,11 +158,16 @@
 }
 
 /* Quick-input overlay window: transparent background so the floating card's
-   rounded corners show. Unlayered, so it overrides the base body background. */
+   rounded corners show. Unlayered, so it overrides the base body background.
+   `overflow: hidden` keeps the frameless overlay from ever showing window-level
+   scrollbars during the brief gap before the dynamic height catches up to the
+   content (recents arriving after show, sub-pixel rounding); the window height
+   tracks the panel, so nothing meaningful is clipped. */
 html.overlay,
 html.overlay body,
 html.overlay #root {
   background: transparent;
+  overflow: hidden;
 }
 
 /* T34 chat layout styles. Unlayered so these beat Tailwind's layered utilities
