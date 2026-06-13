@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Ghost, PanelRight } from "lucide-react";
+import { Ghost, PanelRight, ShieldAlert } from "lucide-react";
 import { MessageList } from "@/components/chat/MessageList";
 import { Composer } from "@/components/chat/Composer";
 import { ChatPanel } from "@/components/chat/ChatPanel";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useThreads } from "@/store/threads";
 import { useBots } from "@/store/bots";
 import { useT } from "@/store/i18n";
-import { useProviders } from "@/lib/providers";
+import { isKeylessProvider, useProviders } from "@/lib/providers";
 import { cn } from "@/lib/utils";
 
 /** Pre-first-message explainer for an incognito chat (T36): states what the
@@ -31,6 +31,65 @@ function IncognitoExplainer() {
         <p className="text-foreground/90 mt-3 text-sm font-medium">
           {t("chat.incognitoExplainerIsnt")}
         </p>
+      </div>
+    </div>
+  );
+}
+
+/** Per-call approval gate for the read-only system-diagnostics tool: shows the
+ * exact action (path or resolved command) and where the result will go, and
+ * runs nothing until the user allows it. Mirrors the Composer's terminal-staging
+ * confirmation. */
+function ApprovalGate({
+  providerLabel,
+  local,
+}: {
+  providerLabel: string;
+  local: boolean;
+}) {
+  const t = useT();
+  const pending = useThreads((s) => s.pendingApproval);
+  const resolve = useThreads((s) => s.resolveApproval);
+  if (!pending) return null;
+  return (
+    <div className="border-primary/40 bg-muted/40 flex flex-col gap-2 rounded-md border p-3 text-sm">
+      <div className="flex items-center gap-2 font-medium">
+        <ShieldAlert className="size-4 shrink-0" aria-hidden />
+        {t("chat.approvalTitle")}
+      </div>
+      <p className="text-muted-foreground text-xs">
+        {t("chat.approvalExplain")}
+      </p>
+      <div className="text-muted-foreground text-xs font-medium">
+        {pending.summary}
+      </div>
+      <div
+        className={cn(
+          "text-xs font-medium",
+          local ? "text-muted-foreground" : "text-destructive",
+        )}
+      >
+        {local
+          ? t("chat.approvalDestLocal", { provider: providerLabel })
+          : t("chat.approvalDestCloud", { provider: providerLabel })}
+      </div>
+      <pre className="bg-background overflow-x-auto rounded border p-2 font-mono text-xs whitespace-pre-wrap">
+        {pending.detail}
+      </pre>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" onClick={() => resolve(true)}>
+          {t("chat.approve")}
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => resolve(true, true)}
+        >
+          {t("chat.approveAll")}
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => resolve(false)}>
+          {t("chat.deny")}
+        </Button>
       </div>
     </div>
   );
@@ -81,6 +140,12 @@ export function ChatView() {
   const providerEnabled = providers.some((p) => p.id === provider);
   const anyProvider = providers.length > 0;
 
+  // Where an approved system-diagnostics result will go: local models keep it
+  // on the machine; cloud providers receive it. Surfaced on the approval card.
+  const providerLabel =
+    providers.find((p) => p.id === provider)?.label ?? provider;
+  const providerLocal = isKeylessProvider(provider);
+
   // Show "Thinking…" only until the first streamed token arrives; after that
   // the growing assistant bubble conveys progress.
   const last = messages[messages.length - 1];
@@ -114,6 +179,7 @@ export function ChatView() {
           <MessageList messages={messages} pending={pending} bot={bot} />
         )}
         {error && <p className="text-destructive px-1 text-sm">{error}</p>}
+        <ApprovalGate providerLabel={providerLabel} local={providerLocal} />
         <Composer
           onSend={(text, images, documents) =>
             void send(text, images, documents)

@@ -12,9 +12,19 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { getSetting, setSetting } from "@/lib/db";
+import { isKeylessProvider } from "@/lib/providers";
+import type { Provider } from "@/types/db";
 
 /** Settings key under which the server list JSON is persisted. */
 export const MCP_SERVERS_KEY = "mcp_servers";
+
+/**
+ * Settings key for the opt-in that lets the read-only system-diagnostics server
+ * be used with **cloud** providers (off by default). Local models (Ollama) can
+ * always use it — their data never leaves the machine — so this only governs
+ * sending system data to a third-party cloud provider.
+ */
+export const ALLOW_CLOUD_SYS_TOOLS_KEY = "allow_cloud_sys_tools";
 
 export type McpTransport = "builtin" | "stdio" | "http";
 
@@ -50,34 +60,55 @@ export const BUILTIN_WEB_SERVER: McpServer = {
 };
 
 /**
- * Ensure the built-in web server is present exactly once and first. User config
- * may persist a toggled-off built-in entry (we keep its `enabled`), but never a
- * duplicate or a removed one. Pure — unit-tested.
+ * The built-in, read-only system-diagnostics server (`sys`). Ships **disabled** —
+ * it lets the model read files/dirs, owners & permissions, and run read-only
+ * diagnostics (processes, disk, network, sensors…), and every call is gated
+ * behind an explicit per-call approval. It can never modify anything. Approved
+ * output (including file contents) is sent to your model provider.
  */
-export function withBuiltin(servers: McpServer[]): McpServer[] {
-  const existing = servers.find((s) => s.id === BUILTIN_WEB_SERVER.id);
-  const builtin: McpServer = {
-    ...BUILTIN_WEB_SERVER,
-    enabled: existing ? existing.enabled : BUILTIN_WEB_SERVER.enabled,
-  };
-  const rest = servers.filter((s) => s.id !== BUILTIN_WEB_SERVER.id);
-  return [builtin, ...rest];
+export const BUILTIN_SYSDEBUG_SERVER: McpServer = {
+  id: "sys",
+  label: "System diagnostics (read-only, built-in)",
+  transport: "builtin",
+  enabled: false,
+  builtin: true,
+};
+
+/** All built-in servers, in display order (always present, never removable). */
+export const BUILTIN_SERVERS: McpServer[] = [
+  BUILTIN_WEB_SERVER,
+  BUILTIN_SYSDEBUG_SERVER,
+];
+
+/**
+ * Ensure every built-in server is present exactly once and first, in declared
+ * order. User config may persist a toggled built-in entry (we keep its
+ * `enabled`), but never a duplicate or a removed one. Pure — unit-tested.
+ */
+export function withBuiltins(servers: McpServer[]): McpServer[] {
+  const builtins = BUILTIN_SERVERS.map((b) => {
+    const existing = servers.find((s) => s.id === b.id);
+    return { ...b, enabled: existing ? existing.enabled : b.enabled };
+  });
+  const builtinIds = new Set(BUILTIN_SERVERS.map((b) => b.id));
+  const rest = servers.filter((s) => !builtinIds.has(s.id));
+  return [...builtins, ...rest];
 }
 
 /** Parse the persisted JSON into a server list, tolerating absent/malformed
  * values. Always includes the built-in. Pure — unit-tested. */
 export function parseServers(raw: string | null): McpServer[] {
-  if (!raw) return withBuiltin([]);
+  if (!raw) return withBuiltins([]);
   try {
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return withBuiltin([]);
+    if (!Array.isArray(parsed)) return withBuiltins([]);
     const servers = parsed.filter(
       (s): s is McpServer =>
         s && typeof s.id === "string" && typeof s.transport === "string",
     );
-    return withBuiltin(servers);
+    return withBuiltins(servers);
   } catch {
-    return withBuiltin([]);
+    return withBuiltins([]);
   }
 }
 
@@ -88,18 +119,56 @@ export async function loadServers(): Promise<McpServer[]> {
 
 /** Persist the server list (the built-in is normalized in on read). */
 export async function saveServers(servers: McpServer[]): Promise<void> {
-  await setSetting(MCP_SERVERS_KEY, JSON.stringify(withBuiltin(servers)));
+  await setSetting(MCP_SERVERS_KEY, JSON.stringify(withBuiltins(servers)));
+}
+
+/** Whether system diagnostics may run with cloud providers (opt-in, default off). */
+export async function loadAllowCloudSysTools(): Promise<boolean> {
+  return (await getSetting(ALLOW_CLOUD_SYS_TOOLS_KEY)) === "true";
+}
+
+/** Persist the cloud opt-in for system diagnostics. */
+export async function setAllowCloudSysTools(allow: boolean): Promise<void> {
+  await setSetting(ALLOW_CLOUD_SYS_TOOLS_KEY, allow ? "true" : "false");
 }
 
 /**
- * The enabled servers to hand to `chat_stream`. Returns `undefined` when no
- * server is enabled, so the backend sends no tools and the chat path is
- * byte-identical to the no-MCP behavior. Read inside `chatStream` so the store's
- * `send()` call site stays unchanged.
+ * The enabled servers to hand to `chat_stream` for a given provider. Returns
+ * `undefined` when nothing applies, so the backend sends no tools and the chat
+ * path is byte-identical to the no-MCP behavior. Read inside `chatStream` so the
+ * store's `send()` call site stays unchanged.
+ *
+ * The read-only system-diagnostics server (`sys`) is **provider-gated**: it is
+ * available with local models (Ollama) always, but with a cloud provider only
+ * when the user has explicitly opted in — otherwise the system data it reads
+ * would be sent off-machine to a third party. Local-by-default; cloud on opt-in.
  */
-export async function enabledServersForChat(): Promise<McpServer[] | undefined> {
-  const enabled = (await loadServers()).filter((s) => s.enabled);
+export async function enabledServersForChat(
+  provider: Provider,
+): Promise<McpServer[] | undefined> {
+  const local = isKeylessProvider(provider);
+  const allowCloudSys = local ? true : await loadAllowCloudSysTools();
+  const enabled = gateServersForChat(await loadServers(), local, allowCloudSys);
   return enabled.length > 0 ? enabled : undefined;
+}
+
+/**
+ * The enabled-server gate: keep enabled servers, but drop the read-only system-
+ * diagnostics server (`sys`) for cloud providers unless the user opted in. Local
+ * providers always keep it (data stays on the machine). Pure — unit-tested.
+ */
+export function gateServersForChat(
+  servers: McpServer[],
+  local: boolean,
+  allowCloudSys: boolean,
+): McpServer[] {
+  return servers.filter((s) => {
+    if (!s.enabled) return false;
+    if (s.id === BUILTIN_SYSDEBUG_SERVER.id && !local && !allowCloudSys) {
+      return false;
+    }
+    return true;
+  });
 }
 
 /** List the tools the given servers expose (settings "refresh/test"). */

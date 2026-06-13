@@ -47,7 +47,9 @@ export function MenuBar() {
           {t("menu.toggleSidebar")}
         </Item>
         <DropdownMenuSeparator />
-        <Item action="usage">{t("menu.usage")}</Item>
+        <Item action="usage" shortcut="U">
+          {t("menu.usage")}
+        </Item>
       </Menu>
     </div>
   );

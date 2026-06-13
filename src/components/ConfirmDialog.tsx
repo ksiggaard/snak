@@ -49,7 +49,7 @@ export function ConfirmDialog() {
       >
         <h2 className="text-base font-semibold">{options.title}</h2>
         {options.description && (
-          <p className="text-muted-foreground mt-2 text-sm">
+          <p className="text-muted-foreground mt-2 text-sm whitespace-pre-line">
             {options.description}
           </p>
         )}

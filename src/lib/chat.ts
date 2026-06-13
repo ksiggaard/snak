@@ -36,13 +36,29 @@ export interface ToolCallEvent {
 }
 
 /**
- * One streamed event from the backend: either a text chunk (`text`) or a notice
- * that the model called a tool (`toolCall`). They are mutually exclusive on the
- * wire (the Rust `StreamDelta` omits whichever is absent).
+ * A gated tool call awaiting the user's approval before it runs. Sent for the
+ * read-only system-diagnostics server; the UI shows an approve/deny card and
+ * replies via `approveToolCall(id, …)`.
+ */
+export interface ApprovalRequestEvent {
+  id: string;
+  toolName: string;
+  /** Short action label, e.g. "Read file". */
+  summary: string;
+  /** The exact target — a path or the resolved command line. */
+  detail: string;
+}
+
+/**
+ * One streamed event from the backend: a text chunk (`text`), a notice that the
+ * model called a tool (`toolCall`), or a request to approve a gated tool call
+ * (`approvalRequest`). They are mutually exclusive on the wire (the Rust
+ * `StreamDelta` omits whichever fields are absent).
  */
 export interface StreamEvent {
   text?: string;
   toolCall?: ToolCallEvent;
+  approvalRequest?: ApprovalRequestEvent;
 }
 
 /**
@@ -67,7 +83,9 @@ export async function chatStream(
 ): Promise<ChatResult> {
   const channel = new Channel<StreamEvent>();
   channel.onmessage = (msg) => onDelta(msg);
-  const mcpServers = await enabledServersForChat();
+  // Provider-gated: the system-diagnostics tools are filtered out for cloud
+  // providers unless the user opted in (local models always get them).
+  const mcpServers = await enabledServersForChat(provider);
   return invoke("chat_stream", {
     provider,
     model,
@@ -85,4 +103,13 @@ export async function chatStream(
  */
 export function cancelStream(): Promise<void> {
   return invoke("cancel_stream");
+}
+
+/**
+ * Approve or deny a pending tool call (the per-call gate for the system-
+ * diagnostics server). Denying tells the model the call was declined; the chat
+ * loop continues. No-op on the backend if the call was already resolved.
+ */
+export function approveToolCall(id: string, approved: boolean): Promise<void> {
+  return invoke("approve_tool_call", { id, approved });
 }

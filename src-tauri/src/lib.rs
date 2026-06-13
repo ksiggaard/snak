@@ -175,6 +175,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(CloseToTray::default())
         .manage(commands::chat::CancelFlag::default())
+        .manage(commands::chat::PendingApprovals::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(
@@ -262,6 +263,7 @@ pub fn run() {
             commands::keys::delete_api_key,
             commands::chat::chat_stream,
             commands::chat::cancel_stream,
+            commands::chat::approve_tool_call,
             commands::quick::submit_quick,
             commands::quick::hide_quick,
             commands::quick::set_global_shortcut,

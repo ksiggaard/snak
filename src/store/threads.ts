@@ -24,9 +24,11 @@ import {
   SYSTEM_PROMPT_ADDENDUM_KEY,
 } from "@/lib/db";
 import {
+  approveToolCall,
   cancelStream,
   chatStream,
   type ApiMessage,
+  type ApprovalRequestEvent,
   type StreamEvent,
 } from "@/lib/chat";
 import {
@@ -117,6 +119,12 @@ interface ThreadsState {
   compacting: boolean;
   /** True between requesting a cancel and the stream actually stopping. */
   cancelling: boolean;
+  /** A gated (system-diagnostics) tool call awaiting the user's approval, or
+   * null when none is pending. The chat loop blocks until it's resolved. */
+  pendingApproval: ApprovalRequestEvent | null;
+  /** "Approve all this chat" was chosen — subsequent gated calls in the current
+   * send auto-approve without prompting. Reset at the start of each `send`. */
+  autoApproveSysTools: boolean;
   error: string | null;
   initialized: boolean;
 
@@ -160,6 +168,12 @@ interface ThreadsState {
   compact: () => Promise<void>;
   /** Stop the in-flight stream; partial text is persisted via the normal path. */
   cancel: () => Promise<void>;
+  /**
+   * Resolve the pending system-diagnostics approval (the per-call gate). Denying
+   * tells the model the call was declined and the stream continues. `all` (only
+   * meaningful when approving) auto-approves the rest of this send's gated calls.
+   */
+  resolveApproval: (approved: boolean, all?: boolean) => void;
   rename: (id: string, title: string) => Promise<void>;
   /** Pin/unpin a thread to the sidebar Favorites group (T23). */
   toggleFavorite: (id: string) => Promise<void>;
@@ -292,6 +306,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   busy: false,
   compacting: false,
   cancelling: false,
+  pendingApproval: null,
+  autoApproveSysTools: false,
   error: null,
   initialized: false,
 
@@ -423,7 +439,13 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     if (!content.trim() && images.length === 0 && documents.length === 0)
       return;
     if (get().busy) return;
-    set({ busy: true, cancelling: false, error: null });
+    set({
+      busy: true,
+      cancelling: false,
+      pendingApproval: null,
+      autoApproveSysTools: false,
+      error: null,
+    });
     try {
       let id = get().currentThreadId;
       let provider: Provider;
@@ -538,6 +560,18 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         let acc = "";
         const toolCalls: MessageToolCall[] = [];
         const onDelta = (event: StreamEvent) => {
+          // A gated (system-diagnostics) call needs explicit approval. The Rust
+          // loop is blocked awaiting our reply. Auto-approve if the user chose
+          // "Approve all this chat"; otherwise surface the approval card.
+          if (event.approvalRequest) {
+            const req = event.approvalRequest;
+            if (get().autoApproveSysTools) {
+              void approveToolCall(req.id, true);
+            } else {
+              set({ pendingApproval: req });
+            }
+            return;
+          }
           if (event.toolCall) {
             toolCalls.push({
               name: event.toolCall.name,
@@ -681,7 +715,12 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       const id = get().currentThreadId;
       if (id) set({ messages: await loadThreadMessages(id) });
     } finally {
-      set({ busy: false, cancelling: false });
+      set({
+        busy: false,
+        cancelling: false,
+        pendingApproval: null,
+        autoApproveSysTools: false,
+      });
     }
   },
 
@@ -770,7 +809,9 @@ export const useThreads = create<ThreadsState>((set, get) => ({
 
   cancel: async () => {
     if (!get().busy || get().cancelling) return;
-    set({ cancelling: true });
+    // Clear any pending approval card — `cancel_stream` drains pending
+    // approvals on the backend (declining them), unblocking a gated stream.
+    set({ cancelling: true, pendingApproval: null });
     try {
       await cancelStream();
     } catch {
@@ -778,6 +819,16 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       // normally; nothing actionable to surface to the user.
       set({ cancelling: false });
     }
+  },
+
+  resolveApproval: (approved, all = false) => {
+    const req = get().pendingApproval;
+    if (!req) return;
+    set({
+      pendingApproval: null,
+      ...(approved && all ? { autoApproveSysTools: true } : {}),
+    });
+    void approveToolCall(req.id, approved);
   },
 
   rename: async (id, title) => {

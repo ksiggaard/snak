@@ -14,11 +14,13 @@
 //! a cancelled request still resolves `Ok(ChatResponse { .. })` with the partial
 //! text — no error, nothing lost.
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use tauri::ipc::Channel;
 use tauri::State;
+use tokio::sync::oneshot;
 
 use crate::commands::keys;
 use crate::mcp::{self, ServerConfig};
@@ -47,6 +49,13 @@ the page rather than guessing.";
 #[derive(Default)]
 pub struct CancelFlag(pub Arc<AtomicBool>);
 
+/// Tool calls awaiting user approval, keyed by tool-call id. The chat loop
+/// inserts a one-shot sender before emitting an approval request and awaits the
+/// receiver; `approve_tool_call` (or `cancel_stream`) fulfills it. Held in Tauri
+/// managed state so the command and the loop share it.
+#[derive(Default)]
+pub struct PendingApprovals(pub Mutex<HashMap<String, oneshot::Sender<bool>>>);
+
 #[tauri::command]
 pub async fn chat_stream(
     provider: String,
@@ -55,6 +64,7 @@ pub async fn chat_stream(
     on_delta: Channel<StreamDelta>,
     #[allow(non_snake_case)] mcpServers: Option<Vec<ServerConfig>>,
     cancel: State<'_, CancelFlag>,
+    approvals: State<'_, PendingApprovals>,
 ) -> Result<ChatResponse, String> {
     // Reset any leftover cancellation from a previous request.
     let flag = cancel.0.clone();
@@ -123,9 +133,39 @@ pub async fn chat_stream(
 
         // Surface each requested tool call to the UI as a structured event (the
         // frontend renders it as a distinct chip and persists it), then execute
-        // it via MCP and feed the results back.
+        // it via MCP and feed the results back. Calls to the read-only
+        // system-diagnostics server are gated: we emit an approval request and
+        // wait for the user before running anything.
         let mut results = Vec::with_capacity(resp.tool_calls.len());
+        let mut cancelled = false;
         for call in &resp.tool_calls {
+            if mcp::requires_approval(&call.name) {
+                let (summary, detail) = mcp::describe_call(call);
+                let (tx, rx) = oneshot::channel();
+                approvals.0.lock().unwrap().insert(call.id.clone(), tx);
+                on_delta
+                    .send(StreamDelta::approval(call, summary, detail))
+                    .map_err(|e| format!("channel send failed: {e}"))?;
+
+                // Block until the user decides (or cancel_stream drains us). A
+                // dropped sender or `false` both mean "do not run".
+                let approved = rx.await.unwrap_or(false);
+                approvals.0.lock().unwrap().remove(&call.id);
+                cancelled = flag.load(Ordering::Relaxed);
+
+                if !approved {
+                    results.push(ToolResult {
+                        tool_call_id: call.id.clone(),
+                        name: call.name.clone(),
+                        content: "User denied this tool call.".into(),
+                    });
+                    if cancelled {
+                        break;
+                    }
+                    continue;
+                }
+            }
+
             on_delta
                 .send(StreamDelta::tool(call))
                 .map_err(|e| format!("channel send failed: {e}"))?;
@@ -135,6 +175,15 @@ pub async fn chat_stream(
                 tool_call_id: call.id.clone(),
                 name: call.name.clone(),
                 content,
+            });
+        }
+
+        // User cancelled while an approval was pending: stop here with the text
+        // streamed so far (mirrors the provider-loop cancellation behavior).
+        if cancelled {
+            return Ok(ChatResponse {
+                content: transcript,
+                ..resp
             });
         }
 
@@ -193,12 +242,28 @@ fn with_tool_system_prompt(messages: Vec<ChatMessage>, has_tools: bool) -> Vec<C
     out
 }
 
+/// Resolve a pending tool-call approval. `approved = false` (or an unknown id)
+/// declines; the chat loop then feeds the model a "denied" tool result and
+/// continues. No-op if the call was already resolved (e.g. cancelled).
+#[tauri::command]
+pub fn approve_tool_call(id: String, approved: bool, approvals: State<'_, PendingApprovals>) {
+    if let Some(tx) = approvals.0.lock().unwrap().remove(&id) {
+        let _ = tx.send(approved);
+    }
+}
+
 /// Request cancellation of the in-flight stream. Sets the shared flag; the
 /// running provider loop observes it and stops, so the pending `chat_stream`
-/// call resolves with the partial text.
+/// call resolves with the partial text. Also drains any pending tool-call
+/// approvals (declining them), so a stream blocked on the approval gate — which
+/// is awaiting, not polling the flag — unblocks immediately.
 #[tauri::command]
-pub fn cancel_stream(cancel: State<'_, CancelFlag>) {
+pub fn cancel_stream(cancel: State<'_, CancelFlag>, approvals: State<'_, PendingApprovals>) {
     cancel.0.store(true, Ordering::Relaxed);
+    let mut pending = approvals.0.lock().unwrap();
+    for (_id, tx) in pending.drain() {
+        let _ = tx.send(false);
+    }
 }
 
 #[cfg(test)]

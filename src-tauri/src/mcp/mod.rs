@@ -21,6 +21,7 @@
 //! the persisted server config (Stage-1 rule) and passes the enabled list into
 //! `chat_stream`; an empty/all-disabled list produces an empty tool slice.
 
+pub mod sysdebug;
 pub mod web_browse;
 
 use anyhow::{anyhow, Context};
@@ -98,7 +99,7 @@ pub async fn list_tools(client: &reqwest::Client, servers: &[ServerConfig]) -> V
     let mut out = Vec::new();
     for server in servers.iter().filter(|s| s.enabled) {
         let tools = match server.transport() {
-            Transport::Builtin => web_browse::tools(),
+            Transport::Builtin => builtin_tools(&server.id),
             Transport::Stdio => list_stdio_tools(server).await.unwrap_or_default(),
             Transport::Http => list_http_tools(client, server).await.unwrap_or_default(),
         };
@@ -140,10 +141,45 @@ async fn call_tool_inner(
             )
         })?;
     match server.transport() {
-        Transport::Builtin => web_browse::call_tool(client, tool, &call.arguments).await,
+        Transport::Builtin => builtin_call(client, &server.id, tool, &call.arguments).await,
         Transport::Stdio => call_stdio_tool(server, tool, &call.arguments).await,
         Transport::Http => call_http_tool(client, server, tool, &call.arguments).await,
     }
+}
+
+/// Dispatch a built-in (in-process) server by id. Unknown ids fall back to the
+/// web-browse server, matching `split_namespaced`'s unnamespaced fallback.
+fn builtin_tools(server_id: &str) -> Vec<ToolDef> {
+    match server_id {
+        sysdebug::SERVER_ID => sysdebug::tools(),
+        _ => web_browse::tools(),
+    }
+}
+
+async fn builtin_call(
+    client: &reqwest::Client,
+    server_id: &str,
+    tool: &str,
+    args: &Value,
+) -> anyhow::Result<String> {
+    match server_id {
+        sysdebug::SERVER_ID => sysdebug::call_tool(tool, args).await,
+        _ => web_browse::call_tool(client, tool, args).await,
+    }
+}
+
+/// Whether a (namespaced) tool call must be confirmed by the user before it
+/// runs. Only the read-only system-diagnostics server (`sys`) is gated; the
+/// web-browse tool and external MCP servers run as before.
+pub fn requires_approval(tool_name: &str) -> bool {
+    split_namespaced(tool_name).0 == sysdebug::SERVER_ID
+}
+
+/// A `(summary, detail)` describing what a gated tool call would do, for the
+/// UI's per-call approval card.
+pub fn describe_call(call: &ToolCall) -> (String, String) {
+    let (_server, tool) = split_namespaced(&call.name);
+    sysdebug::describe(tool, &call.arguments)
 }
 
 // ---------------------------------------------------------------------------
@@ -450,6 +486,23 @@ mod tests {
     #[test]
     fn unnamespaced_routes_to_builtin() {
         assert_eq!(split_namespaced("fetch_url"), ("web", "fetch_url"));
+    }
+
+    #[test]
+    fn only_sys_tools_require_approval() {
+        assert!(requires_approval("sys__read_file"));
+        assert!(requires_approval("sys__run_diagnostic"));
+        assert!(!requires_approval("web__fetch_url"));
+        assert!(!requires_approval("somemcp__do_thing"));
+    }
+
+    #[test]
+    fn builtin_tools_route_by_id() {
+        assert!(builtin_tools(sysdebug::SERVER_ID)
+            .iter()
+            .any(|t| t.name == "read_file"));
+        // Unknown / web id falls back to the web-browse server.
+        assert!(builtin_tools("web").iter().any(|t| t.name == "fetch_url"));
     }
 
     #[test]

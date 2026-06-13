@@ -138,6 +138,17 @@ export const en = {
   // --- Chat view / message list -----------------------------------------------
   "chat.empty": "Send a message to start the conversation.",
   "chat.thinking": "Thinking…",
+  "chat.waitingApproval": "Waiting for your approval…",
+  "chat.approvalTitle": "Allow this system access?",
+  "chat.approvalExplain":
+    "The read-only system tool wants to run the action below. Nothing runs until you allow it. Approved output is sent to your model provider.",
+  "chat.approve": "Allow",
+  "chat.approveAll": "Allow all this chat",
+  "chat.deny": "Deny",
+  "chat.approvalDestLocal":
+    "Stays on this machine — runs locally via {provider}.",
+  "chat.approvalDestCloud":
+    "⚠ Will be sent to {provider} (cloud) — this data leaves your machine.",
   "chat.incognitoHint": "Incognito — this chat is deleted when the app exits.",
   "chat.incognitoHeader": "Incognito chat",
   "chat.incognitoExplainerTitle": "This is an incognito chat",
@@ -503,6 +514,16 @@ export const en = {
   "mcp.addServer": "Add server",
   "mcp.availableTools": "Available tools",
   "mcp.refreshHint": "Refresh to list tools from enabled servers.",
+  "mcp.sysLocalOnly":
+    "System diagnostics is limited to local models (Ollama) — its data stays on this machine.",
+  "mcp.sysCloudAllowed":
+    "⚠ System diagnostics is allowed with cloud models — approved data is sent off-machine.",
+  "mcp.sysAllowCloud": "Allow with cloud models…",
+  "mcp.sysRestrictLocal": "Restrict to local",
+  "mcp.sysCloudRiskTitle": "Allow system access with cloud models?",
+  "mcp.sysCloudRiskBody":
+    "This read-only tool reads your files, directories, owners/permissions, processes, network configuration, logs and other system details.\n\nWith a cloud model, everything you approve is transmitted to that third-party provider (Anthropic, OpenAI, Mistral or Google) and may be retained or logged on their servers. That can include secrets, tokens, private keys, and other sensitive data found in the files or output you approve.\n\nEach call still requires your explicit approval, but approval sends the data off your machine. Local models (Ollama) never have this risk. Only enable this if you understand and accept it.",
+  "mcp.sysCloudRiskConfirm": "I understand — allow cloud access",
 
   // --- Settings: skills ---------------------------------------------------------------------------------------------------------------------
   "skills.title": "Skills",

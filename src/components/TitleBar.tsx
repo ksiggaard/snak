@@ -20,6 +20,7 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -144,10 +145,12 @@ export function TitleBar() {
           <DropdownMenuItem onClick={() => setView("settings")}>
             <Settings2 className="size-4" />
             {t("titleBar.settings")}
+            <DropdownMenuShortcut>{shortcutLabel(",")}</DropdownMenuShortcut>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setView("usage")}>
             <BarChart3 className="size-4" />
             {t("titleBar.usage")}
+            <DropdownMenuShortcut>{shortcutLabel("U")}</DropdownMenuShortcut>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel>{t("titleBar.theme")}</DropdownMenuLabel>
