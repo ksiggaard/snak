@@ -41,6 +41,8 @@ export function menuActionForKey(e: KeyboardEvent): MenuAction | null {
       return "toggle-sidebar";
     case ",":
       return "settings";
+    case "u":
+      return "usage";
     case "q":
       return "quit";
     default:

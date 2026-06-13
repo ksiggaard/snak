@@ -32,7 +32,7 @@ pub fn install(app: &tauri::App) -> tauri::Result<()> {
         true,
         Some("CmdOrCtrl+B"),
     )?;
-    let usage = MenuItem::with_id(app, "menu_usage", "Usage", true, None::<&str>)?;
+    let usage = MenuItem::with_id(app, "menu_usage", "Usage", true, Some("CmdOrCtrl+U"))?;
 
     // Quit: macOS gets the predefined item in the application menu (standard
     // Cmd+Q via NSApp.terminate); elsewhere a custom item handled in
