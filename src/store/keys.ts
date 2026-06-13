@@ -52,32 +52,40 @@ export const useKeys = create<KeysState>((set) => ({
   loaded: false,
 
   load: async () => {
-    // One-time backfill: a pre-cache install has no flags, so read the keychain
-    // once per known provider and persist the result (guarded so it never reads
-    // the keychain again on subsequent launches).
-    if ((await getSetting(PRESENCE_SYNCED_KEY)) !== "1") {
-      await Promise.all(
-        KEYED_PROVIDER_IDS.map(async (provider) => {
-          const has = await readApiKeyPresence(provider);
-          await setSetting(presenceKey(provider), has ? "1" : "0");
-        }),
+    // Resolve `loaded` even if a DB/keychain call throws: a failed presence read
+    // must degrade to "no keys present", not leave consumers (e.g. the quick-input
+    // ModelChooser, which gates its list on `loaded`) spinning forever. Mirrors
+    // the try/catch in `useModels.load()`.
+    try {
+      // One-time backfill: a pre-cache install has no flags, so read the keychain
+      // once per known provider and persist the result (guarded so it never reads
+      // the keychain again on subsequent launches).
+      if ((await getSetting(PRESENCE_SYNCED_KEY)) !== "1") {
+        await Promise.all(
+          KEYED_PROVIDER_IDS.map(async (provider) => {
+            const has = await readApiKeyPresence(provider);
+            await setSetting(presenceKey(provider), has ? "1" : "0");
+          }),
+        );
+        await setSetting(PRESENCE_SYNCED_KEY, "1");
+      }
+      // Read the cached flags (pure DB — no keychain access).
+      const pairs = await Promise.all(
+        KEYED_PROVIDER_IDS.map(
+          async (provider) =>
+            [
+              provider,
+              (await getSetting(presenceKey(provider))) === "1",
+            ] as const,
+        ),
       );
-      await setSetting(PRESENCE_SYNCED_KEY, "1");
+      set({
+        present: new Set(pairs.filter(([, ok]) => ok).map(([p]) => p)),
+        loaded: true,
+      });
+    } catch {
+      set({ loaded: true });
     }
-    // Read the cached flags (pure DB — no keychain access).
-    const pairs = await Promise.all(
-      KEYED_PROVIDER_IDS.map(
-        async (provider) =>
-          [
-            provider,
-            (await getSetting(presenceKey(provider))) === "1",
-          ] as const,
-      ),
-    );
-    set({
-      present: new Set(pairs.filter(([, ok]) => ok).map(([p]) => p)),
-      loaded: true,
-    });
   },
 
   setPresent: async (provider, present) => {

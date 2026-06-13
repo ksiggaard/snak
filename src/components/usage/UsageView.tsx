@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { dailyUsage, usageByModel, type UsageByModel } from "@/lib/db";
@@ -136,11 +143,20 @@ function DayTooltip({
   const t = useT();
   const tp = useTp();
   const ref = useRef<HTMLDivElement>(null);
+  // Start fixed + hidden at the origin so the (yet-unpositioned) tooltip is out
+  // of normal flow — otherwise a `visibility:hidden` static element reserves
+  // space in the cell grid and shifts the layout on hover (the "jumping" bug).
   const [style, setStyle] = useState<React.CSSProperties>({
+    position: "fixed",
+    top: 0,
+    left: 0,
     visibility: "hidden",
   });
 
-  useEffect(() => {
+  // useLayoutEffect (not useEffect): measure + position synchronously before the
+  // browser paints, so the tooltip never flashes at its initial (0,0)/hidden spot
+  // and then jumps to the computed position — that double-paint was the flicker.
+  useLayoutEffect(() => {
     if (!ref.current) return;
     const tip = ref.current.getBoundingClientRect();
     const vw = window.innerWidth;

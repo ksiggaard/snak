@@ -226,12 +226,19 @@ function App() {
           {/* Inline sidebar (>= md), shown unless collapsed. */}
           {sidebarOpen && <Sidebar />}
 
-          {/* Overlay sidebar for narrow widths. */}
+          {/* Overlay sidebar for narrow widths. Offset below the chrome
+              (TitleBar 32px + inline MenuBar 28px) so the Sheet doesn't cover
+              the topbar / the hamburger that opens it. Inline style overrides
+              the shadcn `top-0`/`h-full` classes. */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetContent
               side="left"
               showCloseButton={false}
               className="bg-sidebar text-sidebar-foreground gap-0 p-0"
+              style={{
+                top: menuBarMode === "inline" ? 60 : 32,
+                height: `calc(100% - ${menuBarMode === "inline" ? 60 : 32}px)`,
+              }}
             >
               <SheetTitle className="sr-only">
                 {t("sidebar.navigation")}
