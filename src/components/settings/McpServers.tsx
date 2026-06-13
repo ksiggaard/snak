@@ -11,15 +11,19 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { NativeSelect } from "@/components/NativeSelect";
 import {
+  BUILTIN_SYSDEBUG_SERVER,
   listTools,
+  loadAllowCloudSysTools,
   loadServers,
   saveServers,
+  setAllowCloudSysTools,
   type McpListedTool,
   type McpServer,
   type McpTransport,
 } from "@/lib/mcp";
 import { confirmDialog } from "@/store/confirm";
 import { t as tNow, useT } from "@/store/i18n";
+import { ShieldAlert } from "lucide-react";
 
 /**
  * MCP servers settings card (T13). Lets the user toggle the built-in web-browse
@@ -34,6 +38,8 @@ export function McpServers() {
   const [tools, setTools] = useState<McpListedTool[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Cloud opt-in for the read-only system-diagnostics server (default off).
+  const [allowCloudSys, setAllowCloudSys] = useState(false);
 
   // Draft for the "add custom server" row.
   const [draftLabel, setDraftLabel] = useState("");
@@ -42,7 +48,24 @@ export function McpServers() {
 
   useEffect(() => {
     void loadServers().then(setServers);
+    void loadAllowCloudSysTools().then(setAllowCloudSys);
   }, []);
+
+  // Enabling cloud access for system diagnostics requires confirming a full
+  // risk dialog; disabling (tightening) is immediate.
+  async function setCloudSys(allow: boolean) {
+    if (allow) {
+      const ok = await confirmDialog({
+        title: tNow("mcp.sysCloudRiskTitle"),
+        description: tNow("mcp.sysCloudRiskBody"),
+        confirmText: tNow("mcp.sysCloudRiskConfirm"),
+        destructive: true,
+      });
+      if (!ok) return;
+    }
+    await setAllowCloudSysTools(allow);
+    setAllowCloudSys(allow);
+  }
 
   async function persist(next: McpServer[]) {
     setServers(next);
@@ -108,55 +131,86 @@ export function McpServers() {
           {servers.map((s) => (
             <div
               key={s.id}
-              className="flex items-start justify-between gap-3 border-t py-3 first:border-t-0 first:pt-0"
+              className="flex flex-col gap-2 border-t py-3 first:border-t-0 first:pt-0"
             >
-              <div className="flex flex-col gap-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">{s.label}</span>
-                  <span className="text-muted-foreground rounded border px-1 text-[10px] uppercase">
-                    {s.transport}
-                  </span>
-                  {s.builtin && (
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{s.label}</span>
                     <span className="text-muted-foreground rounded border px-1 text-[10px] uppercase">
-                      {t("common.builtIn")}
+                      {s.transport}
+                    </span>
+                    {s.builtin && (
+                      <span className="text-muted-foreground rounded border px-1 text-[10px] uppercase">
+                        {t("common.builtIn")}
+                      </span>
+                    )}
+                  </div>
+                  {(s.command || s.url) && (
+                    <span className="text-muted-foreground text-xs break-all">
+                      {s.command ?? s.url}
                     </span>
                   )}
                 </div>
-                {(s.command || s.url) && (
-                  <span className="text-muted-foreground text-xs break-all">
-                    {s.command ?? s.url}
-                  </span>
-                )}
+                <div className="flex shrink-0 items-center gap-3">
+                  <label className="text-muted-foreground flex cursor-pointer items-center gap-2 text-xs select-none">
+                    <Switch
+                      checked={s.enabled}
+                      onCheckedChange={() => toggle(s.id)}
+                      aria-label={`${s.label} ${s.enabled ? t("common.enabled") : t("common.disabled")}`}
+                    />
+                    <span className="w-12">
+                      {s.enabled ? t("common.enabled") : t("common.disabled")}
+                    </span>
+                  </label>
+                  {!s.builtin && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        void confirmDialog({
+                          title: tNow("mcp.removeTitle", { label: s.label }),
+                          confirmText: tNow("common.remove"),
+                          destructive: true,
+                        }).then((ok) => {
+                          if (ok) remove(s.id);
+                        });
+                      }}
+                    >
+                      {t("common.remove")}
+                    </Button>
+                  )}
+                </div>
               </div>
-              <div className="flex shrink-0 items-center gap-3">
-                <label className="text-muted-foreground flex cursor-pointer items-center gap-2 text-xs select-none">
-                  <Switch
-                    checked={s.enabled}
-                    onCheckedChange={() => toggle(s.id)}
-                    aria-label={`${s.label} ${s.enabled ? t("common.enabled") : t("common.disabled")}`}
-                  />
-                  <span className="w-12">
-                    {s.enabled ? t("common.enabled") : t("common.disabled")}
-                  </span>
-                </label>
-                {!s.builtin && (
+              {s.id === BUILTIN_SYSDEBUG_SERVER.id && s.enabled && (
+                <div className="bg-muted/40 flex flex-col gap-2 rounded-md border p-2 text-xs">
+                  <div className="text-muted-foreground flex items-start gap-1.5">
+                    <ShieldAlert
+                      className={
+                        allowCloudSys
+                          ? "text-destructive mt-0.5 size-3.5 shrink-0"
+                          : "mt-0.5 size-3.5 shrink-0"
+                      }
+                      aria-hidden
+                    />
+                    <span>
+                      {allowCloudSys
+                        ? t("mcp.sysCloudAllowed")
+                        : t("mcp.sysLocalOnly")}
+                    </span>
+                  </div>
                   <Button
                     size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      void confirmDialog({
-                        title: tNow("mcp.removeTitle", { label: s.label }),
-                        confirmText: tNow("common.remove"),
-                        destructive: true,
-                      }).then((ok) => {
-                        if (ok) remove(s.id);
-                      });
-                    }}
+                    variant={allowCloudSys ? "outline" : "secondary"}
+                    className="self-start"
+                    onClick={() => void setCloudSys(!allowCloudSys)}
                   >
-                    {t("common.remove")}
+                    {allowCloudSys
+                      ? t("mcp.sysRestrictLocal")
+                      : t("mcp.sysAllowCloud")}
                   </Button>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           ))}
         </div>

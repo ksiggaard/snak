@@ -126,6 +126,10 @@ pub struct StreamDelta {
     /// Set when the model called a tool this round.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call: Option<ToolCallDelta>,
+    /// Set when a tool call needs explicit user approval before it runs. The
+    /// frontend shows an approve/deny card and replies via `approve_tool_call`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub approval_request: Option<ApprovalRequest>,
 }
 
 impl StreamDelta {
@@ -134,6 +138,7 @@ impl StreamDelta {
         Self {
             text: text.into(),
             tool_call: None,
+            approval_request: None,
         }
     }
 
@@ -142,8 +147,36 @@ impl StreamDelta {
         Self {
             text: String::new(),
             tool_call: Some(ToolCallDelta::new(call)),
+            approval_request: None,
         }
     }
+
+    /// A request for the user to approve a gated tool call before it runs.
+    pub(crate) fn approval(call: &ToolCall, summary: String, detail: String) -> Self {
+        Self {
+            text: String::new(),
+            tool_call: None,
+            approval_request: Some(ApprovalRequest {
+                id: call.id.clone(),
+                tool_name: call.name.clone(),
+                summary,
+                detail,
+            }),
+        }
+    }
+}
+
+/// A pending tool call awaiting user approval, surfaced to the UI's approval
+/// card. `id` correlates the eventual `approve_tool_call(id, approved)` reply.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApprovalRequest {
+    pub id: String,
+    pub tool_name: String,
+    /// Short action label, e.g. "Read file".
+    pub summary: String,
+    /// The exact target — a path or the resolved command line.
+    pub detail: String,
 }
 
 /// A compact, display-oriented view of a tool call, streamed to the UI and

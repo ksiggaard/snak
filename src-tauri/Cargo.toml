@@ -37,7 +37,7 @@ futures-util = "0.3"
 base64 = "0.22"
 # Async process + IO for the MCP stdio transport (T13). Tauri already pulls tokio
 # into the tree; we depend on it directly for `process` + `io-util`.
-tokio = { version = "1", features = ["process", "io-util", "macros", "rt"] }
+tokio = { version = "1", features = ["process", "io-util", "macros", "rt", "sync", "time"] }
 # Document text extraction (T39): pure-Rust PDF text, zip + streaming XML for
 # the OOXML/ODF container formats, calamine for spreadsheets. zip only needs
 # deflate (no bzip2/aes baggage).
