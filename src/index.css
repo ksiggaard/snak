@@ -205,3 +205,58 @@ html.overlay #root {
 :is(.chat-style-compact, .chat-style-terminal) .chat-content :where(.mb-2) {
   margin-bottom: 0.25rem;
 }
+
+/* ── UI animations (T46) ───────────────────────────────────────────────────
+   A single global on/off (Appearance → Animations). When disabled, the
+   `.no-animations` class on <html> collapses every transition/animation to
+   ~0 so the UI is fully static; the same is honored for OS "reduce motion". */
+.no-animations *,
+.no-animations *::before,
+.no-animations *::after {
+  animation-duration: 0.001ms !important;
+  animation-delay: 0ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  transition-delay: 0ms !important;
+  scroll-behavior: auto !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Thinking indicator: three dots pulsing in sequence (delays set per dot). */
+@keyframes snak-thinking-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+.snak-thinking-dot {
+  animation: snak-thinking-dot 1.2s infinite ease-in-out both;
+}
+
+/* Incognito ghost: a gentle vertical float, playing on the ghost identity. */
+@keyframes snak-ghost-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+.snak-ghost-float {
+  animation: snak-ghost-float 3.5s ease-in-out infinite;
+}

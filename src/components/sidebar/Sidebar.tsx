@@ -119,7 +119,8 @@ export function Sidebar() {
 
   return (
     <aside
-      className="bg-sidebar text-sidebar-foreground border-sidebar-border relative hidden shrink-0 flex-col border-r md:flex"
+      // Slides + fades in when shown (T46); instant when animations are off.
+      className="bg-sidebar text-sidebar-foreground border-sidebar-border animate-in slide-in-from-left-4 fade-in-0 relative hidden shrink-0 flex-col border-r duration-200 md:flex"
       style={{ width }}
     >
       <SidebarContent />

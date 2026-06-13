@@ -525,8 +525,19 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
       )}
       {pending && (
         <div className="flex justify-start">
-          <div className="text-muted-foreground text-sm">
-            {t("chat.thinking")}
+          <div className="text-muted-foreground flex items-center gap-1.5 text-sm">
+            <span>{t("chat.thinking")}</span>
+            {/* Three dots pulsing in sequence (T46). Static when animations
+                are off — the kill-switch zeroes the animation. */}
+            <span aria-hidden className="flex gap-0.5">
+              {[0, 0.2, 0.4].map((delay, i) => (
+                <span
+                  key={i}
+                  className="snak-thinking-dot bg-muted-foreground inline-block size-1 rounded-full"
+                  style={{ animationDelay: `${delay}s` }}
+                />
+              ))}
+            </span>
           </div>
         </div>
       )}

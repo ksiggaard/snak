@@ -1,10 +1,12 @@
 import { create } from "zustand";
 import {
+  applyAnimations,
   applyCustomColors,
   applyCustomRadius,
   applyCustomTypography,
   clampContrast,
   clampSize,
+  getStoredAnimations,
   getStoredChatListStyle,
   getStoredChatStyle,
   getStoredCustomColors,
@@ -13,6 +15,7 @@ import {
   isHexColor,
   RADIUS,
   storeChatListStyle,
+  storeAnimations,
   storeChatStyle,
   storeCustomColors,
   storeRadius,
@@ -36,6 +39,8 @@ interface AppearanceState {
   chatListStyle: ChatListStyle;
   /** Corner radius (px) for the `--radius` token; null = built-in 10px. */
   radius: number | null;
+  /** Whether UI animations/transitions play (T46); default on. */
+  animations: boolean;
 
   /** Set one color pick for one mode, persist, and re-apply the overrides. */
   setColor: (mode: ColorMode, key: ColorKey, hex: string) => void;
@@ -53,6 +58,8 @@ interface AppearanceState {
   setChatListStyle: (style: ChatListStyle) => void;
   /** Set (or clear with null) the corner radius. */
   setRadius: (v: number | null) => void;
+  /** Enable/disable UI animations globally (T46). */
+  setAnimations: (enabled: boolean) => void;
 }
 
 export const useAppearance = create<AppearanceState>((set, get) => ({
@@ -61,6 +68,7 @@ export const useAppearance = create<AppearanceState>((set, get) => ({
   chatStyle: getStoredChatStyle(),
   chatListStyle: getStoredChatListStyle(),
   radius: getStoredRadius(),
+  animations: getStoredAnimations(),
 
   setColor: (mode, key, hex) => {
     if (!isHexColor(hex)) return;
@@ -124,6 +132,12 @@ export const useAppearance = create<AppearanceState>((set, get) => ({
     storeChatListStyle(style);
     set({ chatListStyle: style });
   },
+
+  setAnimations: (enabled) => {
+    storeAnimations(enabled);
+    applyAnimations(enabled);
+    set({ animations: enabled });
+  },
 }));
 
 // Apply the stored overrides as soon as this module loads (before first
@@ -133,3 +147,4 @@ export const useAppearance = create<AppearanceState>((set, get) => ({
 applyCustomColors(getStoredCustomColors());
 applyCustomTypography(getStoredTypography());
 applyCustomRadius(getStoredRadius());
+applyAnimations(getStoredAnimations());

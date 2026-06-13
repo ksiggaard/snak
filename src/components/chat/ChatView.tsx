@@ -18,7 +18,10 @@ function IncognitoExplainer() {
   return (
     <div className="flex flex-1 items-center justify-center overflow-y-auto p-4">
       <div className="border-muted-foreground/40 bg-muted/30 max-w-md rounded-xl border border-dashed p-6 text-center">
-        <Ghost className="text-muted-foreground mx-auto size-10" aria-hidden />
+        <Ghost
+          className="snak-ghost-float text-muted-foreground mx-auto size-10"
+          aria-hidden
+        />
         <h2 className="mt-3 text-base font-semibold">
           {t("chat.incognitoExplainerTitle")}
         </h2>

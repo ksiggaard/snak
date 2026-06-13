@@ -248,17 +248,32 @@ function App() {
           </Sheet>
 
           <main className="flex min-w-0 flex-1 flex-col p-3 md:p-4">
-            {view === "settings" ? (
-              <SettingsView />
-            ) : view === "usage" ? (
-              <UsageView />
-            ) : openBotId ? (
-              <BotView />
-            ) : openProjectId ? (
-              <ProjectView />
-            ) : (
-              <ChatView />
-            )}
+            {/* Keyed so switching views replays the fade-in (T46). The
+                `.no-animations` kill-switch makes this instant when disabled. */}
+            <div
+              key={
+                view === "settings" || view === "usage"
+                  ? view
+                  : openBotId
+                    ? `bot:${openBotId}`
+                    : openProjectId
+                      ? `project:${openProjectId}`
+                      : "chat"
+              }
+              className="animate-in fade-in-0 flex min-h-0 flex-1 flex-col duration-200"
+            >
+              {view === "settings" ? (
+                <SettingsView />
+              ) : view === "usage" ? (
+                <UsageView />
+              ) : openBotId ? (
+                <BotView />
+              ) : openProjectId ? (
+                <ProjectView />
+              ) : (
+                <ChatView />
+              )}
+            </div>
           </main>
         </div>
       </div>
