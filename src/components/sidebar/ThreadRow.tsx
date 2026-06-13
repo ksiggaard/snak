@@ -161,7 +161,9 @@ export function ThreadRow({
           className={cn(
             "group relative flex items-center gap-1 rounded-md px-2",
             compact ? "py-0.5" : "py-1.5",
-            active ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/50",
+            active
+              ? "bg-primary/10 hover:bg-primary/15"
+              : "hover:bg-sidebar-accent/50",
             // Incognito identity (T36): a dashed left edge + tint so the row
             // reads as temporary at a glance, beyond the Ghost badge.
             !!thread.ephemeral &&
@@ -169,6 +171,15 @@ export function ThreadRow({
             !!thread.ephemeral && !active && "bg-muted/40",
           )}
         >
+          {/* Active-row indicator: a primary-coloured left bar. Reads at a
+              glance in any theme, where the `bg-sidebar-accent` tint alone is
+              too close to the sidebar background to spot the active chat. */}
+          {active && (
+            <span
+              aria-hidden
+              className="bg-primary absolute inset-y-1 left-0 w-[3px] rounded-r-full"
+            />
+          )}
           {editing ? (
             <Input
               autoFocus
@@ -231,6 +242,7 @@ export function ThreadRow({
                   className={cn(
                     "truncate",
                     compact ? "text-xs" : "text-sm",
+                    active && "text-foreground font-medium",
                     !!thread.ephemeral && "text-muted-foreground italic",
                   )}
                 >
