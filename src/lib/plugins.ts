@@ -16,6 +16,7 @@ import {
   type PluginInfo,
   type PluginManifest,
   type ProviderContribution,
+  type RendererContribution,
   type SkillContribution,
   type SlashCommandContribution,
   type ThemeContribution,
@@ -97,6 +98,7 @@ export interface HostRegistry {
   themes: ThemeContribution[];
   skills: SkillContribution[];
   slashCommands: SlashCommandContribution[];
+  renderers: RendererContribution[];
 }
 
 /** Build the registry from a plugin list (only `enabled` plugins contribute). */
@@ -106,6 +108,7 @@ export function buildRegistry(plugins: PluginInfo[]): HostRegistry {
     themes: [],
     skills: [],
     slashCommands: [],
+    renderers: [],
   };
   for (const p of plugins) {
     if (!p.enabled || !p.manifest.contributes) continue;
@@ -123,7 +126,18 @@ export function buildRegistry(plugins: PluginInfo[]): HostRegistry {
       case "slash-command":
         reg.slashCommands.push(c as SlashCommandContribution);
         break;
+      case "renderer":
+        reg.renderers.push(c as RendererContribution);
+        break;
     }
   }
   return reg;
+}
+
+/** True when an enabled `renderer` plugin contributes the given language
+ * (case-insensitive), e.g. "mermaid". Consumed by `CodeBlock` to decide
+ * whether to render a diagram instead of a plain fenced block. */
+export function hasRenderer(reg: HostRegistry, language: string): boolean {
+  const lang = language.toLowerCase();
+  return reg.renderers.some((r) => r.language.toLowerCase() === lang);
 }

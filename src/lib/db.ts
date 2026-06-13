@@ -228,12 +228,15 @@ export async function addMessage(input: {
   /** 'normal' (default) or 'summary' for a compaction-point row (T28). */
   kind?: MessageKind;
   duration_ms?: number | null;
+  /** Persona that authored this reply via an @-mention (T43); null/absent
+   * for normal turns. */
+  bot_id?: string | null;
 }): Promise<Message> {
   const db = await getDb();
   const id = newId();
   await db.execute(
-    `INSERT INTO messages (id, thread_id, role, content, kind, duration_ms)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
+    `INSERT INTO messages (id, thread_id, role, content, kind, duration_ms, bot_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     [
       id,
       input.thread_id,
@@ -241,6 +244,7 @@ export async function addMessage(input: {
       input.content,
       input.kind ?? "normal",
       input.duration_ms ?? null,
+      input.bot_id ?? null,
     ],
   );
   await touchThread(input.thread_id);
@@ -829,6 +833,9 @@ export async function setBotDefaultModel(
 export async function deleteBot(id: string): Promise<void> {
   const db = await getDb();
   await db.execute(`UPDATE threads SET bot_id = NULL WHERE bot_id = $1`, [id]);
+  // Mention-attributed replies (T43) orphan to a normal rendering, mirroring
+  // the threads NULL-out above (no FK-cascade reliance).
+  await db.execute(`UPDATE messages SET bot_id = NULL WHERE bot_id = $1`, [id]);
   await db.execute(`DELETE FROM bot_memory WHERE bot_id = $1`, [id]);
   await db.execute(`DELETE FROM bots WHERE id = $1`, [id]);
 }

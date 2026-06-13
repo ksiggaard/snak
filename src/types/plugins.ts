@@ -5,13 +5,19 @@
 /** Host API version this build implements. Manifests must target this. */
 export const PLUGIN_API_VERSION = 1;
 
-export type PluginCategory = "provider" | "theme" | "skill" | "slash-command";
+export type PluginCategory =
+  | "provider"
+  | "theme"
+  | "skill"
+  | "slash-command"
+  | "renderer";
 
 export const PLUGIN_CATEGORIES: PluginCategory[] = [
   "provider",
   "theme",
   "skill",
   "slash-command",
+  "renderer",
 ];
 
 /** Human labels for each category (used in the settings UI grouping). */
@@ -20,6 +26,7 @@ export const CATEGORY_LABELS: Record<PluginCategory, string> = {
   theme: "Themes",
   skill: "Skills",
   "slash-command": "Slash commands",
+  renderer: "Renderers",
 };
 
 // --- Category-specific contribution descriptors (extension points) ----------
@@ -52,11 +59,19 @@ export interface SlashCommandContribution {
   description: string;
 }
 
+/** A fenced-code-block renderer for one language (T42). Per the T12
+ * declarative security model the descriptor only *names* the language —
+ * the renderer itself is built-in code keyed by it (e.g. "mermaid"). */
+export interface RendererContribution {
+  language: string;
+}
+
 export type PluginContribution =
   | ProviderContribution
   | ThemeContribution
   | SkillContribution
-  | SlashCommandContribution;
+  | SlashCommandContribution
+  | RendererContribution;
 
 export interface PluginManifest {
   id: string;

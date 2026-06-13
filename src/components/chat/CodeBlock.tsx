@@ -2,7 +2,10 @@ import { useState } from "react";
 import { Check, Copy, SquareTerminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { codeText, languageFromClassName } from "@/lib/markdown";
+import { hasRenderer } from "@/lib/plugins";
 import { isShellLanguage, openInTerminal } from "@/lib/terminal";
+import { Mermaid } from "@/components/chat/Mermaid";
+import { selectRegistry, usePlugins } from "@/store/plugins";
 import { useT } from "@/store/i18n";
 
 interface CodeBlockProps {
@@ -25,6 +28,21 @@ export function CodeBlock({ className, children }: CodeBlockProps) {
   const text = codeText(children);
   const [copied, setCopied] = useState(false);
   const isShell = isShellLanguage(language);
+
+  // Renderer plugins (T42): a fenced language with an enabled `renderer`
+  // contribution is drawn as a diagram instead of a highlighted code block.
+  // Per the T12 declarative model the manifest only *names* the language; the
+  // host supplies the component — mermaid is the only built-in renderer, so a
+  // manifest claiming any other language has no effect here. Disabling the
+  // plugin falls through to the normal code block (shows the raw source).
+  const registry = usePlugins(selectRegistry);
+  if (
+    language &&
+    language.toLowerCase() === "mermaid" &&
+    hasRenderer(registry, "mermaid")
+  ) {
+    return <Mermaid code={text} />;
+  }
 
   const onCopy = async () => {
     try {

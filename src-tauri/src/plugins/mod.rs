@@ -71,8 +71,8 @@ pub struct PluginInfo {
     pub enabled: bool,
 }
 
-/// The four known plugin categories.
-const CATEGORIES: [&str; 4] = ["provider", "theme", "skill", "slash-command"];
+/// The known plugin categories.
+const CATEGORIES: [&str; 5] = ["provider", "theme", "skill", "slash-command", "renderer"];
 
 /// Parse + validate a manifest from JSON text. Pure (no IO) so it is unit-tested.
 /// Rejects unknown categories, blank required fields, and mismatched `apiVersion`.
@@ -121,6 +121,7 @@ fn builtin_manifests() -> Vec<PluginManifest> {
         include_str!("builtin/gemini.json"),
         include_str!("builtin/ollama.json"),
         include_str!("builtin/terminal.json"),
+        include_str!("builtin/mermaid.json"),
     ];
     BUILTINS
         .iter()
@@ -317,8 +318,9 @@ mod tests {
     #[test]
     fn all_builtins_are_valid_and_enabled_by_default() {
         let builtins = builtin_manifests();
-        // Five provider plugins (T18/T37) + the /terminal slash-command plugin (T14).
-        assert_eq!(builtins.len(), 6, "expected 6 built-in plugins");
+        // Five provider plugins (T18/T37) + the /terminal slash-command plugin
+        // (T14) + the mermaid renderer plugin (T42).
+        assert_eq!(builtins.len(), 7, "expected 7 built-in plugins");
         let providers = builtins.iter().filter(|m| m.category == "provider").count();
         assert_eq!(providers, 5, "expected 5 built-in providers");
         for m in &builtins {
@@ -331,6 +333,13 @@ mod tests {
                 .iter()
                 .any(|m| m.category == "slash-command" && m.id == "com.snak.terminal"),
             "expected the built-in /terminal slash-command plugin",
+        );
+        // The renderer built-in is present and contributes the mermaid language.
+        assert!(
+            builtins
+                .iter()
+                .any(|m| m.category == "renderer" && m.id == "com.snak.mermaid"),
+            "expected the built-in mermaid renderer plugin",
         );
     }
 

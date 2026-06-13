@@ -137,6 +137,60 @@ pub async fn fetch_models(client: &reqwest::Client) -> anyhow::Result<Vec<Ollama
     Ok(parse_tags(&v))
 }
 
+/// One model currently loaded in memory, from the native `/api/ps` listing
+/// (T41). Distinct from `OllamaModel` (installed-on-disk): these are the
+/// models the daemon has resident and serving right now.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct OllamaRunningModel {
+    pub name: String,
+    /// Bytes resident in VRAM/RAM for this model right now.
+    pub size_vram: u64,
+    /// RFC 3339 timestamp when the daemon will unload it (keep-alive expiry).
+    pub expires_at: String,
+}
+
+/// Parse the native `/api/ps` response (`{"models":[{name,size_vram,expires_at,…}]}`)
+/// into the running-model fields the UI shows. Same tolerance contract as
+/// `parse_tags`. Pure / unit-tested.
+pub(crate) fn parse_ps(v: &serde_json::Value) -> Vec<OllamaRunningModel> {
+    v.get("models")
+        .and_then(|m| m.as_array())
+        .map(|models| {
+            models
+                .iter()
+                .map(|m| OllamaRunningModel {
+                    name: m
+                        .get("name")
+                        .and_then(|n| n.as_str())
+                        .unwrap_or_default()
+                        .to_string(),
+                    size_vram: u64_field(m, "size_vram"),
+                    expires_at: m
+                        .get("expires_at")
+                        .and_then(|s| s.as_str())
+                        .unwrap_or_default()
+                        .to_string(),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// GET `/api/ps` → the models currently loaded in memory.
+pub async fn fetch_running(client: &reqwest::Client) -> anyhow::Result<Vec<OllamaRunningModel>> {
+    let v: serde_json::Value = client
+        .get(format!("{BASE_URL}/api/ps"))
+        .send()
+        .await
+        .context("ollama ps request failed")?
+        .error_for_status()
+        .context("ollama ps request failed")?
+        .json()
+        .await
+        .context("parsing ollama ps response")?;
+    Ok(parse_ps(&v))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -182,6 +236,44 @@ mod tests {
     fn empty_models_list_yields_empty_vec() {
         let v = serde_json::json!({ "models": [] });
         assert!(parse_tags(&v).is_empty());
+    }
+
+    #[test]
+    fn parses_a_realistic_ps_payload() {
+        let v = serde_json::json!({
+            "models": [
+                {
+                    "name": "llama3.2:1b",
+                    "model": "llama3.2:1b",
+                    "size": 1600000000u64,
+                    "size_vram": 1600000000u64,
+                    "expires_at": "2026-06-13T10:05:00Z",
+                    "digest": "baf6a787fdff"
+                }
+            ]
+        });
+        let running = parse_ps(&v);
+        assert_eq!(running.len(), 1);
+        assert_eq!(running[0].name, "llama3.2:1b");
+        assert_eq!(running[0].size_vram, 1600000000);
+        assert_eq!(running[0].expires_at, "2026-06-13T10:05:00Z");
+    }
+
+    #[test]
+    fn ps_missing_fields_fall_back_to_defaults() {
+        let v = serde_json::json!({ "models": [{ "name": "tiny" }] });
+        let running = parse_ps(&v);
+        assert_eq!(running.len(), 1);
+        assert_eq!(running[0].name, "tiny");
+        assert_eq!(running[0].size_vram, 0);
+        assert_eq!(running[0].expires_at, "");
+    }
+
+    #[test]
+    fn ps_garbage_payload_yields_empty_vec() {
+        assert!(parse_ps(&serde_json::json!("nope")).is_empty());
+        assert!(parse_ps(&serde_json::json!({ "models": 3 })).is_empty());
+        assert!(parse_ps(&serde_json::json!(null)).is_empty());
     }
 
     #[test]

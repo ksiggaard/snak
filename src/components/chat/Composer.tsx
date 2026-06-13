@@ -26,6 +26,11 @@ import {
   type PendingDocument,
 } from "@/lib/documents";
 import { prepareImage, type PreparedImage } from "@/lib/image";
+import {
+  activeMentionQuery,
+  insertMention,
+  matchMentionBots,
+} from "@/lib/mentions";
 import { isKeylessProvider, useProviders } from "@/lib/providers";
 import { takeScreenshot } from "@/lib/quick";
 import { openInTerminal } from "@/lib/terminal";
@@ -36,12 +41,14 @@ import {
   resolveCommand,
   type SlashCommand,
 } from "@/lib/slashCommands";
+import { BotAvatar } from "@/components/bots/BotAvatar";
+import { useBots } from "@/store/bots";
 import { selectRegistry, usePlugins } from "@/store/plugins";
 import { useThreads } from "@/store/threads";
 import { useKeys } from "@/store/keys";
 import { useOllama } from "@/store/ollama";
 import { t as tNow, useT } from "@/store/i18n";
-import type { Provider } from "@/types/db";
+import type { Bot, Provider } from "@/types/db";
 
 interface ComposerProps {
   onSend: (
@@ -116,6 +123,40 @@ export function Composer({
   const matches = isSlashPrefix ? matchCommands(firstToken, commands) : [];
   const showPalette =
     paletteOpen && isSlashPrefix && !hasArgsYet && matches.length > 0;
+
+  // --- @-mentions (T43) -------------------------------------------------------
+  // Typing `@` (at the start or after whitespace) opens a persona palette
+  // anchored to the token under the caret — unlike the leading-`/` rule,
+  // mentions can appear mid-text, so the caret position is tracked too.
+  const bots = useBots((s) => s.bots);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [caret, setCaret] = useState(0);
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const mentionQuery = activeMentionQuery(text, caret);
+  const mentionMatches = mentionQuery
+    ? matchMentionBots(mentionQuery.query, bots)
+    : [];
+  // The slash palette wins the degenerate overlap (a leading "/" command word
+  // can't contain "@", so this only matters for malformed input).
+  const showMentionPalette =
+    mentionOpen && !showPalette && mentionMatches.length > 0;
+
+  /** Insert the picked persona as `@Name ` over the typed token. The trailing
+   * space ends the active mention token, so the palette closes and the next
+   * Enter sends (no double-capture). */
+  function pickMention(bot: Bot) {
+    if (!mentionQuery) return;
+    const r = insertMention(text, mentionQuery, bot.name);
+    setText(r.text);
+    setCaret(r.caret);
+    setMentionOpen(false);
+    // React re-renders the textarea with the caret at the end; put it back
+    // right after the inserted mention.
+    requestAnimationFrame(() => {
+      textareaRef.current?.setSelectionRange(r.caret, r.caret);
+    });
+  }
 
   // Whether the selected provider has a stored API key — from the cached keys
   // store (no keychain prompt). `null` while the cache is still loading, which
@@ -266,6 +307,8 @@ export function Composer({
     setAttachError(null);
     setCanvasOpen(false);
     setPaletteOpen(false);
+    setMentionOpen(false);
+    setCaret(0);
   }
 
   /**
@@ -445,6 +488,40 @@ export function Composer({
         </div>
       )}
 
+      {/* Persona mention palette (T43): autocomplete while typing `@…`. */}
+      {showMentionPalette && (
+        <div
+          aria-label={t("composer.mentionPaletteAria")}
+          className="bg-popover text-popover-foreground overflow-hidden rounded-md border text-sm shadow-md"
+        >
+          {mentionMatches.map((b, i) => (
+            <button
+              key={b.id}
+              type="button"
+              // onMouseDown so the click lands before the textarea blurs.
+              onMouseDown={(e) => {
+                e.preventDefault();
+                pickMention(b);
+              }}
+              onMouseEnter={() => setMentionIndex(i)}
+              className={`flex w-full items-center gap-2 px-3 py-2 text-left ${
+                i === Math.min(mentionIndex, mentionMatches.length - 1)
+                  ? "bg-accent text-accent-foreground"
+                  : ""
+              }`}
+            >
+              <BotAvatar bot={b} className="size-5 shrink-0" />
+              <span className="font-medium">{b.name}</span>
+              {b.tagline && (
+                <span className="text-muted-foreground truncate">
+                  {b.tagline}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Confirmation gate for backend actions (T14 safety model). */}
       {pendingCommand && (
         <div className="border-primary/40 bg-muted/40 flex flex-col gap-2 rounded-md border p-3 text-sm">
@@ -538,15 +615,24 @@ export function Composer({
         }}
       />
       <Textarea
+        ref={textareaRef}
         value={text}
         onChange={(e) => {
           const v = e.target.value;
           setText(v);
+          setCaret(e.target.selectionStart ?? v.length);
           // Open the palette when the user starts a slash command; reset the
           // highlight to the top as the filter changes.
           setPaletteOpen(v.startsWith("/") && !v.startsWith("//"));
           setPaletteIndex(0);
+          // Re-arm the mention palette on every edit (Esc dismisses until the
+          // next keystroke), and reset its highlight as the filter changes.
+          setMentionOpen(true);
+          setMentionIndex(0);
         }}
+        // Caret moves without edits (click, arrow keys) retarget the mention
+        // palette to the token now under the caret.
+        onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
         onPaste={(e) => {
           // Any pasted *files* go through the attach flow (images, documents,
           // …); plain-text pastes have no files and stay normal text input.
@@ -579,6 +665,35 @@ export function Composer({
             if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
               e.preventDefault();
               pickCommand(matches[Math.min(paletteIndex, matches.length - 1)]);
+              return;
+            }
+          }
+          // Mention palette (T43): same keys as the slash palette above.
+          if (showMentionPalette) {
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setMentionIndex((i) => (i + 1) % mentionMatches.length);
+              return;
+            }
+            if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setMentionIndex(
+                (i) => (i - 1 + mentionMatches.length) % mentionMatches.length,
+              );
+              return;
+            }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              setMentionOpen(false);
+              return;
+            }
+            if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+              e.preventDefault();
+              pickMention(
+                mentionMatches[
+                  Math.min(mentionIndex, mentionMatches.length - 1)
+                ],
+              );
               return;
             }
           }

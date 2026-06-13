@@ -151,6 +151,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/015_personas.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 16,
+            description: "mentions: messages.bot_id persona attribution (T43)",
+            sql: include_str!("../migrations/016_message_bot.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -266,6 +272,9 @@ pub fn run() {
             commands::languages::languages_directory,
             commands::ollama::ollama_status,
             commands::ollama::ollama_list_models,
+            commands::ollama::ollama_ps,
+            commands::ollama::ollama_start,
+            commands::ollama::ollama_unload,
             set_close_to_tray,
             menu::set_menu_visible,
             menu::quit_app,

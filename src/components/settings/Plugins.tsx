@@ -23,6 +23,7 @@ const CATEGORY_KEYS: Record<PluginCategory, MessageKey> = {
   theme: "plugins.category.theme",
   skill: "plugins.category.skill",
   "slash-command": "plugins.category.slashCommand",
+  renderer: "plugins.category.renderer",
 };
 
 function PluginRow({ p }: { p: PluginInfo }) {
