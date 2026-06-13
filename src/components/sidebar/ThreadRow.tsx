@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
 import {
   FolderInput,
   Ghost,
@@ -9,15 +9,15 @@ import {
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { BotAvatar } from "@/components/bots/BotAvatar";
 import { useBots } from "@/store/bots";
 import { useProjects } from "@/store/projects";
@@ -85,6 +85,25 @@ export function ThreadRow({
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(thread.title);
+  // Tracks whether the row's context menu is open, only so the action overlay
+  // stays visible while it is (ContextMenu opens itself from the right-click).
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // The MoreHorizontal button opens the same context menu near the button:
+  // synthesize a contextmenu event at its corner so it bubbles to the trigger
+  // and Radix anchors the menu there (right-clicking the row anchors at the
+  // cursor natively).
+  function openMenuFromButton(e: ReactMouseEvent<HTMLButtonElement>) {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    e.currentTarget.dispatchEvent(
+      new MouseEvent("contextmenu", {
+        bubbles: true,
+        clientX: rect.left,
+        clientY: rect.bottom,
+      }),
+    );
+  }
 
   // Per row style (T35): an optional second line under the title, an optional
   // right-aligned date on the title line, and an optional leading provider
@@ -135,171 +154,187 @@ export function ThreadRow({
   const fav = !!thread.favorite;
 
   return (
-    <div
-      className={cn(
-        "group flex items-center gap-1 rounded-md px-2",
-        compact ? "py-0.5" : "py-1.5",
-        active ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/50",
-        // Incognito identity (T36): a dashed left edge + tint so the row
-        // reads as temporary at a glance, beyond the Ghost badge.
-        !!thread.ephemeral &&
-          "border-muted-foreground/40 rounded-l-none border-l-2 border-dashed",
-        !!thread.ephemeral && !active && "bg-muted/40",
-      )}
-    >
-      {editing ? (
-        <Input
-          autoFocus
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commitEdit}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") void commitEdit();
-            if (e.key === "Escape") setEditing(false);
-          }}
-          className="h-7 text-sm"
-        />
-      ) : (
-        <button
-          type="button"
-          onClick={onSelect}
-          onDoubleClick={beginEdit}
-          className="flex min-w-0 flex-1 flex-col text-left"
-          title={
-            thread.ephemeral
-              ? t("sidebar.incognitoRenameHint")
-              : t("sidebar.renameHint")
-          }
+    <ContextMenu onOpenChange={setMenuOpen}>
+      {/* Renaming owns the row; don't hijack right-click into the menu then. */}
+      <ContextMenuTrigger asChild disabled={editing}>
+        <div
+          className={cn(
+            "group relative flex items-center gap-1 rounded-md px-2",
+            compact ? "py-0.5" : "py-1.5",
+            active ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/50",
+            // Incognito identity (T36): a dashed left edge + tint so the row
+            // reads as temporary at a glance, beyond the Ghost badge.
+            !!thread.ephemeral &&
+              "border-muted-foreground/40 rounded-l-none border-l-2 border-dashed",
+            !!thread.ephemeral && !active && "bg-muted/40",
+          )}
         >
-          <span className="flex w-full min-w-0 items-center gap-1.5">
-            {/* Provider monogram for the "icon" row style (T35). */}
-            {monogram !== null && (
-              <span
-                className="bg-primary/10 text-primary grid size-5 shrink-0 place-items-center rounded-full text-[10px] font-bold select-none"
-                aria-hidden
-              >
-                {monogram}
-              </span>
-            )}
-            {/* Incognito badge (T29): session-only thread, purged on exit. */}
-            {!!thread.ephemeral && (
-              <Ghost
-                className="text-muted-foreground size-3.5 shrink-0"
-                aria-label={t("sidebar.incognitoBadge")}
-              />
-            )}
-            {/* Favorite indicator — the toggle itself lives in the row menu. */}
-            {fav && (
-              <Star
-                className="size-3 shrink-0 fill-yellow-500 text-yellow-500"
-                aria-label={t("sidebar.favorites")}
-              />
-            )}
-            {/* Bot badge (T38): the persona's avatar before the title. */}
-            {bot && (
-              <span
-                className="shrink-0"
-                title={t("sidebar.botBadge", { name: bot.name })}
-                aria-label={t("sidebar.botBadge", { name: bot.name })}
-              >
-                <BotAvatar bot={bot} className="size-4 shrink-0" />
-              </span>
-            )}
-            <span
-              className={cn(
-                "truncate",
-                compact ? "text-xs" : "text-sm",
-                !!thread.ephemeral && "text-muted-foreground italic",
-              )}
+          {editing ? (
+            <Input
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commitEdit}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void commitEdit();
+                if (e.key === "Escape") setEditing(false);
+              }}
+              className="h-7 text-sm"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={onSelect}
+              onDoubleClick={beginEdit}
+              className="flex min-w-0 flex-1 flex-col text-left"
+              title={
+                thread.ephemeral
+                  ? t("sidebar.incognitoRenameHint")
+                  : t("sidebar.renameHint")
+              }
             >
-              {thread.title}
-            </span>
-            {/* Right-aligned date for the "inline" / "full" row styles. */}
-            {trailingDate !== null && (
-              <span className="text-muted-foreground ml-auto shrink-0 pl-1 text-[10px] tabular-nums">
-                {trailingDate}
-              </span>
-            )}
-          </span>
-          {subline !== null && (
-            <span className="text-muted-foreground w-full truncate text-xs">
-              {subline}
-            </span>
-          )}
-        </button>
-      )}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            aria-label={t("sidebar.chatMenu")}
-            title={t("sidebar.chatMenu")}
-            className="text-muted-foreground hover:text-foreground shrink-0 opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100"
-          >
-            <MoreHorizontal className="size-4" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          <DropdownMenuItem onClick={() => void toggleFavorite(thread.id)}>
-            <Star className={cn(fav && "fill-yellow-500 text-yellow-500")} />
-            {fav ? t("sidebar.unfavorite") : t("sidebar.favorite")}
-          </DropdownMenuItem>
-          {projects.length > 0 && (
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>
-                <FolderInput />
-                {t("sidebar.moveToProject")}
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuItem
-                  disabled={thread.project_id === null}
-                  onClick={() => void assignThreadProject(thread.id, null)}
-                >
-                  {t("panel.noProject")}
-                </DropdownMenuItem>
-                {projects.map((p) => (
-                  <DropdownMenuItem
-                    key={p.id}
-                    disabled={thread.project_id === p.id}
-                    onClick={() => void assignThreadProject(thread.id, p.id)}
+              <span className="flex w-full min-w-0 items-center gap-1.5">
+                {/* Provider monogram for the "icon" row style (T35). */}
+                {monogram !== null && (
+                  <span
+                    className="bg-primary/10 text-primary grid size-5 shrink-0 place-items-center rounded-full text-[10px] font-bold select-none"
+                    aria-hidden
                   >
-                    {p.name}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
+                    {monogram}
+                  </span>
+                )}
+                {/* Incognito badge (T29): session-only thread, purged on exit. */}
+                {!!thread.ephemeral && (
+                  <Ghost
+                    className="text-muted-foreground size-3.5 shrink-0"
+                    aria-label={t("sidebar.incognitoBadge")}
+                  />
+                )}
+                {/* Favorite indicator — the toggle itself lives in the row menu. */}
+                {fav && (
+                  <Star
+                    className="size-3 shrink-0 fill-yellow-500 text-yellow-500"
+                    aria-label={t("sidebar.favorites")}
+                  />
+                )}
+                {/* Bot badge (T38): the persona's avatar before the title. */}
+                {bot && (
+                  <span
+                    className="shrink-0"
+                    title={t("sidebar.botBadge", { name: bot.name })}
+                    aria-label={t("sidebar.botBadge", { name: bot.name })}
+                  >
+                    <BotAvatar bot={bot} className="size-4 shrink-0" />
+                  </span>
+                )}
+                <span
+                  className={cn(
+                    "truncate",
+                    compact ? "text-xs" : "text-sm",
+                    !!thread.ephemeral && "text-muted-foreground italic",
+                  )}
+                >
+                  {thread.title}
+                </span>
+                {/* Right-aligned date for the "inline" / "full" row styles. */}
+                {trailingDate !== null && (
+                  <span className="text-muted-foreground ml-auto shrink-0 pl-1 text-[10px] tabular-nums">
+                    {trailingDate}
+                  </span>
+                )}
+              </span>
+              {subline !== null && (
+                <span className="text-muted-foreground w-full truncate text-xs">
+                  {subline}
+                </span>
+              )}
+            </button>
           )}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            variant="destructive"
-            onClick={() => {
-              void confirmDialog({
-                title: tNow("sidebar.deleteThreadTitle", {
-                  title: thread.title,
-                }),
-                confirmText: tNow("common.delete"),
-                destructive: true,
-              }).then((ok) => {
-                if (ok) void remove(thread.id);
-              });
-            }}
+          {/* Action buttons overlay the row's right edge instead of reserving
+          flex space — invisible until hover (or while the menu is open), so
+          the title gets the full width the rest of the time. A gradient
+          backing keeps the icons legible over any text underneath. */}
+          <div
+            className={cn(
+              "absolute inset-y-0 right-0 flex items-center gap-0.5 rounded-r-md pr-1 pl-6",
+              "from-sidebar-accent via-sidebar-accent bg-gradient-to-l to-transparent",
+              "opacity-0 transition-opacity group-hover:opacity-100",
+              menuOpen && "opacity-100",
+              editing && "hidden",
+            )}
           >
-            <Trash2 />
-            {t("common.delete")}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      {!thread.archived && (
-        <button
-          type="button"
-          aria-label={t("sidebar.archiveChat")}
-          title={t("sidebar.archiveChat")}
-          onClick={() => void setArchived(thread.id, true)}
-          className="text-muted-foreground hover:text-foreground shrink-0 opacity-0 group-hover:opacity-100"
+            <button
+              type="button"
+              aria-label={t("sidebar.chatMenu")}
+              title={t("sidebar.chatMenu")}
+              onClick={openMenuFromButton}
+              className="text-muted-foreground hover:text-foreground shrink-0"
+            >
+              <MoreHorizontal className="size-4" />
+            </button>
+            {!thread.archived && (
+              <button
+                type="button"
+                aria-label={t("sidebar.archiveChat")}
+                title={t("sidebar.archiveChat")}
+                onClick={() => void setArchived(thread.id, true)}
+                className="text-muted-foreground hover:text-foreground shrink-0"
+              >
+                <X className="size-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onClick={() => void toggleFavorite(thread.id)}>
+          <Star className={cn(fav && "fill-yellow-500 text-yellow-500")} />
+          {fav ? t("sidebar.unfavorite") : t("sidebar.favorite")}
+        </ContextMenuItem>
+        {projects.length > 0 && (
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>
+              <FolderInput />
+              {t("sidebar.moveToProject")}
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent>
+              <ContextMenuItem
+                disabled={thread.project_id === null}
+                onClick={() => void assignThreadProject(thread.id, null)}
+              >
+                {t("panel.noProject")}
+              </ContextMenuItem>
+              {projects.map((p) => (
+                <ContextMenuItem
+                  key={p.id}
+                  disabled={thread.project_id === p.id}
+                  onClick={() => void assignThreadProject(thread.id, p.id)}
+                >
+                  {p.name}
+                </ContextMenuItem>
+              ))}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        )}
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          variant="destructive"
+          onClick={() => {
+            void confirmDialog({
+              title: tNow("sidebar.deleteThreadTitle", {
+                title: thread.title,
+              }),
+              confirmText: tNow("common.delete"),
+              destructive: true,
+            }).then((ok) => {
+              if (ok) void remove(thread.id);
+            });
+          }}
         >
-          <X className="size-4" />
-        </button>
-      )}
-    </div>
+          <Trash2 />
+          {t("common.delete")}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }

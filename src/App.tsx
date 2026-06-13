@@ -14,6 +14,7 @@ import { Sidebar, SidebarContent } from "@/components/sidebar/Sidebar";
 import { TitleBar } from "@/components/TitleBar";
 import { MenuBar } from "@/components/MenuBar";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { ImageLightbox } from "@/components/ImageLightbox";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSetting, purgeEphemeralThreads } from "@/lib/db";
@@ -218,6 +219,7 @@ function App() {
         <TitleBar />
         {menuBarMode === "inline" && <MenuBar />}
         <ConfirmDialog />
+        <ImageLightbox />
         <SearchOverlay />
 
         <div className="flex min-h-0 flex-1">

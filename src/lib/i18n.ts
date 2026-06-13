@@ -154,6 +154,11 @@ export const en = {
   "chat.copy": "Copy",
   "chat.copied": "Copied",
   "chat.copyCode": "Copy code",
+  "chat.viewImage": "View image",
+  "chat.viewDiagram": "View diagram",
+  "chat.downloadImage": "Download",
+  "chat.imageSaved": "Image saved.",
+  "chat.imageSaveFailed": "Couldn't save the image.",
   "chat.openInTerminal": "Open in terminal",
   "chat.openInTerminalTitle":
     "Open in terminal (staged, not run — review and press Enter)",

@@ -1,6 +1,8 @@
 import { useEffect, useId, useState } from "react";
 import { resolveTheme } from "@/lib/theme";
+import { openLightboxSvg } from "@/store/lightbox";
 import { useTheme } from "@/store/theme";
+import { useT } from "@/store/i18n";
 
 /**
  * Renders a ```mermaid fenced block (T42) as a diagram. Enabled via the
@@ -22,6 +24,7 @@ import { useTheme } from "@/store/theme";
  *   model-authored source can't inject active content via the SVG.
  */
 export function Mermaid({ code }: { code: string }) {
+  const t = useT();
   const theme = useTheme((s) => s.theme);
   const resolved = resolveTheme(theme);
   // useId is unique per instance but not a valid CSS id on its own (":r0:");
@@ -61,8 +64,12 @@ export function Mermaid({ code }: { code: string }) {
 
   if (svg) {
     return (
-      <div
-        className="my-2 flex justify-center overflow-x-auto"
+      <button
+        type="button"
+        onClick={() => openLightboxSvg(svg)}
+        aria-label={t("chat.viewDiagram")}
+        title={t("chat.viewDiagram")}
+        className="focus-visible:ring-ring my-2 flex w-full cursor-zoom-in justify-center overflow-x-auto rounded-md focus-visible:ring-2 focus-visible:outline-none"
         // SVG comes from mermaid's own renderer (securityLevel:"strict"),
         // not from raw model HTML — sanitized by mermaid before we inject it.
         dangerouslySetInnerHTML={{ __html: svg }}

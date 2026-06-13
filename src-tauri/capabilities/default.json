@@ -13,6 +13,7 @@
     "core:tray:default",
     "core:menu:default",
     "opener:default",
+    "dialog:default",
     "global-shortcut:default",
     "sql:default",
     "sql:allow-load",

@@ -2110,3 +2110,64 @@ the chat.
   still resolve at send (noted; acceptable). Verified: `npm run build`, `npm run
   lint`, `npm test` (442 passed, +41), `cargo build`, `cargo clippy`,
   `cargo fmt --check`, `cargo test` (64) — all green; touched files Prettier-clean.
+
+---
+
+## T44 — Full-size image/diagram lightbox + download-to-disk
+
+- **Status:** done
+- **Owner:** Claude (T44)
+- **Priority:** P2
+- **Layer:** Frontend + Rust (native save dialog)
+- **Depends on:** T8 (Markdown/code rendering), T42 (Mermaid)
+
+A single shared full-size viewer for images and rendered Mermaid diagrams, openable from
+anywhere (message images, the right-side chat panel's media gallery, and diagrams), with a
+native "Save as…" download. Replaces the panel-local lightbox that previously only the media
+gallery had.
+
+**Acceptance criteria:**
+- One `<ImageLightbox>` mounted at the app root (like `ConfirmDialog`), driven by a
+  `useLightbox` store; backdrop / Esc / X close it.
+- Clicking a message image, a panel-gallery thumbnail, or a Mermaid diagram opens it full-size.
+- A **Download** button saves the content via a native save dialog (image → original format,
+  diagram → `.svg`); the bytes are written from Rust (webview only holds base64) — no JS
+  filesystem capability.
+- When opened from the gallery (entry carries a `messageId`) it offers a "Go to message" jump.
+
+**Notes:**
+- 2026-06-13 (Claude): Implemented. New `src/store/lightbox.ts` (content = stored image or SVG;
+  imperative `openLightbox`/`openLightboxSvg` helpers), `src/components/ImageLightbox.tsx`
+  (mounted in `App.tsx`), `src/lib/images.ts` (`downloadImage`/`downloadSvg`/`fitSvg`). Rust
+  `commands/files.rs::save_image` (base64 decode + `tauri-plugin-dialog` `blocking_save_file`),
+  registered in `lib.rs`; added `dialog:default` to `capabilities/default.json` and the
+  `tauri-plugin-dialog` dep. `MessageList`/`ChatPanel`/`Mermaid` now open the shared viewer
+  (the panel's old local `Lightbox` was removed). 5 new `chat.*` i18n keys
+  (`viewImage`/`viewDiagram`/`downloadImage`/`imageSaved`/`imageSaveFailed`) in the catalog +
+  all five locale packs (the `panel.goToMessage`/`panel.close` keys it reuses already existed).
+  Verified: `npm test` (446), `npm run build`/`lint`, `cargo check` all green.
+
+---
+
+## T45 — Sidebar thread-row right-click context menu
+
+- **Status:** done
+- **Owner:** Claude (T45)
+- **Priority:** P3
+- **Layer:** Frontend
+- **Depends on:** T23 (favorites), T20 (projects)
+
+Right-clicking a sidebar thread row opens a context menu mirroring the existing row actions,
+so the per-row affordances aren't limited to the hover menu button.
+
+**Acceptance criteria:**
+- Right-click (and the kebab button) opens a menu with: favorite/unfavorite, move-to-project
+  (submenu: "No project" + each project), rename, and delete (destructive).
+- Reuses existing store actions and i18n keys; no new keys needed.
+
+**Notes:**
+- 2026-06-13 (Claude): Added shadcn `src/components/ui/context-menu.tsx` (Radix) and wrapped
+  the row in `ThreadRow.tsx` with `ContextMenu`. Items reuse `toggleFavorite`, the projects
+  list/move action, rename, and delete — all gated like the existing kebab menu (disabled while
+  editing). Reuses `sidebar.*`/`panel.*`/`common.*` keys already in every pack. Verified with
+  the full gate.
