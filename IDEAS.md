@@ -21,11 +21,11 @@ into tasks when they firm up.
 14. Mermaid chart rendering in chats (prebundled plugin, enabled by default) → **T42**
 15. Personas: bots rebrand + profile fields, self-managed memory, mood (from chat, 2026-06-12) → **T40**
 16. @-mention a persona in any chat for a one-shot, in-character reply to the chat context (tag more → all answer; reply shows the persona's name on top) → **T43**
-17. Put animations into the UI. Not long but enough to make the applicaiton feel very polished and playful. I would like more fun in the chat. Transition effects between screens. Sidebars should animate in. Thinking animation with text animations. Incigneto playing on the ghost theme. Add option to appearance setting to toggle these animations. 
-18. Bug: Jumping/flickering interface when hovering the chart in token usage screen.
-19. Bug: Responsive mode ultra narrow does not account for the topbar. The sidebar menu is not placed correctly.
-20. Bug: Quick chat CTRL+SPACE - It's loading models but never finding them.
-21. Quick chat should appear on the screen where the mouse cursor is.
-22. Default darkmode theme is Accent=#dc8add. Background=#163e54 and Mix color=#000000. It matches the logo better.
+17. Put animations into the UI. Not long but enough to make the applicaiton feel very polished and playful. I would like more fun in the chat. Transition effects between screens. Sidebars should animate in. Thinking animation with text animations. Incigneto playing on the ghost theme. Add option to appearance setting to toggle these animations. → **T46**
+18. Bug: Jumping/flickering interface when hovering the chart in token usage screen. → **T47**
+19. Bug: Responsive mode ultra narrow does not account for the topbar. The sidebar menu is not placed correctly. → **T48**
+20. Bug: Quick chat CTRL+SPACE - It's loading models but never finding them. → **T49**
+21. Quick chat should appear on the screen where the mouse cursor is. → **T50**
+22. Default darkmode theme is Accent=#dc8add. Background=#163e54 and Mix color=#000000. It matches the logo better. → **T51**
 
 
