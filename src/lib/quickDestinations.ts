@@ -1,13 +1,13 @@
 // T31 — quick-input overlay destination picking. Pure helpers (unit-tested):
-// the overlay shows "New chat" plus up to MAX_RECENTS recent threads as chips,
-// and Tab / Ctrl+Arrow cycles the selection without leaving the textarea.
+// the overlay shows "New chat" plus up to MAX_RECENTS recent threads in a
+// dropdown, and Tab / Ctrl+Arrow cycles the selection without leaving the textarea.
 //
 // Recents delivery (the overlay never touches the DB): when Rust `show_quick`
 // runs it emits QUICK_RECENTS_REQUEST_EVENT to the `main` window; App answers
 // by emitting QUICK_RECENTS_EVENT to the `quick` window with the list below,
 // taken from the in-memory threads store.
 
-/** A destination chip for an existing thread. */
+/** A destination option for an existing thread. */
 export interface QuickRecent {
   id: string;
   title: string;

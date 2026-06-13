@@ -154,6 +154,11 @@ export const en = {
   "chat.copy": "Copy",
   "chat.copied": "Copied",
   "chat.copyCode": "Copy code",
+  "chat.viewImage": "View image",
+  "chat.viewDiagram": "View diagram",
+  "chat.downloadImage": "Download",
+  "chat.imageSaved": "Image saved.",
+  "chat.imageSaveFailed": "Couldn't save the image.",
   "chat.openInTerminal": "Open in terminal",
   "chat.openInTerminalTitle":
     "Open in terminal (staged, not run — review and press Enter)",
@@ -423,6 +428,10 @@ export const en = {
   "corners.description":
     "How rounded the window chrome and controls are — cards, buttons, inputs, and popovers all follow. 0 is fully square.",
   "corners.label": "Corner radius",
+  "animations.title": "Animations",
+  "animations.description":
+    "Subtle motion throughout the app — views fade in, the sidebar slides, the thinking indicator pulses. Turn off for a fully static UI.",
+  "animations.label": "UI animations",
 
   // --- Settings: appearance — typography card ------------------------------------------------------------------------------
   "typography.title": "Typography",

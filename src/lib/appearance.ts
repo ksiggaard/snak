@@ -65,9 +65,29 @@ export const RADIUS: SizeRange = { min: 0, max: 20, fallback: 10 };
 const COLORS_KEY = "custom-colors";
 const TYPOGRAPHY_KEY = "custom-typography";
 const RADIUS_KEY = "custom-radius";
+const ANIMATIONS_KEY = "animations";
 const COLORS_STYLE_ID = "custom-colors";
 const TYPOGRAPHY_STYLE_ID = "custom-typography";
 const RADIUS_STYLE_ID = "custom-radius";
+
+// ── UI animations (T46) ─────────────────────────────────────────────────────
+// A single global on/off. Enabled by default; when off, a `.no-animations`
+// class on <html> neutralizes transitions/animations app-wide (see index.css).
+
+/** Whether UI animations are enabled. Default on; only "0" disables. */
+export function getStoredAnimations(): boolean {
+  return localStorage.getItem(ANIMATIONS_KEY) !== "0";
+}
+
+export function storeAnimations(enabled: boolean): void {
+  if (enabled) localStorage.removeItem(ANIMATIONS_KEY);
+  else localStorage.setItem(ANIMATIONS_KEY, "0");
+}
+
+/** Toggle the `.no-animations` kill-switch class on <html>. */
+export function applyAnimations(enabled: boolean): void {
+  document.documentElement.classList.toggle("no-animations", !enabled);
+}
 
 // ── Chat layout style (T34) & chat-list row style (T35) ─────────────────────
 //
@@ -233,7 +253,9 @@ export const DEFAULT_PICKER_COLORS: Record<
   Record<ColorKey, string>
 > = {
   light: { primary: "#171717", background: "#ffffff", surface: "#000000" },
-  dark: { primary: "#e5e5e5", background: "#0a0a0a", surface: "#ffffff" },
+  // The default dark palette is the logo colours (baked into `.dark` in
+  // index.css); these source picks seed the pickers + reset targets to match.
+  dark: { primary: "#dc8add", background: "#163e54", surface: "#000000" },
 };
 
 /** Bounds for the surface-contrast multiplier (1 = the built-in steps). */

@@ -8,10 +8,12 @@ import {
   contrastForeground,
   cssFontFamily,
   derivedSurfaceDecls,
+  getStoredAnimations,
   getStoredChatListStyle,
   getStoredChatStyle,
   getStoredCustomColors,
   getStoredRadius,
+  storeAnimations,
   getStoredTypography,
   isHexColor,
   mixHex,
@@ -241,6 +243,19 @@ describe("radius pref", () => {
     expect(getStoredRadius()).toBeNull();
     localStorage.setItem("custom-radius", "not a number");
     expect(getStoredRadius()).toBeNull();
+  });
+});
+
+describe("animations pref", () => {
+  it("defaults on and round-trips through localStorage", () => {
+    expect(getStoredAnimations()).toBe(true);
+    storeAnimations(false);
+    expect(getStoredAnimations()).toBe(false);
+    expect(localStorage.getItem("animations")).toBe("0");
+    storeAnimations(true);
+    expect(getStoredAnimations()).toBe(true);
+    // Enabled is the default — no key is left behind.
+    expect(localStorage.getItem("animations")).toBeNull();
   });
 });
 

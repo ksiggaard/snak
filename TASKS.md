@@ -2110,3 +2110,196 @@ the chat.
   still resolve at send (noted; acceptable). Verified: `npm run build`, `npm run
   lint`, `npm test` (442 passed, +41), `cargo build`, `cargo clippy`,
   `cargo fmt --check`, `cargo test` (64) — all green; touched files Prettier-clean.
+
+---
+
+## T44 — Full-size image/diagram lightbox + download-to-disk
+
+- **Status:** done
+- **Owner:** Claude (T44)
+- **Priority:** P2
+- **Layer:** Frontend + Rust (native save dialog)
+- **Depends on:** T8 (Markdown/code rendering), T42 (Mermaid)
+
+A single shared full-size viewer for images and rendered Mermaid diagrams, openable from
+anywhere (message images, the right-side chat panel's media gallery, and diagrams), with a
+native "Save as…" download. Replaces the panel-local lightbox that previously only the media
+gallery had.
+
+**Acceptance criteria:**
+- One `<ImageLightbox>` mounted at the app root (like `ConfirmDialog`), driven by a
+  `useLightbox` store; backdrop / Esc / X close it.
+- Clicking a message image, a panel-gallery thumbnail, or a Mermaid diagram opens it full-size.
+- A **Download** button saves the content via a native save dialog (image → original format,
+  diagram → `.svg`); the bytes are written from Rust (webview only holds base64) — no JS
+  filesystem capability.
+- When opened from the gallery (entry carries a `messageId`) it offers a "Go to message" jump.
+
+**Notes:**
+- 2026-06-13 (Claude): Implemented. New `src/store/lightbox.ts` (content = stored image or SVG;
+  imperative `openLightbox`/`openLightboxSvg` helpers), `src/components/ImageLightbox.tsx`
+  (mounted in `App.tsx`), `src/lib/images.ts` (`downloadImage`/`downloadSvg`/`fitSvg`). Rust
+  `commands/files.rs::save_image` (base64 decode + `tauri-plugin-dialog` `blocking_save_file`),
+  registered in `lib.rs`; added `dialog:default` to `capabilities/default.json` and the
+  `tauri-plugin-dialog` dep. `MessageList`/`ChatPanel`/`Mermaid` now open the shared viewer
+  (the panel's old local `Lightbox` was removed). 5 new `chat.*` i18n keys
+  (`viewImage`/`viewDiagram`/`downloadImage`/`imageSaved`/`imageSaveFailed`) in the catalog +
+  all five locale packs (the `panel.goToMessage`/`panel.close` keys it reuses already existed).
+  Verified: `npm test` (446), `npm run build`/`lint`, `cargo check` all green.
+
+---
+
+## T45 — Sidebar thread-row right-click context menu
+
+- **Status:** done
+- **Owner:** Claude (T45)
+- **Priority:** P3
+- **Layer:** Frontend
+- **Depends on:** T23 (favorites), T20 (projects)
+
+Right-clicking a sidebar thread row opens a context menu mirroring the existing row actions,
+so the per-row affordances aren't limited to the hover menu button.
+
+**Acceptance criteria:**
+- Right-click (and the kebab button) opens a menu with: favorite/unfavorite, move-to-project
+  (submenu: "No project" + each project), rename, and delete (destructive).
+- Reuses existing store actions and i18n keys; no new keys needed.
+
+**Notes:**
+- 2026-06-13 (Claude): Added shadcn `src/components/ui/context-menu.tsx` (Radix) and wrapped
+  the row in `ThreadRow.tsx` with `ContextMenu`. Items reuse `toggleFavorite`, the projects
+  list/move action, rename, and delete — all gated like the existing kebab menu (disabled while
+  editing). Reuses `sidebar.*`/`panel.*`/`common.*` keys already in every pack. Verified with
+  the full gate.
+
+---
+
+## T46 — UI animations with an Appearance toggle
+
+- **Status:** done
+- **Owner:** Claude (T46)
+- **Priority:** P2
+- **Layer:** Frontend
+- **Depends on:** T30/T33 (Appearance), T36 (incognito identity)
+
+(IDEAS 17.) Add tasteful motion that makes the app feel polished — view transitions, the
+sidebar animating in, a thinking animation, an incognito ghost touch — with an Appearance
+setting to toggle them off.
+
+**Acceptance criteria:**
+- A global animations on/off in Appearance settings, persisted; off = a fully static UI.
+- View/screen transitions, sidebar enter, an animated thinking indicator, an incognito
+  ghost animation, all gated by the toggle.
+
+**Notes:**
+- 2026-06-13 (Claude): `animations: boolean` (default on) added to the appearance store
+  (`store/appearance.ts`) + `lib/appearance.ts` helpers (`getStoredAnimations`/`storeAnimations`/
+  `applyAnimations`), persisted in localStorage (`animations` = "0" when off, absent = on) and
+  applied at bootstrap by toggling a `.no-animations` class on `<html>`. The kill-switch
+  (`index.css`) collapses every transition/animation to ~0; OS `prefers-reduced-motion` is
+  honored the same way. Motion added (tw-animate-css utilities + two small keyframes): keyed
+  view fade-in (`App.tsx`), inline sidebar `slide-in-from-left`+fade (`Sidebar.tsx`), a
+  three-dot pulsing thinking indicator (`MessageList.tsx`, `snak-thinking-dot`), and a gentle
+  float on the incognito explainer ghost (`ChatView.tsx`, `snak-ghost-float`). New `animations.*`
+  i18n keys in the catalog + all five packs; `AnimationsCard` (On/Off ToggleGroup) in
+  `settings/Appearance.tsx`. Round-trip test added. Verified: `npm run build`/`lint`/`test` (447).
+
+---
+
+## T47 — Bug: token-usage chart hover flicker
+
+- **Status:** done
+- **Owner:** Claude (T47)
+- **Priority:** P2
+- **Layer:** Frontend
+- **Depends on:** T16/T27 (usage view)
+
+(IDEAS 18.) Hovering the activity heatmap made the interface jump/flicker.
+
+**Notes:**
+- 2026-06-13 (Claude): Two causes in `usage/UsageView.tsx`'s `DayTooltip`: (1) position was
+  computed in a `useEffect` (post-paint), so the tooltip painted once unpositioned then jumped —
+  switched to `useLayoutEffect` (pre-paint); (2) the tooltip's initial style was only
+  `visibility:hidden`, leaving it `position:static` and reserving space in the cell grid (the
+  "jumping interface") — now starts `position:fixed` at the origin so it's out of flow until
+  positioned. Verified: full frontend gate.
+
+---
+
+## T48 — Bug: ultra-narrow sidebar overlay covers the topbar
+
+- **Status:** done
+- **Owner:** Claude (T48)
+- **Priority:** P1
+- **Layer:** Frontend
+- **Depends on:** T21/T25 (responsive chrome)
+
+(IDEAS 19.) At ultra-narrow widths the overlay sidebar (`Sheet`) didn't account for the
+topbar — it covered the TitleBar/MenuBar and its own hamburger.
+
+**Notes:**
+- 2026-06-13 (Claude): The shadcn `Sheet` uses `inset-y-0`/`h-full` (full viewport from top).
+  Offset the sidebar `SheetContent` in `App.tsx` via inline `style` (beats the classes) to start
+  below the chrome — `top: 32` (TitleBar h-8), or `60` when the inline MenuBar (h-7) is shown —
+  with matching `height: calc(100% - …)`. Verified across ~360–768px.
+
+---
+
+## T49 — Bug: quick-chat loads models but never finds them
+
+- **Status:** done
+- **Owner:** Claude (T49)
+- **Priority:** P1
+- **Layer:** Frontend
+- **Depends on:** —
+
+(IDEAS 20.) The quick-input overlay's model picker spun on "loading" forever.
+
+**Notes:**
+- 2026-06-13 (Claude): Root cause — `ModelChooser` gates its list on `useKeys.loaded`, and
+  `useKeys.load()` (`store/keys.ts`) had no try/catch. In the `quick` window (which loads its own
+  stores), a thrown DB/keychain call left `loaded` false forever → permanent spinner. Wrapped the
+  body in try/catch and always set `loaded:true` (mirrors `useModels.load()`), so a failed
+  presence read degrades to "no keys present" instead of hanging. Verified: full frontend gate.
+
+---
+
+## T50 — Quick-chat overlay opens on the cursor's screen
+
+- **Status:** done
+- **Owner:** Claude (T50)
+- **Priority:** P2
+- **Layer:** Rust
+- **Depends on:** —
+
+(IDEAS 21.) On multi-monitor setups the overlay should appear on the screen where the mouse
+cursor is.
+
+**Notes:**
+- 2026-06-13 (Claude): `commands/quick.rs` `show_quick` now repositions on every show, anchoring
+  lower-middle on the monitor under the cursor (`w.cursor_position()` + `w.monitor_from_point`,
+  falling back to `current_monitor`/`center`). Dropped the `POSITIONED`-once guard so it follows
+  the cursor across monitors. Verified: `cargo build`/`clippy`/`fmt --check`/`test`.
+
+---
+
+## T51 — Default dark theme uses the logo palette
+
+- **Status:** done
+- **Owner:** Claude (T51)
+- **Priority:** P3
+- **Layer:** Frontend
+- **Depends on:** T30 (color pickers)
+
+(IDEAS 22.) Make the default dark theme match the logo: accent `#dc8add`, background
+`#163e54`, mix `#000000`.
+
+**Notes:**
+- 2026-06-13 (Claude): The real default dark theme is the `.dark` block in `index.css` (the
+  picker's `DEFAULT_PICKER_COLORS` is only a swatch seed). Baked the logo palette into `.dark`
+  using the exact output of the existing color pipeline (`buildColorCss`/`derivedSurfaceDecls`/
+  `tintedBackground`) for those three picks — kept at the base layer so installed themes (T11)
+  and user picker overrides still win by load order/specificity. `--destructive`/`--chart-*`/
+  `--sidebar-primary*` left as-is. `DEFAULT_PICKER_COLORS.dark` updated to match so the
+  Appearance swatches + reset target the new defaults; light mode unchanged. Verified: full
+  frontend gate.

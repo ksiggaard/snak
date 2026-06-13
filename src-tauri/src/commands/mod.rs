@@ -1,5 +1,6 @@
 pub mod chat;
 pub mod documents;
+pub mod files;
 pub mod keys;
 pub mod languages;
 pub mod ollama;

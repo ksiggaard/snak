@@ -176,6 +176,7 @@ pub fn run() {
         .manage(CloseToTray::default())
         .manage(commands::chat::CancelFlag::default())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations(DB_URL, migrations())
@@ -268,6 +269,7 @@ pub fn run() {
             commands::quick::set_quick_height,
             commands::terminal::open_in_terminal,
             commands::documents::extract_document_text,
+            commands::files::save_image,
             commands::languages::list_languages,
             commands::languages::languages_directory,
             commands::ollama::ollama_status,

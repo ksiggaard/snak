@@ -3,24 +3,30 @@
 //! (which owns the chat/DB logic) via the `quick-submit` event.
 
 use base64::{engine::general_purpose::STANDARD, Engine};
-use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewWindow};
+use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Monitor, WebviewWindow};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
-
-/// Whether the overlay has been placed yet this session. Once it has (on the
-/// first show), we leave it wherever it sits — so a user drag sticks until the
-/// app restarts, at which point it returns to the lower-middle default.
-static POSITIONED: AtomicBool = AtomicBool::new(false);
 
 /// Fraction of the monitor height at which the overlay's *bottom* edge sits by
 /// default ("lower-middle"). The panel grows upward from this anchor.
 const BOTTOM_ANCHOR_FRAC: f64 = 0.80;
 
+/// The monitor under the mouse cursor — so on a multi-monitor setup the overlay
+/// appears on whichever screen the user is currently working on. Falls back to
+/// the overlay's current monitor when the cursor/monitor lookup is unavailable.
+fn monitor_under_cursor(w: &WebviewWindow) -> Option<Monitor> {
+    if let Ok(pos) = w.cursor_position() {
+        if let Ok(Some(m)) = w.monitor_from_point(pos.x, pos.y) {
+            return Some(m);
+        }
+    }
+    w.current_monitor().ok().flatten()
+}
+
 /// Place the overlay horizontally centered with its bottom edge at
-/// `BOTTOM_ANCHOR_FRAC` of the monitor height. Falls back to the OS center if
-/// monitor info is unavailable.
+/// `BOTTOM_ANCHOR_FRAC` of the height of the monitor under the cursor. Falls
+/// back to the OS center if monitor info is unavailable.
 fn position_lower_middle(w: &WebviewWindow) {
-    let Ok(Some(monitor)) = w.current_monitor() else {
+    let Some(monitor) = monitor_under_cursor(w) else {
         let _ = w.center();
         return;
     };
@@ -39,11 +45,10 @@ fn position_lower_middle(w: &WebviewWindow) {
 /// Show + focus the quick-input overlay. Called by the shortcut handler.
 pub fn show_quick(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("quick") {
-        // Position to the lower-middle default only the first time it's shown this
-        // session; afterwards keep wherever it sits (including any user drag).
-        if !POSITIONED.swap(true, Ordering::Relaxed) {
-            position_lower_middle(&w);
-        }
+        // Reposition on every show so the overlay appears on the monitor under
+        // the mouse cursor (multi-monitor) at the lower-middle default, rather
+        // than staying on whichever screen it was last shown.
+        position_lower_middle(&w);
         let _ = w.show();
         let _ = w.set_focus();
         // T31: ask the main window for the recent-thread list. The overlay never

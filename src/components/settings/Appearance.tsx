@@ -51,6 +51,7 @@ export function Appearance() {
       <TitleBarCard />
       <ColorsCard />
       <CornersCard />
+      <AnimationsCard />
       <TypographyCard />
       <ChatStyleCard />
       <ChatListCard />
@@ -487,6 +488,37 @@ function CornersCard() {
           range={RADIUS}
           onChange={setRadius}
         />
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Global on/off for UI animations and transitions (T46). */
+function AnimationsCard() {
+  const t = useT();
+  const animations = useAppearance((s) => s.animations);
+  const setAnimations = useAppearance((s) => s.setAnimations);
+
+  return (
+    <Card className="w-full max-w-lg">
+      <CardHeader>
+        <CardTitle>{t("animations.title")}</CardTitle>
+        <CardDescription>{t("animations.description")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <OptionRow label={t("animations.label")}>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            spacing={0}
+            value={animations ? "on" : "off"}
+            onValueChange={(v) => v && setAnimations(v === "on")}
+          >
+            <ToggleGroupItem value="on">{t("common.on")}</ToggleGroupItem>
+            <ToggleGroupItem value="off">{t("common.off")}</ToggleGroupItem>
+          </ToggleGroup>
+        </OptionRow>
       </CardContent>
     </Card>
   );

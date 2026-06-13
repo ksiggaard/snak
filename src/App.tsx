@@ -14,6 +14,7 @@ import { Sidebar, SidebarContent } from "@/components/sidebar/Sidebar";
 import { TitleBar } from "@/components/TitleBar";
 import { MenuBar } from "@/components/MenuBar";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { ImageLightbox } from "@/components/ImageLightbox";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSetting, purgeEphemeralThreads } from "@/lib/db";
@@ -218,18 +219,26 @@ function App() {
         <TitleBar />
         {menuBarMode === "inline" && <MenuBar />}
         <ConfirmDialog />
+        <ImageLightbox />
         <SearchOverlay />
 
         <div className="flex min-h-0 flex-1">
           {/* Inline sidebar (>= md), shown unless collapsed. */}
           {sidebarOpen && <Sidebar />}
 
-          {/* Overlay sidebar for narrow widths. */}
+          {/* Overlay sidebar for narrow widths. Offset below the chrome
+              (TitleBar 32px + inline MenuBar 28px) so the Sheet doesn't cover
+              the topbar / the hamburger that opens it. Inline style overrides
+              the shadcn `top-0`/`h-full` classes. */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetContent
               side="left"
               showCloseButton={false}
               className="bg-sidebar text-sidebar-foreground gap-0 p-0"
+              style={{
+                top: menuBarMode === "inline" ? 60 : 32,
+                height: `calc(100% - ${menuBarMode === "inline" ? 60 : 32}px)`,
+              }}
             >
               <SheetTitle className="sr-only">
                 {t("sidebar.navigation")}
@@ -239,17 +248,32 @@ function App() {
           </Sheet>
 
           <main className="flex min-w-0 flex-1 flex-col p-3 md:p-4">
-            {view === "settings" ? (
-              <SettingsView />
-            ) : view === "usage" ? (
-              <UsageView />
-            ) : openBotId ? (
-              <BotView />
-            ) : openProjectId ? (
-              <ProjectView />
-            ) : (
-              <ChatView />
-            )}
+            {/* Keyed so switching views replays the fade-in (T46). The
+                `.no-animations` kill-switch makes this instant when disabled. */}
+            <div
+              key={
+                view === "settings" || view === "usage"
+                  ? view
+                  : openBotId
+                    ? `bot:${openBotId}`
+                    : openProjectId
+                      ? `project:${openProjectId}`
+                      : "chat"
+              }
+              className="animate-in fade-in-0 flex min-h-0 flex-1 flex-col duration-200"
+            >
+              {view === "settings" ? (
+                <SettingsView />
+              ) : view === "usage" ? (
+                <UsageView />
+              ) : openBotId ? (
+                <BotView />
+              ) : openProjectId ? (
+                <ProjectView />
+              ) : (
+                <ChatView />
+              )}
+            </div>
           </main>
         </div>
       </div>

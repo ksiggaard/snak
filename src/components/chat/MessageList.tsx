@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { Markdown } from "@/components/chat/Markdown";
 import { BotAvatar } from "@/components/bots/BotAvatar";
 import { useBots } from "@/store/bots";
+import { openLightbox } from "@/store/lightbox";
 import { useSearch } from "@/store/search";
 import { useAppearance } from "@/store/appearance";
 import { timeLabels, useIntlLocale, useT } from "@/store/i18n";
@@ -153,12 +154,20 @@ function ChatMessage({
   const images = m.images.length > 0 && (
     <div className="flex flex-wrap gap-2">
       {m.images.map((img, i) => (
-        <img
+        <button
           key={i}
-          src={imageDataUrl(img)}
-          alt={t("chat.attachment")}
-          className="max-h-48 rounded-md"
-        />
+          type="button"
+          onClick={() => openLightbox(img)}
+          aria-label={t("chat.viewImage")}
+          title={t("chat.viewImage")}
+          className="focus-visible:ring-ring cursor-zoom-in overflow-hidden rounded-md focus-visible:ring-2 focus-visible:outline-none"
+        >
+          <img
+            src={imageDataUrl(img)}
+            alt={t("chat.attachment")}
+            className="max-h-48 rounded-md"
+          />
+        </button>
       ))}
     </div>
   );
@@ -516,8 +525,19 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
       )}
       {pending && (
         <div className="flex justify-start">
-          <div className="text-muted-foreground text-sm">
-            {t("chat.thinking")}
+          <div className="text-muted-foreground flex items-center gap-1.5 text-sm">
+            <span>{t("chat.thinking")}</span>
+            {/* Three dots pulsing in sequence (T46). Static when animations
+                are off — the kill-switch zeroes the animation. */}
+            <span aria-hidden className="flex gap-0.5">
+              {[0, 0.2, 0.4].map((delay, i) => (
+                <span
+                  key={i}
+                  className="snak-thinking-dot bg-muted-foreground inline-block size-1 rounded-full"
+                  style={{ animationDelay: `${delay}s` }}
+                />
+              ))}
+            </span>
           </div>
         </div>
       )}

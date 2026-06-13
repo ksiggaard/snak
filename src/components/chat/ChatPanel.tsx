@@ -1,11 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  Coins,
-  CornerDownLeft,
-  Image as ImageIcon,
-  ListOrdered,
-  X,
-} from "lucide-react";
+import { Coins, Image as ImageIcon, ListOrdered, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -13,13 +7,13 @@ import {
   mediaEntries,
   searchChatMessages,
   userMessageEntries,
-  type MediaEntry,
 } from "@/lib/chatPanel";
 import { NativeSelect } from "@/components/NativeSelect";
 import { threadUsageTotals, type ThreadUsageTotals } from "@/lib/db";
 import { imageDataUrl, type MessageView } from "@/lib/messages";
 import { highlightSegments } from "@/lib/search";
 import { formatTokens } from "@/lib/usage";
+import { openLightbox } from "@/store/lightbox";
 import { useProjects } from "@/store/projects";
 import { useSearch } from "@/store/search";
 import { useThreads } from "@/store/threads";
@@ -48,7 +42,6 @@ export function ChatPanel({
     threadId: string;
     totals: ThreadUsageTotals;
   } | null>(null);
-  const [lightbox, setLightbox] = useState<MediaEntry | null>(null);
 
   const userEntries = useMemo(() => userMessageEntries(messages), [messages]);
   const media = useMemo(() => mediaEntries(messages), [messages]);
@@ -179,7 +172,7 @@ export function ChatPanel({
                     <button
                       key={`${entry.messageId}-${i}`}
                       type="button"
-                      onClick={() => setLightbox(entry)}
+                      onClick={() => openLightbox(entry.image, entry.messageId)}
                       className="focus-visible:ring-ring overflow-hidden rounded-md focus-visible:ring-2"
                     >
                       <img
@@ -210,71 +203,7 @@ export function ChatPanel({
           </span>
         </div>
       )}
-
-      {lightbox && (
-        <Lightbox
-          entry={lightbox}
-          onClose={() => setLightbox(null)}
-          onGoToMessage={() => {
-            requestScroll(lightbox.messageId);
-            setLightbox(null);
-          }}
-        />
-      )}
     </aside>
-  );
-}
-
-/** Full-size view of a shared image: backdrop/Esc/X to close, plus a jump to
- * the message it was sent with. */
-function Lightbox({
-  entry,
-  onClose,
-  onGoToMessage,
-}: {
-  entry: MediaEntry;
-  onClose: () => void;
-  onGoToMessage: () => void;
-}) {
-  const t = useT();
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black/80 p-6 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <img
-        src={imageDataUrl(entry.image)}
-        alt=""
-        onClick={(e) => e.stopPropagation()}
-        className="max-h-[82vh] max-w-[92vw] rounded-lg object-contain shadow-2xl"
-      />
-      <div
-        className="flex items-center gap-2"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <Button variant="secondary" size="sm" onClick={onGoToMessage}>
-          <CornerDownLeft className="size-4" />
-          {t("panel.goToMessage")}
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          aria-label={t("panel.close")}
-          onClick={onClose}
-        >
-          <X className="size-4" />
-        </Button>
-      </div>
-    </div>
   );
 }
 
