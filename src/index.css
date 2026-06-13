@@ -106,38 +106,43 @@
 }
 
 .dark {
+    /* Default dark palette = the logo colours (accent #dc8add, background
+       #163e54, mix #000000). These surface/foreground values are the exact
+       output of the Appearance color pipeline (buildColorCss → derivedSurfaceDecls)
+       for those three picks, baked in at the base layer so installed themes (T11)
+       and user picker overrides still win by load order / specificity. */
     color-scheme: dark;
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
+    --background: #153b50;
+    --foreground: #ffffff;
+    --card: #14374b;
+    --card-foreground: #ffffff;
+    --popover: #14374b;
+    --popover-foreground: #ffffff;
+    --primary: #dc8add;
+    --primary-foreground: #171717;
+    --secondary: #123345;
+    --secondary-foreground: #ffffff;
+    --muted: #123345;
+    --muted-foreground: #a1b1b9;
+    --accent: #123345;
+    --accent-foreground: #ffffff;
     --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
+    --border: #113042;
+    --input: #113042;
+    --ring: #0e2836;
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar: #133548;
+    --sidebar-foreground: #ffffff;
     --sidebar-primary: oklch(0.488 0.243 264.376);
     --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    --sidebar-accent: #123345;
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: #113042;
+    --sidebar-ring: #0e2836;
 }
 
 @layer base {

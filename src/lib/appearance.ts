@@ -233,7 +233,9 @@ export const DEFAULT_PICKER_COLORS: Record<
   Record<ColorKey, string>
 > = {
   light: { primary: "#171717", background: "#ffffff", surface: "#000000" },
-  dark: { primary: "#e5e5e5", background: "#0a0a0a", surface: "#ffffff" },
+  // The default dark palette is the logo colours (baked into `.dark` in
+  // index.css); these source picks seed the pickers + reset targets to match.
+  dark: { primary: "#dc8add", background: "#163e54", surface: "#000000" },
 };
 
 /** Bounds for the surface-contrast multiplier (1 = the built-in steps). */
