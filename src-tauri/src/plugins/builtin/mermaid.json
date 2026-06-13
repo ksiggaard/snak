@@ -1,0 +1,13 @@
+{
+  "id": "com.snak.mermaid",
+  "name": "Mermaid diagrams",
+  "version": "1.0.0",
+  "category": "renderer",
+  "apiVersion": 1,
+  "description": "Renders ```mermaid fenced code blocks in assistant messages as diagrams. Disable to show the raw source instead.",
+  "author": "snak",
+  "enabledByDefault": true,
+  "contributes": {
+    "language": "mermaid"
+  }
+}

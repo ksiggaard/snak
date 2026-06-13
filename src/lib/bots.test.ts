@@ -3,6 +3,16 @@ import { botAvatarUrl, botMonogram, buildBotSystemText } from "@/lib/bots";
 
 const mem = (...contents: string[]) => contents.map((content) => ({ content }));
 
+/** The exact persona header (base rules: stay in character + knowledge
+ * realism), pinned here so a wording change is a deliberate test update.
+ * `who` differs from `name` when a tagline is folded in. */
+const header = (name: string, who = name) =>
+  [
+    `You are ${who}, a persona the user created. Always stay in character as ${name} — never break character, and never describe yourself as an AI, a language model, or a persona.`,
+    `You're talking to the user in a text chat, like a Teams or Slack message. Reply with ONLY what ${name} would type. Never narrate actions, gestures, facial expressions, tone, or sounds, and never use stage directions or asterisk/parenthetical roleplay (no "(he sighs)", "*smiles*", "*harrumphs*", etc.). Use emoji where it fits ${name}'s character, the way people naturally do in chat. Your personality and mood should come through in how you write — never in narrated behavior.`,
+    `${name} simulates a real person, and real people don't know everything: you know only what ${name} plausibly could, given their era, background, and expertise. Never lie about knowing something you wouldn't, and never answer a question that's outside ${name}'s knowledge. When that happens, don't reason it out or explain — reply briefly and in character, e.g. "I don't know", "How would I know?", "What are you talking about?", "Ask someone else", or just "…".`,
+  ].join("\n");
+
 /** Profile fixture: everything blank, mood feature on (the column default). */
 const profile = (
   over: Partial<Parameters<typeof buildBotSystemText>[0]> = {},
@@ -36,7 +46,7 @@ describe("buildBotSystemText", () => {
 
   it("includes only the persona header for a name-only bot", () => {
     expect(buildBotSystemText(profile({ name: "John" }), [])).toBe(
-      "You are John, a persona the user created. Stay in character as John.",
+      header("John"),
     );
   });
 
@@ -46,9 +56,7 @@ describe("buildBotSystemText", () => {
         profile({ name: "Bjarne", tagline: "The IT architect" }),
         [],
       ),
-    ).toBe(
-      "You are Bjarne (The IT architect), a persona the user created. Stay in character as Bjarne.",
-    );
+    ).toBe(header("Bjarne", "Bjarne (The IT architect)"));
   });
 
   it("composes header, instructions, and memory, separated by blank lines", () => {
@@ -58,7 +66,7 @@ describe("buildBotSystemText", () => {
     );
     expect(out).toBe(
       [
-        "You are John, a persona the user created. Stay in character as John.",
+        header("John"),
         "Challenge the architecture.",
         "Memory (John's notes from previous conversations with this user):\n- Prefers TypeScript",
       ].join("\n\n"),
@@ -71,10 +79,7 @@ describe("buildBotSystemText", () => {
       [],
     );
     expect(out).toBe(
-      [
-        "You are John, a persona the user created. Stay in character as John.",
-        "How you work:\nAsk before answering.",
-      ].join("\n\n"),
+      [header("John"), "How you work:\nAsk before answering."].join("\n\n"),
     );
   });
 
@@ -84,10 +89,7 @@ describe("buildBotSystemText", () => {
       [],
     );
     expect(out).toBe(
-      [
-        "You are John, a persona the user created. Stay in character as John.",
-        "Tone of voice:\nWarm but direct.",
-      ].join("\n\n"),
+      [header("John"), "Tone of voice:\nWarm but direct."].join("\n\n"),
     );
   });
 
@@ -98,7 +100,7 @@ describe("buildBotSystemText", () => {
     );
     expect(out).toBe(
       [
-        "You are John, a persona the user created. Stay in character as John.",
+        header("John"),
         "Your current mood: cheerful\nLet it subtly color your responses; don't mention it unprompted.",
       ].join("\n\n"),
     );
@@ -109,7 +111,9 @@ describe("buildBotSystemText", () => {
       profile({ name: "John", mood_enabled: 0, mood: "cheerful" }),
       [],
     );
-    expect(out).not.toContain("mood");
+    // The mood *section* and value must not be injected (the base header
+    // mentions the word "mood" in general guidance, so match the marker).
+    expect(out).not.toContain("Your current mood:");
     expect(out).not.toContain("cheerful");
   });
 
@@ -118,7 +122,7 @@ describe("buildBotSystemText", () => {
       profile({ name: "John", mood_enabled: 1, mood: "   " }),
       [],
     );
-    expect(out).not.toContain("mood");
+    expect(out).not.toContain("Your current mood:");
   });
 
   it("orders sections header → personality → modus operandi → tone → mood → memory", () => {
@@ -157,7 +161,7 @@ describe("buildBotSystemText", () => {
     );
     expect(out).toBe(
       [
-        "You are John, a persona the user created. Stay in character as John.",
+        header("John"),
         "Memory (John's notes from previous conversations with this user):\n- kept",
       ].join("\n\n"),
     );

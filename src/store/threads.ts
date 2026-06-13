@@ -10,6 +10,7 @@ import {
   getProject,
   getSetting,
   listBotMemory,
+  listBots,
   listProjectFiles,
   listThreads,
   listUserMemory,
@@ -35,6 +36,7 @@ import {
 } from "@/lib/messages";
 import { buildCompactionRequest, compactHistory } from "@/lib/compaction";
 import { buildBotSystemText } from "@/lib/bots";
+import { extractMentions } from "@/lib/mentions";
 import { runPersonaMemoryUpdate } from "@/lib/personaMemory";
 import { buildProjectSystemText } from "@/lib/projects";
 import { buildSkillsSystemText } from "@/lib/skills";
@@ -217,6 +219,63 @@ function friendlyError(e: unknown): string {
     return `The provider rejected the request (${code}). ${raw}`;
   }
   return raw;
+}
+
+/**
+ * Load the system-context blocks shared by every reply of one send: skills
+ * (T15) and the global addendum/memory (T10) in `head`, the project context
+ * (T20) in `tail`. The persona block (T38/T43) is per-reply and slots between
+ * them, so an assembled history reads [skills, global, (bot), project,
+ * ...history] — the same precedence order the pre-T43 unshift sequence
+ * produced: the bot is the assistant's *identity* and spans projects, while
+ * the project context stays closest to the history it scopes. Each provider
+ * concatenates consecutive role:"system" messages in array order
+ * (Anthropic/Gemini join with "\n\n"; OpenAI/Mistral pass them through), so
+ * this realizes the documented precedence without any provider/Rust changes.
+ */
+async function loadSharedSystemBlocks(
+  projectId: string | null,
+): Promise<{ head: ApiMessage[]; tail: ApiMessage[] }> {
+  const head: ApiMessage[] = [];
+  const tail: ApiMessage[] = [];
+
+  // Enabled skills (T15): instruction packs from `skill` plugins.
+  const skillsSystemText = buildSkillsSystemText(
+    selectRegistry(usePlugins.getState()).skills,
+  );
+  if (skillsSystemText)
+    head.push({ role: "system", content: skillsSystemText, images: [] });
+
+  // Global system context (T10): the custom system-prompt addendum + the
+  // user's memory entries (applies to every thread/provider).
+  const [addendum, memory] = await Promise.all([
+    getSetting(SYSTEM_PROMPT_ADDENDUM_KEY),
+    listUserMemory(),
+  ]);
+  const globalSystemText = buildGlobalSystemText(addendum, memory);
+  if (globalSystemText)
+    head.push({ role: "system", content: globalSystemText, images: [] });
+
+  // Project base context (T20): instructions + reference files, for threads
+  // that belong to a project.
+  if (projectId) {
+    const project = await getProject(projectId);
+    if (project) {
+      const files = await listProjectFiles(projectId);
+      const systemText = buildProjectSystemText(project, files);
+      if (systemText)
+        tail.push({ role: "system", content: systemText, images: [] });
+    }
+  }
+  return { head, tail };
+}
+
+/** The persona's system block — identity header, T40 profile fields, mood,
+ * and memory — or null when it all renders empty. Loaded per reply, so each
+ * @-mentioned persona (T43) gets its own current memory/mood. */
+async function botSystemBlock(bot: Bot): Promise<ApiMessage | null> {
+  const botText = buildBotSystemText(bot, await listBotMemory(bot.id));
+  return botText ? { role: "system", content: botText, images: [] } : null;
 }
 
 export const useThreads = create<ThreadsState>((set, get) => ({
@@ -433,203 +492,189 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       const afterUser = await loadThreadMessages(id);
       set({ messages: afterUser });
 
-      // Compacted API history (T28): everything after the latest `summary`
-      // row, with that summary injected as a leading user turn — or the full
-      // transcript when the thread was never compacted. Display is unaffected
-      // (the store keeps every row); only the API context shrinks.
-      const history: ApiMessage[] = compactHistory(afterUser);
+      // @-mentions (T43): personas called out in the message each produce
+      // their own one-shot, in-character reply. The roster comes from lib/db
+      // directly — NOT useBots: store/bots.ts imports this store, so reading
+      // it here would create a module cycle.
+      const mentioned = content.includes("@")
+        ? extractMentions(content, await listBots())
+        : [];
 
-      // Leading system context, assembled at the message layer (not in the
-      // Rust providers). Precedence is skills → global → bot → project →
-      // history: the bot (T38) is the assistant's *identity* and spans
-      // projects, so it sits ahead of the project context, which stays
-      // closest to the history it scopes. Since we prepend, the blocks are
-      // unshifted in reverse (project, then bot, then global, then skills),
-      // so the array ends up [skills, global, bot, project, ...history].
-      // Each provider concatenates consecutive role:"system" messages in array
-      // order (Anthropic/Gemini join with "\n\n"; OpenAI/Mistral pass them
-      // through), so this realizes the documented precedence without any
-      // provider/Rust changes.
+      // System context shared by every reply of this send (skills/global/
+      // project); the persona block is per-reply and slots in between.
+      const shared = await loadSharedSystemBlocks(projectId);
+      const threadId = id; // non-null capture for the closures below
 
-      // Project base context (T20): the project's instructions + reference
-      // files, for threads that belong to a project.
-      if (projectId) {
-        const project = await getProject(projectId);
-        if (project) {
-          const files = await listProjectFiles(projectId);
-          const systemText = buildProjectSystemText(project, files);
-          if (systemText) {
-            history.unshift({
-              role: "system",
-              content: systemText,
-              images: [],
+      /**
+       * Stream one assistant reply and persist it (+ tool calls, usage).
+       * `replyBot`'s persona block occupies the "bot" slot of the precedence
+       * stack; `attributeBotId` lands in `messages.bot_id` (T43) — set for an
+       * @-mentioned persona, null for the thread's own persona, whose replies
+       * render off the thread's bot instead.
+       */
+      const runReply = async (
+        replyBot: Bot | null,
+        attributeBotId: string | null,
+      ) => {
+        // Compacted API history (T28): everything after the latest `summary`
+        // row, with that summary injected as a leading user turn — or the
+        // full transcript when never compacted. Reloaded per reply so, on a
+        // multi-mention send, persona N sees personas 1..N-1's replies in
+        // history (they can react to each other — by design).
+        const rows = await loadThreadMessages(threadId);
+        const botBlock = replyBot ? await botSystemBlock(replyBot) : null;
+        const history: ApiMessage[] = [
+          ...shared.head,
+          ...(botBlock ? [botBlock] : []),
+          ...shared.tail,
+          ...compactHistory(rows),
+        ];
+
+        // Stream the reply, appending a placeholder assistant bubble on the
+        // first event and growing it as chunks arrive. Text arrives as content
+        // deltas; tool calls arrive as structured events and render as chips.
+        // The placeholder carries `bot_id` so a mentioned persona's
+        // attribution renders while it is still streaming.
+        let acc = "";
+        const toolCalls: MessageToolCall[] = [];
+        const onDelta = (event: StreamEvent) => {
+          if (event.toolCall) {
+            toolCalls.push({
+              name: event.toolCall.name,
+              url: event.toolCall.url,
             });
           }
-        }
-      }
-
-      // Bot persona (T38): the bot's identity header, personality
-      // instructions, and memory entries — unshifted after the project block
-      // so it sits ahead of it (the persona frames the whole conversation,
-      // project context stays nearest the history). The loaded bot is kept
-      // around for the T40 memory-review call after the reply completes.
-      let bot: Bot | null = null;
-      if (botId) {
-        bot = await getBot(botId);
-        if (bot) {
-          const botText = buildBotSystemText(bot, await listBotMemory(botId));
-          if (botText) {
-            history.unshift({
-              role: "system",
-              content: botText,
-              images: [],
-            });
-          }
-        }
-      }
-
-      // Global system context (T10): the custom system-prompt addendum + the
-      // user's memory entries. Global (applies to every thread/provider).
-      // Unshifted after the bot block so it sits ahead of it.
-      const [addendum, memory] = await Promise.all([
-        getSetting(SYSTEM_PROMPT_ADDENDUM_KEY),
-        listUserMemory(),
-      ]);
-      const globalSystemText = buildGlobalSystemText(addendum, memory);
-      if (globalSystemText) {
-        history.unshift({
-          role: "system",
-          content: globalSystemText,
-          images: [],
-        });
-      }
-
-      // Enabled skills (T15): instruction packs from `skill` plugins, alongside
-      // the global guidance — unshifted last so they lead the system context.
-      const skillsSystemText = buildSkillsSystemText(
-        selectRegistry(usePlugins.getState()).skills,
-      ); // T15 wire-in
-      if (skillsSystemText)
-        history.unshift({
-          role: "system",
-          content: skillsSystemText,
-          images: [],
-        });
-
-      // Stream the reply, appending a placeholder assistant bubble on the first
-      // event and growing it as chunks arrive. Text arrives as content deltas;
-      // tool calls arrive as structured events and render as distinct chips.
-      let acc = "";
-      const toolCalls: MessageToolCall[] = [];
-      const onDelta = (event: StreamEvent) => {
-        if (event.toolCall) {
-          toolCalls.push({
-            name: event.toolCall.name,
-            url: event.toolCall.url,
+          if (event.text) acc += event.text;
+          set((s) => {
+            const exists = s.messages.some((m) => m.id === STREAM_ID);
+            const base = exists
+              ? s.messages
+              : [
+                  ...s.messages,
+                  {
+                    id: STREAM_ID,
+                    thread_id: threadId,
+                    role: "assistant" as const,
+                    content: "",
+                    kind: "normal" as const,
+                    duration_ms: null,
+                    bot_id: attributeBotId,
+                    created_at: "",
+                    images: [],
+                    documents: [],
+                    toolCalls: [],
+                  },
+                ];
+            return {
+              messages: base.map((m) =>
+                m.id === STREAM_ID
+                  ? { ...m, content: acc, toolCalls: [...toolCalls] }
+                  : m,
+              ),
+            };
           });
+        };
+
+        // On cancellation this still resolves with the partial text
+        // accumulated so far (the backend early-exits and returns Ok), so the
+        // same persistence path preserves whatever was generated.
+        const started = Date.now();
+        const result = await chatStream(provider, model, history, onDelta);
+        // Persist the assistant turn when it produced text or invoked a tool.
+        // (Skip a truly empty row, e.g. cancelled before any token/tool call.)
+        if (result.content.length > 0 || toolCalls.length > 0) {
+          const assistantMsg = await addMessage({
+            thread_id: threadId,
+            role: "assistant",
+            content: result.content,
+            duration_ms: Math.round(Date.now() - started),
+            bot_id: attributeBotId,
+          });
+          // Persist each tool call as a structured attachment so it survives
+          // reload and renders as a distinct chip — never as model-authored
+          // text.
+          for (const tc of toolCalls) {
+            await addAttachment({
+              message_id: assistantMsg.id,
+              kind: "tool_call",
+              media_type: "application/json",
+              data: JSON.stringify(tc),
+            });
+          }
+          // Record token usage for this response. Attribute it to the model
+          // the API actually used (`result.model`), falling back to the
+          // requested model — so usage stays correct even if the thread's
+          // model changes later. Skip if the provider reported no tokens at
+          // all (e.g. an early cancel that emitted text but no usage event).
+          const u = result.usage;
+          if (
+            u &&
+            (u.input_tokens > 0 ||
+              u.output_tokens > 0 ||
+              u.cache_creation_tokens > 0 ||
+              u.cache_read_tokens > 0)
+          ) {
+            await addUsage({
+              message_id: assistantMsg.id,
+              thread_id: threadId,
+              provider,
+              model: result.model || model,
+              input_tokens: u.input_tokens,
+              output_tokens: u.output_tokens,
+              cache_creation_tokens: u.cache_creation_tokens,
+              cache_read_tokens: u.cache_read_tokens,
+            });
+          }
         }
-        if (event.text) acc += event.text;
-        set((s) => {
-          const exists = s.messages.some((m) => m.id === STREAM_ID);
-          const base = exists
-            ? s.messages
-            : [
-                ...s.messages,
-                {
-                  id: STREAM_ID,
-                  thread_id: id!,
-                  role: "assistant" as const,
-                  content: "",
-                  kind: "normal" as const,
-                  duration_ms: null,
-                  created_at: "",
-                  images: [],
-                  documents: [],
-                  toolCalls: [],
-                },
-              ];
-          return {
-            messages: base.map((m) =>
-              m.id === STREAM_ID
-                ? { ...m, content: acc, toolCalls: [...toolCalls] }
-                : m,
-            ),
-          };
-        });
+        // Replace the placeholder with the persisted rows.
+        set({ messages: await loadThreadMessages(threadId) });
+        // updated_at changed → reorder sidebar.
+        await get().refreshThreads();
+        return result;
       };
 
-      // On cancellation this still resolves with the partial text accumulated
-      // so far (the backend early-exits and returns Ok), so the same
-      // persistence path preserves whatever was generated.
-      const started = Date.now();
-      const result = await chatStream(provider, model, history, onDelta);
-      // Persist the assistant turn when it produced text or invoked a tool.
-      // (Skip a truly empty row, e.g. cancelled before any token or tool call.)
-      if (result.content.length > 0 || toolCalls.length > 0) {
-        const assistantMsg = await addMessage({
-          thread_id: id,
-          role: "assistant",
-          content: result.content,
-          duration_ms: Math.round(Date.now() - started),
-        });
-        // Persist each tool call as a structured attachment so it survives
-        // reload and renders as a distinct chip — never as model-authored text.
-        for (const tc of toolCalls) {
-          await addAttachment({
-            message_id: assistantMsg.id,
-            kind: "tool_call",
-            media_type: "application/json",
-            data: JSON.stringify(tc),
-          });
-        }
-        // Record token usage for this response. Attribute it to the model the
-        // API actually used (`result.model`), falling back to the requested
-        // model — so usage stays correct even if the thread's model changes
-        // later. Skip if the provider reported no tokens at all (e.g. an early
-        // cancel that still emitted text but no usage event).
-        const u = result.usage;
+      /** Persona self-managed memory + mood (T40): review the exchange
+       * off-path. Fire-and-forget — runPersonaMemoryUpdate never throws, so
+       * it can neither delay nor fail the send path. NEVER runs for incognito
+       * threads (session-only chats must leave no trace in the persona's
+       * memory or mood), and only when the reply produced text to review. */
+      const reviewExchange = (replyBot: Bot, replyText: string) => {
         if (
-          u &&
-          (u.input_tokens > 0 ||
-            u.output_tokens > 0 ||
-            u.cache_creation_tokens > 0 ||
-            u.cache_read_tokens > 0)
+          !ephemeral &&
+          (replyBot.auto_memory || replyBot.mood_enabled) &&
+          replyText.length > 0
         ) {
-          await addUsage({
-            message_id: assistantMsg.id,
-            thread_id: id,
+          void runPersonaMemoryUpdate(
+            replyBot,
+            content,
+            replyText,
             provider,
-            model: result.model || model,
-            input_tokens: u.input_tokens,
-            output_tokens: u.output_tokens,
-            cache_creation_tokens: u.cache_creation_tokens,
-            cache_read_tokens: u.cache_read_tokens,
-          });
+            model,
+          );
         }
-      }
-      // Replace the placeholder with the persisted rows.
-      set({ messages: await loadThreadMessages(id) });
-      // updated_at changed → reorder sidebar.
-      await get().refreshThreads();
+      };
 
-      // Persona self-managed memory + mood (T40): review the exchange
-      // off-path. Fire-and-forget — runPersonaMemoryUpdate never throws, so
-      // it can neither delay nor fail the send path. NEVER runs for incognito
-      // threads (session-only chats must leave no trace in the persona's
-      // memory or mood), and only when the reply produced text to review.
-      if (
-        bot &&
-        !ephemeral &&
-        (bot.auto_memory || bot.mood_enabled) &&
-        result.content.length > 0
-      ) {
-        void runPersonaMemoryUpdate(
-          bot,
-          content,
-          result.content,
-          provider,
-          model,
-        );
+      if (mentioned.length > 0) {
+        // Mention path (T43): the mentioned personas reply sequentially, in
+        // mention order, each on the THREAD's provider/model (persona
+        // defaults are ignored — one model for the whole "ask all" sequence,
+        // no surprise key/provider switches). The thread's own persona is NOT
+        // auto-invoked on this message — the mention replaces it for this
+        // exchange. The mentioned persona talked with the user, so it may
+        // remember it (same T40 toggles + incognito skip as a persona
+        // thread).
+        for (const mentionBot of mentioned) {
+          // Stop (T3) cancels the remaining queue; the in-flight stream
+          // still resolves with its partial text via the normal path.
+          if (get().cancelling) break;
+          const result = await runReply(mentionBot, mentionBot.id);
+          reviewExchange(mentionBot, result.content);
+        }
+      } else {
+        // Thread persona (T38) or plain reply — the single-reply path.
+        const bot = botId ? await getBot(botId) : null;
+        const result = await runReply(bot, null);
+        if (bot) reviewExchange(bot, result.content);
       }
     } catch (e) {
       set({ error: friendlyError(e) });

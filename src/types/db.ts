@@ -113,6 +113,10 @@ export interface Message {
   kind: MessageKind;
   /** Wall-clock generation time in ms for assistant replies; null otherwise. */
   duration_ms: number | null;
+  /** Persona that authored this reply via an @-mention (T43, migration 016).
+   * NULL for normal turns — including a thread persona's own replies, which
+   * render off the thread's bot instead. */
+  bot_id: string | null;
   created_at: string;
 }
 

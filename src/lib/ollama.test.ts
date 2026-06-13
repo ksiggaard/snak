@@ -4,6 +4,7 @@ import {
   isValidOllamaModelName,
   ollamaPullCommand,
   reconcileOllamaModels,
+  SUGGESTED_MODELS,
 } from "@/lib/ollama";
 import type { Model } from "@/types/db";
 
@@ -92,6 +93,22 @@ describe("reconcileOllamaModels", () => {
     );
     expect(toAdd).toEqual([]);
     expect(toRemove).toEqual([]);
+  });
+});
+
+describe("SUGGESTED_MODELS", () => {
+  it("every curated name is a valid, shell-safe model name", () => {
+    // Suggestions are staged into `ollama pull <name>`, so an invalid name
+    // would be both broken and a (theoretical) injection vector.
+    for (const s of SUGGESTED_MODELS) {
+      expect(isValidOllamaModelName(s.name), s.name).toBe(true);
+    }
+  });
+
+  it("includes a Hugging Face (hf.co) example per the idea", () => {
+    expect(SUGGESTED_MODELS.some((s) => s.name.startsWith("hf.co/"))).toBe(
+      true,
+    );
   });
 });
 

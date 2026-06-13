@@ -21,6 +21,16 @@ export interface OllamaModelInfo {
   modified_at: string;
 }
 
+/** One model currently loaded in memory (Rust `OllamaRunningModel`,
+ *  from `/api/ps`, T41). */
+export interface OllamaRunningModelInfo {
+  name: string;
+  /** Bytes resident in VRAM/RAM right now. */
+  size_vram: number;
+  /** RFC 3339 timestamp when the daemon will unload it (keep-alive expiry). */
+  expires_at: string;
+}
+
 /** Probe the local daemon. Never rejects for an unreachable daemon — that's a
  *  normal state and comes back as `{ running: false }`. */
 export const getOllamaStatus = (): Promise<OllamaStatus> =>
@@ -29,6 +39,18 @@ export const getOllamaStatus = (): Promise<OllamaStatus> =>
 /** List the locally-installed models (rejects when the daemon is down). */
 export const listOllamaModels = (): Promise<OllamaModelInfo[]> =>
   invoke("ollama_list_models");
+
+/** List the models currently loaded in memory (rejects when down) (T41). */
+export const listOllamaRunning = (): Promise<OllamaRunningModelInfo[]> =>
+  invoke("ollama_ps");
+
+/** Start the daemon (`ollama serve`, spawned detached). Rejects with an
+ *  actionable message if the binary isn't installed (T41). */
+export const startOllama = (): Promise<void> => invoke("ollama_start");
+
+/** Unload a loaded model from memory (`ollama stop <model>`) (T41). */
+export const unloadOllamaModel = (model: string): Promise<void> =>
+  invoke("ollama_unload", { model });
 
 /**
  * Whether `name` is a plausible Ollama model name: dotted/dashed segments,
@@ -64,6 +86,31 @@ export function reconcileOllamaModels(
     toRemove: rows.filter((m) => !want.has(m.model_id)),
   };
 }
+
+/** A curated model the user can one-click "stage pull" (T41). `note` is a short
+ * untranslated hint (size class / use). Names pass `isValidOllamaModelName` and
+ * include a Hugging Face example (`hf.co/<repo>`) per the idea. */
+export interface SuggestedModel {
+  name: string;
+  note: string;
+}
+
+/**
+ * A small, curated starter set surfaced as one-click pull chips. Kept short and
+ * broadly useful (a tiny general model, a small coder, a vision model) plus one
+ * Hugging Face GGUF to demonstrate the `hf.co/<repo>` flow. This is just
+ * suggestions — any name can still be typed into the pull field.
+ */
+export const SUGGESTED_MODELS: SuggestedModel[] = [
+  { name: "llama3.2:1b", note: "tiny, fast — good first model" },
+  { name: "llama3.2:3b", note: "small general-purpose" },
+  { name: "qwen2.5-coder:7b", note: "coding" },
+  { name: "gemma3:4b", note: "small, vision-capable" },
+  {
+    name: "hf.co/bartowski/Llama-3.2-1B-Instruct-GGUF",
+    note: "Hugging Face GGUF",
+  },
+];
 
 /** Human-readable byte size for the installed-models list, e.g. "1.3 GB". */
 export function formatBytes(bytes: number): string {

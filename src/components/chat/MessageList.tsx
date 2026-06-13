@@ -15,6 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/components/chat/Markdown";
 import { BotAvatar } from "@/components/bots/BotAvatar";
+import { useBots } from "@/store/bots";
 import { useSearch } from "@/store/search";
 import { useAppearance } from "@/store/appearance";
 import { timeLabels, useIntlLocale, useT } from "@/store/i18n";
@@ -125,6 +126,7 @@ function ChatMessage({
   now,
   innerRef,
   bot,
+  mentionBot,
 }: {
   m: MessageView;
   chatStyle: ChatStyle;
@@ -132,12 +134,21 @@ function ChatMessage({
   now: number;
   innerRef: (el: HTMLDivElement | null) => void;
   bot?: Bot | null;
+  /** Persona that authored this reply via an @-mention (T43, m.bot_id) —
+   *  renders with a distinct `@Name` treatment. null = normal reply. */
+  mentionBot?: Bot | null;
 }) {
   const t = useT();
   const isUser = m.role === "user";
-  // Bot persona (T38): assistant messages in a bot thread show the bot's
-  // avatar + name instead of the generic "ai" label; null otherwise.
-  const asBot = m.role === "assistant" ? (bot ?? null) : null;
+  // Bot persona: an @-mentioned author (T43, per-message) wins over the
+  // thread's bot (T38); assistant messages show the persona's avatar + name
+  // instead of the generic "ai" label. A deleted mention persona falls back
+  // to the thread rendering gracefully.
+  const asBot = m.role === "assistant" ? (mentionBot ?? bot) || null : null;
+  // Injected one-shot reply (T43): visually distinct from the thread-persona
+  // byline — the name renders as `@Name` in the accent color.
+  const injected = m.role === "assistant" && mentionBot != null;
+  const botName = asBot ? (injected ? `@${asBot.name}` : asBot.name) : "";
 
   const images = m.images.length > 0 && (
     <div className="flex flex-wrap gap-2">
@@ -202,9 +213,14 @@ function ChatMessage({
   // Small avatar + name byline above a bot's reply, for the styles without
   // their own name/gutter treatment (default, bubbles, document, cards, zebra).
   const byline = asBot && (
-    <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold">
+    <span
+      className={cn(
+        "flex items-center gap-1.5 text-xs font-semibold",
+        injected ? "text-primary" : "text-muted-foreground",
+      )}
+    >
       <BotAvatar bot={asBot} className="size-5" />
-      {asBot.name}
+      {botName}
     </span>
   );
 
@@ -230,7 +246,15 @@ function ChatMessage({
             aria-hidden
           >
             {asBot ? (
-              <BotAvatar bot={asBot} className="ml-auto size-5" />
+              <BotAvatar
+                bot={asBot}
+                className={cn(
+                  "ml-auto size-5",
+                  // Injected one-shot reply (T43): accent ring on the gutter
+                  // avatar (this style has no name to prefix).
+                  injected && "ring-primary ring-1",
+                )}
+              />
             ) : isUser ? (
               t("chat.you")
             ) : (
@@ -279,11 +303,11 @@ function ChatMessage({
             className={cn(
               "text-xs leading-7 font-semibold",
               !asBot && "capitalize",
-              isUser ? "text-primary" : "text-muted-foreground",
+              isUser || injected ? "text-primary" : "text-muted-foreground",
             )}
             aria-hidden
           >
-            {asBot ? asBot.name : isUser ? t("chat.you") : t("chat.ai")}
+            {asBot ? botName : isUser ? t("chat.you") : t("chat.ai")}
           </span>
           {images}
           {docs}
@@ -318,10 +342,13 @@ function ChatMessage({
               the ❯ prompt sits for user lines. */}
           {asBot && (
             <span
-              className="text-muted-foreground shrink-0 font-bold select-none"
+              className={cn(
+                "shrink-0 font-bold select-none",
+                injected ? "text-primary" : "text-muted-foreground",
+              )}
               aria-hidden
             >
-              {asBot.name}
+              {botName}
             </span>
           )}
           <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -361,6 +388,9 @@ function ChatMessage({
 
 export function MessageList({ messages, pending, bot }: MessageListProps) {
   const t = useT();
+  // Persona roster for @-mention attribution (T43): a message with `bot_id`
+  // set renders that persona's avatar + name regardless of the thread's bot.
+  const bots = useBots((s) => s.bots);
   const bottomRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const scrollToMessageId = useSearch((s) => s.scrollToMessageId);
@@ -474,6 +504,9 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
             flashed={flashId === m.id}
             now={now}
             bot={bot}
+            mentionBot={
+              m.bot_id ? (bots.find((b) => b.id === m.bot_id) ?? null) : null
+            }
             innerRef={(el) => {
               if (el) messageRefs.current.set(m.id, el);
               else messageRefs.current.delete(m.id);

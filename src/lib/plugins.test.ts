@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRegistry, parseManifest } from "@/lib/plugins";
+import { buildRegistry, hasRenderer, parseManifest } from "@/lib/plugins";
 import type { PluginInfo } from "@/types/plugins";
 
 const valid = {
@@ -82,16 +82,45 @@ describe("buildRegistry", () => {
       mk("theme", true, { name: "Dark", css: ":root{}" }),
       mk("skill", true, { name: "S", instructions: "do" }),
       mk("slash-command", true, { command: "/t", description: "d" }),
+      mk("renderer", true, { language: "mermaid" }),
     ]);
     expect(reg.providers.map((p) => p.id)).toEqual(["anthropic"]);
     expect(reg.themes).toHaveLength(1);
     expect(reg.skills).toHaveLength(1);
     expect(reg.slashCommands).toHaveLength(1);
+    expect(reg.renderers.map((r) => r.language)).toEqual(["mermaid"]);
   });
 
   it("skips enabled plugins with no contribution", () => {
     const p = mk("provider", true, {});
     p.manifest.contributes = undefined;
     expect(buildRegistry([p]).providers).toHaveLength(0);
+  });
+});
+
+describe("hasRenderer", () => {
+  const reg = buildRegistry([
+    {
+      source: "builtin",
+      enabled: true,
+      manifest: {
+        id: "com.snak.mermaid",
+        name: "Mermaid",
+        version: "1.0.0",
+        category: "renderer",
+        apiVersion: 1,
+        contributes: { language: "Mermaid" } as never,
+      },
+    },
+  ]);
+
+  it("matches the contributed language case-insensitively", () => {
+    expect(hasRenderer(reg, "mermaid")).toBe(true);
+    expect(hasRenderer(reg, "MERMAID")).toBe(true);
+  });
+
+  it("is false for a language no renderer contributes", () => {
+    expect(hasRenderer(reg, "plantuml")).toBe(false);
+    expect(hasRenderer(buildRegistry([]), "mermaid")).toBe(false);
   });
 });

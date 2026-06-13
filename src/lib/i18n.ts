@@ -207,6 +207,7 @@ export const en = {
     "The command below will be staged in your terminal for review — it is never auto-executed. You press Enter there to run it.",
   "composer.stageInTerminal": "Stage in terminal",
   "composer.pluginBadge": "plugin",
+  "composer.mentionPaletteAria": "Mention a persona",
   "composer.terminalOpenError": "Couldn't open a terminal: {error}",
   "composer.pluginCommandNote":
     "The `{command}` command is provided by a plugin but has no built-in action in this host, so it can't run here.",
@@ -349,6 +350,15 @@ export const en = {
   "ollama.pullStagedHint":
     "Staged `ollama pull {name}` in your terminal — review it and press Enter there to run it, then Refresh here.",
   "ollama.pullInvalidName": "That doesn't look like a valid model name.",
+  "ollama.start": "Start Ollama",
+  "ollama.starting": "Starting…",
+  "ollama.startHint": "Runs `ollama serve` for you.",
+  "ollama.loadedModels": "Loaded now",
+  "ollama.loadedHint":
+    "Models currently held in memory. Unload one to free RAM/VRAM (it reloads on next use).",
+  "ollama.inMemory": "{size} in memory",
+  "ollama.unload": "Unload",
+  "ollama.suggestedLabel": "Suggested models",
 
   // --- Settings: memory / system prompt --------------------------------------------------------------
   "memory.title": "System prompt & memory",
@@ -499,6 +509,7 @@ export const en = {
   "plugins.category.theme": "Themes",
   "plugins.category.skill": "Skills",
   "plugins.category.slashCommand": "Slash commands",
+  "plugins.category.renderer": "Renderers",
   "plugins.noneInCategory": "No {category} installed.",
   "plugins.uninstallTitle": 'Uninstall "{name}"?',
 
