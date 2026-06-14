@@ -130,8 +130,6 @@
     "chat.viewChart": "Ver gráfico",
     "chat.playVideo": "Reproducir vídeo",
     "chat.openOnYouTube": "Abrir en YouTube",
-    "chat.popOutVideo": "Abrir en una ventana separada",
-    "chat.popOut": "Separar",
     "chat.inlineVideoUnavailable": "La reproducción integrada necesita gst-plugins-good; se abrirá en tu navegador.",
     "chat.downloadImage": "Descargar",
     "chat.imageSaved": "Imagen guardada.",

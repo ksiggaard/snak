@@ -102,6 +102,42 @@ describe("compactHistory", () => {
     ]);
   });
 
+  it("treats YouTube thumbnails as referenceable videos (manifest, not vision) when enabled", () => {
+    const vthumb: CompactableMessage = {
+      role: "assistant",
+      content: "here you go",
+      kind: "normal",
+      images: [
+        {
+          media_type: "image/jpeg",
+          data: "AAAA",
+          source: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+          title: "Cool Video",
+        },
+      ],
+    };
+    const history = compactHistory([user("find a video"), vthumb], undefined, true);
+    // The thumbnail is NOT sent as vision input…
+    expect(history[1].images).toEqual([]);
+    // …it's listed as a referenceable video with its watch URL instead.
+    expect(history[1].content).toContain(
+      "Video A — Cool Video (https://www.youtube.com/watch?v=dQw4w9WgXcQ)",
+    );
+    expect(history[1].content).not.toContain("Image A");
+  });
+
+  it("keeps YouTube thumbnails as plain images when videos are disabled (default)", () => {
+    const thumb = {
+      media_type: "image/jpeg",
+      data: "AAAA",
+      source: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    };
+    const history = compactHistory([user("x", [thumb])]);
+    expect(history[0].images).toEqual([thumb]);
+    expect(history[0].content).toContain("Image A");
+    expect(history[0].content).not.toContain("Video A");
+  });
+
   it("forwards fetched images from a recent assistant turn (within the window)", () => {
     const img = { media_type: "image/jpeg", data: "BBBB" };
     const assistantWithImage: CompactableMessage = {

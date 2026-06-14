@@ -34,7 +34,7 @@ gst-plugins-ugly gst-libav` (Debian/Ubuntu: the `gstreamer1.0-plugins-*` package
 This is **optional, not required**: the `media_playback_available` command
 (`commands/media.rs`) probes for `autoaudiosink` via `gst-inspect-1.0` at runtime
 (always true on macOS/Windows, which don't use GStreamer for webview media). When it
-returns false the YouTube embed degrades gracefully — Play/pop-out open the video in the
+returns false the YouTube embed degrades gracefully — Play opens the video in the
 system browser instead of mounting the crash-prone `<iframe>` — so snak runs fine without
 these packages; they only enable *inline* playback. Frontend seam: `src/lib/media.ts`
 (cached) consumed by `src/components/chat/YouTubeEmbed.tsx`.
