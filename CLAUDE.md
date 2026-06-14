@@ -23,6 +23,22 @@ Packaging: `npm run tauri build` (produces .deb/.rpm/AppImage). On Arch-based sy
 AppImage step needs `NO_STRIP=true npm run tauri build` — linuxdeploy's bundled `strip`
 can't read modern `.relr.dyn` ELF sections (see T5 in `TASKS.md`).
 
+Runtime deps (Linux, optional): in-app media playback (e.g. the YouTube embeds plugin)
+uses WebKitGTK's GStreamer backend, which needs **`gst-plugins-good`** — it provides the
+`autodetect` plugin (`autoaudiosink`/`autovideosink`) WebKitGTK reaches for by default;
+without it the WebKitWebProcess crashes with "GStreamer element autoaudiosink not found".
+The wider codec set (`gst-plugins-bad`, `gst-plugins-ugly`, `gst-libav`) is also needed
+for H.264/AAC. Install on Arch with `sudo pacman -S gst-plugins-good gst-plugins-bad
+gst-plugins-ugly gst-libav` (Debian/Ubuntu: the `gstreamer1.0-plugins-*` packages).
+
+This is **optional, not required**: the `media_playback_available` command
+(`commands/media.rs`) probes for `autoaudiosink` via `gst-inspect-1.0` at runtime
+(always true on macOS/Windows, which don't use GStreamer for webview media). When it
+returns false the YouTube embed degrades gracefully — Play/pop-out open the video in the
+system browser instead of mounting the crash-prone `<iframe>` — so snak runs fine without
+these packages; they only enable *inline* playback. Frontend seam: `src/lib/media.ts`
+(cached) consumed by `src/components/chat/YouTubeEmbed.tsx`.
+
 ## Conventions
 
 - **Path alias `@/`** → `src/` (configured in `vite.config.ts` + `tsconfig.json`). Import as `@/components/...`, `@/lib/...`.

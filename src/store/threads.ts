@@ -53,6 +53,8 @@ import { extractMentions } from "@/lib/mentions";
 import { runPersonaMemoryUpdate } from "@/lib/personaMemory";
 import { buildProjectSystemText } from "@/lib/projects";
 import { buildSkillsSystemText } from "@/lib/skills";
+import { buildChartsSystemText } from "@/lib/charts";
+import { buildYouTubeSystemText } from "@/lib/youtube";
 import { selectRegistry, usePlugins } from "@/store/plugins";
 import { useKeys } from "@/store/keys";
 import { buildGlobalSystemText } from "@/lib/systemContext";
@@ -301,11 +303,22 @@ async function loadSharedSystemBlocks(
   const tail: ApiMessage[] = [];
 
   // Enabled skills (T15): instruction packs from `skill` plugins.
-  const skillsSystemText = buildSkillsSystemText(
-    selectRegistry(usePlugins.getState()).skills,
-  );
+  const registry = selectRegistry(usePlugins.getState());
+  const skillsSystemText = buildSkillsSystemText(registry.skills);
   if (skillsSystemText)
     head.push({ role: "system", content: skillsSystemText, images: [] });
+
+  // Charts auto-instruct (com.snak.charts): teach the model the ```vega-lite
+  // fence when the charts renderer is enabled (empty otherwise).
+  const chartsSystemText = buildChartsSystemText(registry);
+  if (chartsSystemText)
+    head.push({ role: "system", content: chartsSystemText, images: [] });
+
+  // YouTube embeds auto-instruct (com.snak.youtube): tell the model to put video
+  // URLs on their own line so the inline player can replace them.
+  const youTubeSystemText = buildYouTubeSystemText(registry);
+  if (youTubeSystemText)
+    head.push({ role: "system", content: youTubeSystemText, images: [] });
 
   // Global system context (T10): the custom system-prompt addendum + the
   // user's memory entries (applies to every thread/provider).

@@ -5,6 +5,7 @@ import { codeText, languageFromClassName } from "@/lib/markdown";
 import { hasRenderer } from "@/lib/plugins";
 import { isShellLanguage, openInTerminal } from "@/lib/terminal";
 import { Mermaid } from "@/components/chat/Mermaid";
+import { VegaChart } from "@/components/chat/VegaChart";
 import { selectRegistry, usePlugins } from "@/store/plugins";
 import { useT } from "@/store/i18n";
 
@@ -42,6 +43,21 @@ export function CodeBlock({ className, children }: CodeBlockProps) {
     hasRenderer(registry, "mermaid")
   ) {
     return <Mermaid code={text} />;
+  }
+  // Charts (com.snak.charts): both ```vega-lite and ```vega fences are governed
+  // by the single "vega-lite" renderer contribution.
+  if (
+    language &&
+    (language.toLowerCase() === "vega-lite" ||
+      language.toLowerCase() === "vega") &&
+    hasRenderer(registry, "vega-lite")
+  ) {
+    return (
+      <VegaChart
+        code={text}
+        mode={language.toLowerCase() === "vega" ? "vega" : "vega-lite"}
+      />
+    );
   }
 
   const onCopy = async () => {

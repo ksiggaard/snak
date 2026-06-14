@@ -1,0 +1,13 @@
+{
+  "id": "com.snak.charts",
+  "name": "Charts",
+  "version": "1.0.0",
+  "category": "renderer",
+  "apiVersion": 1,
+  "description": "Renders ```vega-lite (and ```vega) fenced code blocks in assistant messages as charts. Disable to show the raw spec instead.",
+  "author": "snak",
+  "enabledByDefault": true,
+  "contributes": {
+    "language": "vega-lite"
+  }
+}
