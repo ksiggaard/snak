@@ -122,6 +122,8 @@ fn builtin_manifests() -> Vec<PluginManifest> {
         include_str!("builtin/ollama.json"),
         include_str!("builtin/terminal.json"),
         include_str!("builtin/mermaid.json"),
+        include_str!("builtin/charts.json"),
+        include_str!("builtin/youtube.json"),
     ];
     BUILTINS
         .iter()

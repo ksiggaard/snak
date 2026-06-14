@@ -1,11 +1,66 @@
-import { memo } from "react";
+import {
+  Children,
+  createContext,
+  isValidElement,
+  memo,
+  useContext,
+  type ReactNode,
+} from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 // github (light) + github-dark scoped to `.dark` — see highlight-theme.css.
 import "@/components/chat/highlight-theme.css";
 import { CodeBlock } from "@/components/chat/CodeBlock";
+import { YouTubeEmbed } from "@/components/chat/YouTubeEmbed";
 import { openExternal } from "@/lib/openExternal";
+import { hasRenderer } from "@/lib/plugins";
+import { parseYouTubeUrl, type YouTubeVideoOption } from "@/lib/youtube";
+import { selectRegistry, usePlugins } from "@/store/plugins";
+
+/**
+ * Maps an embedded YouTube video id → the picker options for its inline player
+ * (the active video plus the other tool-result options for the same query, each
+ * with its already-downloaded thumbnail). Supplied by the message renderer.
+ * Empty by default → the player falls back to a single video built from the link.
+ */
+const VideoGroupContext = createContext<Map<string, YouTubeVideoOption[]>>(
+  new Map(),
+);
+
+/**
+ * A paragraph whose sole content is a single YouTube link → the inline player
+ * (com.snak.youtube). Returns null when it isn't such a paragraph or the plugin
+ * is disabled, so the caller renders a normal `<p>`. Detecting at the paragraph
+ * level keeps the player block-level (valid HTML — an iframe can't live inside a
+ * `<p>`/`<a>`); inline-in-prose links stay plain links.
+ */
+function YouTubeParagraph({ children }: { children?: ReactNode }) {
+  const registry = usePlugins(selectRegistry);
+  const enabled = hasRenderer(registry, "youtube");
+  const groups = useContext(VideoGroupContext);
+
+  if (enabled) {
+    const kids = Children.toArray(children).filter(
+      (c) => !(typeof c === "string" && c.trim() === ""),
+    );
+    if (kids.length === 1 && isValidElement(kids[0])) {
+      const props = kids[0].props as { href?: string; children?: ReactNode };
+      if (typeof props.href === "string") {
+        const ref = parseYouTubeUrl(props.href);
+        if (ref) {
+          // The message renderer may have grouped the matching tool-result
+          // thumbnails into a picker; otherwise it's a lone video from the link.
+          const options = groups.get(ref.id) ?? [
+            { id: ref.id, href: props.href },
+          ];
+          return <YouTubeEmbed options={options} initialId={ref.id} />;
+        }
+      }
+    }
+  }
+  return <p className="my-1 leading-relaxed">{children}</p>;
+}
 
 /**
  * Renders assistant Markdown richly: GFM (tables, strikethrough, task lists,
@@ -116,7 +171,7 @@ const components: Components = {
     <ol className="my-2 list-decimal space-y-1 pl-5">{children}</ol>
   ),
   li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-  p: ({ children }) => <p className="my-1 leading-relaxed">{children}</p>,
+  p: ({ children }) => <YouTubeParagraph>{children}</YouTubeParagraph>,
   blockquote: ({ children }) => (
     <blockquote className="border-border text-muted-foreground my-2 border-l-2 pl-3 italic">
       {children}
@@ -141,21 +196,33 @@ const components: Components = {
   ),
 };
 
-function MarkdownImpl({ content }: { content: string }) {
+function MarkdownImpl({
+  content,
+  videoGroups,
+}: {
+  content: string;
+  /** Embedded video id → picker options (see VideoGroupContext). */
+  videoGroups?: Map<string, YouTubeVideoOption[]>;
+}) {
   return (
     <div className="text-sm break-words">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[
-          [rehypeHighlight, { detect: true, ignoreMissing: true }],
-        ]}
-        components={components}
-      >
-        {content}
-      </ReactMarkdown>
+      <VideoGroupContext.Provider value={videoGroups ?? EMPTY_GROUPS}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={[
+            [rehypeHighlight, { detect: true, ignoreMissing: true }],
+          ]}
+          components={components}
+        >
+          {content}
+        </ReactMarkdown>
+      </VideoGroupContext.Provider>
     </div>
   );
 }
+
+/** Stable empty-map identity so a groups-less Markdown keeps memo stable. */
+const EMPTY_GROUPS = new Map<string, YouTubeVideoOption[]>();
 
 // Memoize so unrelated store updates don't re-parse Markdown; during streaming
 // `content` changes each token, which still re-renders as intended.

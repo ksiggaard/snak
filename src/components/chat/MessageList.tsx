@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Check,
@@ -38,6 +38,14 @@ import {
 } from "@/lib/appearance";
 import { formatDuration, parseDbTime, relativeTime } from "@/lib/time";
 import { imageLabel, imageLabelOffsets } from "@/lib/imageLabels";
+import { hasRenderer } from "@/lib/plugins";
+import {
+  embeddedYouTubeIds,
+  parseYouTubeUrl,
+  watchUrl,
+  type YouTubeVideoOption,
+} from "@/lib/youtube";
+import { selectRegistry, usePlugins } from "@/store/plugins";
 import type { Bot } from "@/types/db";
 
 interface MessageListProps {
@@ -445,9 +453,80 @@ function ChatMessage({
   const injected = m.role === "assistant" && mentionBot != null;
   const botName = asBot ? (injected ? `@${asBot.name}` : asBot.name) : "";
 
-  const images = m.images.length > 0 && (
+  // YouTube embeds (com.snak.youtube): when a tool-result thumbnail belongs to a
+  // video that the message text embeds as an inline player, drop the now-
+  // redundant standalone thumbnail and hand its (already-downloaded) data to the
+  // player as its poster — so we show one element, not an image plus a blank
+  // video box. Only assistant messages with the plugin enabled are affected.
+  const ytEnabled = usePlugins((s) =>
+    hasRenderer(selectRegistry(s), "youtube"),
+  );
+  const { videoGroups, hiddenImageIds } = useMemo(() => {
+    const groups = new Map<string, YouTubeVideoOption[]>();
+    const hidden = new Set<number>();
+    if (ytEnabled && m.role === "assistant") {
+      // Tool-result thumbnails that are YouTube videos carry the watch URL in
+      // `source`; reuse their already-downloaded image as the poster/option.
+      const thumbs = m.images
+        .map((img, i) => {
+          const src = img.source;
+          const ref = src ? parseYouTubeUrl(src) : null;
+          return ref && src
+            ? {
+                i,
+                option: {
+                  id: ref.id,
+                  href: src,
+                  poster: imageDataUrl(img),
+                  title: img.title,
+                } satisfies YouTubeVideoOption,
+              }
+            : null;
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null);
+      const embedded = embeddedYouTubeIds(m.content);
+
+      if (embedded.length === 1 && thumbs.length > 0) {
+        // One player + the query's thumbnails → a video picker: active video
+        // first, then the other options; all thumbnails move into the picker.
+        const activeId = embedded[0];
+        const seen = new Set<string>();
+        const options: YouTubeVideoOption[] = [];
+        const activeThumb = thumbs.find((t) => t.option.id === activeId);
+        options.push(
+          activeThumb?.option ?? { id: activeId, href: watchUrl(activeId) },
+        );
+        seen.add(activeId);
+        for (const t of thumbs) {
+          if (!seen.has(t.option.id)) {
+            options.push(t.option);
+            seen.add(t.option.id);
+          }
+        }
+        for (const t of thumbs) hidden.add(t.i);
+        groups.set(activeId, options);
+      } else {
+        // Otherwise (no player, or several) merge each matching thumbnail into
+        // its own single-video player as a poster; leave the rest as images.
+        const embSet = new Set(embedded);
+        for (const t of thumbs) {
+          if (embSet.has(t.option.id) && !groups.has(t.option.id)) {
+            groups.set(t.option.id, [t.option]);
+            hidden.add(t.i);
+          }
+        }
+      }
+    }
+    return { videoGroups: groups, hiddenImageIds: hidden };
+  }, [ytEnabled, m.role, m.content, m.images]);
+
+  const images = m.images.length > hiddenImageIds.size && (
     <div className="flex flex-wrap gap-2">
       {m.images.map((img, i) => {
+        // A thumbnail merged into its video player (above) isn't shown again
+        // here; its label index is still reserved so the remaining labels keep
+        // matching the manifest the model received.
+        if (hiddenImageIds.has(i)) return null;
         // Persistent positional label (Image A, B, …) shown so the user can
         // reference a specific image to the model; the label text is kept in
         // English to match the manifest the model receives (see imageLabels).
@@ -509,7 +588,7 @@ function ChatMessage({
       // Assistant text is Markdown (GFM + highlighted code fences).
       // react-markdown tolerates partial/unclosed Markdown, so this
       // is safe to render against the growing streaming placeholder.
-      <Markdown content={m.content} />
+      <Markdown content={m.content} videoGroups={videoGroups} />
     ) : (
       <span className="whitespace-pre-wrap">{m.content}</span>
     ));

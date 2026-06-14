@@ -1,0 +1,13 @@
+{
+  "id": "com.snak.youtube",
+  "name": "YouTube embeds",
+  "version": "1.0.0",
+  "category": "renderer",
+  "apiVersion": 1,
+  "description": "Renders standalone YouTube links in assistant messages as an inline, click-to-play player (link stays available). Disable to show plain links instead.",
+  "author": "snak",
+  "enabledByDefault": true,
+  "contributes": {
+    "language": "youtube"
+  }
+}
