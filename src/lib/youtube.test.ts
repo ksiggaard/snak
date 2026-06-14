@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   buildYouTubeSystemText,
   embeddedYouTubeIds,
+  mediaLabelOffsets,
   parseYouTubeUrl,
+  partitionVideoThumbs,
   youTubeEmbedSrc,
 } from "@/lib/youtube";
 import type { HostRegistry } from "@/lib/plugins";
@@ -112,6 +114,60 @@ describe("embeddedYouTubeIds", () => {
     expect(embeddedYouTubeIds("https://example.com/watch?v=dQw4w9WgXcQ")).toEqual(
       [],
     );
+  });
+});
+
+const yt = (id: string) => ({
+  media_type: "image/jpeg",
+  data: "x",
+  source: `https://youtu.be/${id}`,
+});
+const pic = () => ({
+  media_type: "image/jpeg",
+  data: "x",
+  source: "https://example.com/a.jpg",
+});
+
+describe("partitionVideoThumbs", () => {
+  it("splits YouTube-source images out as videos when enabled", () => {
+    const { images, videoThumbs } = partitionVideoThumbs(
+      [pic(), yt("dQw4w9WgXcQ")],
+      true,
+    );
+    expect(images).toHaveLength(1);
+    expect(videoThumbs).toHaveLength(1);
+    expect(videoThumbs[0].source).toContain("youtu.be");
+  });
+
+  it("treats everything as images when disabled", () => {
+    const { images, videoThumbs } = partitionVideoThumbs(
+      [yt("dQw4w9WgXcQ"), pic()],
+      false,
+    );
+    expect(images).toHaveLength(2);
+    expect(videoThumbs).toHaveLength(0);
+  });
+});
+
+describe("mediaLabelOffsets", () => {
+  it("counts images and videos as independent sequences when enabled", () => {
+    const messages = [
+      { images: [pic(), yt("aaaaaaaaaaa")] },
+      { images: [yt("bbbbbbbbbbb")] },
+      { images: [pic()] },
+    ];
+    expect(mediaLabelOffsets(messages, true)).toEqual({
+      imageOffsets: [0, 1, 1],
+      videoOffsets: [0, 1, 2],
+    });
+  });
+
+  it("counts everything as images when disabled", () => {
+    const messages = [{ images: [yt("aaaaaaaaaaa"), pic()] }, { images: [] }];
+    expect(mediaLabelOffsets(messages, false)).toEqual({
+      imageOffsets: [0, 2],
+      videoOffsets: [0, 0],
+    });
   });
 });
 

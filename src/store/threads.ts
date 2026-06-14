@@ -55,6 +55,7 @@ import { buildProjectSystemText } from "@/lib/projects";
 import { buildSkillsSystemText } from "@/lib/skills";
 import { buildChartsSystemText } from "@/lib/charts";
 import { buildYouTubeSystemText } from "@/lib/youtube";
+import { hasRenderer } from "@/lib/plugins";
 import { selectRegistry, usePlugins } from "@/store/plugins";
 import { useKeys } from "@/store/keys";
 import { buildGlobalSystemText } from "@/lib/systemContext";
@@ -746,7 +747,11 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           ...(botBlock ? [botBlock] : []),
           ...(groupBlock ? [groupBlock] : []),
           ...shared.tail,
-          ...compactHistory(rows, group),
+          ...compactHistory(
+            rows,
+            group,
+            hasRenderer(selectRegistry(usePlugins.getState()), "youtube"),
+          ),
         ];
 
         // Stream the reply, appending a placeholder assistant bubble on the
@@ -1070,7 +1075,11 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         ...(botBlock ? [botBlock] : []),
         ...(groupBlock ? [groupBlock] : []),
         ...shared.tail,
-        ...compactHistory(priorRows, group),
+        ...compactHistory(
+          priorRows,
+          group,
+          hasRenderer(selectRegistry(usePlugins.getState()), "youtube"),
+        ),
       ];
       // Steer for "a different variation" (+ optional direction), folded into
       // the trailing user turn so the call stays valid for every provider.

@@ -15,18 +15,16 @@ import { CodeBlock } from "@/components/chat/CodeBlock";
 import { YouTubeEmbed } from "@/components/chat/YouTubeEmbed";
 import { openExternal } from "@/lib/openExternal";
 import { hasRenderer } from "@/lib/plugins";
-import { parseYouTubeUrl, type YouTubeVideoOption } from "@/lib/youtube";
+import { parseYouTubeUrl } from "@/lib/youtube";
 import { selectRegistry, usePlugins } from "@/store/plugins";
 
 /**
- * Maps an embedded YouTube video id → the picker options for its inline player
- * (the active video plus the other tool-result options for the same query, each
- * with its already-downloaded thumbnail). Supplied by the message renderer.
- * Empty by default → the player falls back to a single video built from the link.
+ * Video ids already shown by the message renderer in its labeled video gallery
+ * (from the search-result thumbnails). An in-text link to one of these is left
+ * as a plain link — the gallery above is the player, so we don't duplicate it.
+ * Empty by default → an in-text link renders its own lone player.
  */
-const VideoGroupContext = createContext<Map<string, YouTubeVideoOption[]>>(
-  new Map(),
-);
+const SuppressedVideosContext = createContext<Set<string>>(new Set());
 
 /**
  * A paragraph whose sole content is a single YouTube link → the inline player
@@ -38,7 +36,7 @@ const VideoGroupContext = createContext<Map<string, YouTubeVideoOption[]>>(
 function YouTubeParagraph({ children }: { children?: ReactNode }) {
   const registry = usePlugins(selectRegistry);
   const enabled = hasRenderer(registry, "youtube");
-  const groups = useContext(VideoGroupContext);
+  const suppressed = useContext(SuppressedVideosContext);
 
   if (enabled) {
     const kids = Children.toArray(children).filter(
@@ -48,13 +46,15 @@ function YouTubeParagraph({ children }: { children?: ReactNode }) {
       const props = kids[0].props as { href?: string; children?: ReactNode };
       if (typeof props.href === "string") {
         const ref = parseYouTubeUrl(props.href);
-        if (ref) {
-          // The message renderer may have grouped the matching tool-result
-          // thumbnails into a picker; otherwise it's a lone video from the link.
-          const options = groups.get(ref.id) ?? [
-            { id: ref.id, href: props.href },
-          ];
-          return <YouTubeEmbed options={options} initialId={ref.id} />;
+        // Skip videos already in the message's gallery above; otherwise this is
+        // a lone link with no search-result thumbnail → its own single player.
+        if (ref && !suppressed.has(ref.id)) {
+          return (
+            <YouTubeEmbed
+              options={[{ id: ref.id, href: props.href }]}
+              initialId={ref.id}
+            />
+          );
         }
       }
     }
@@ -198,15 +198,15 @@ const components: Components = {
 
 function MarkdownImpl({
   content,
-  videoGroups,
+  suppressedVideoIds,
 }: {
   content: string;
-  /** Embedded video id → picker options (see VideoGroupContext). */
-  videoGroups?: Map<string, YouTubeVideoOption[]>;
+  /** Video ids handled by the gallery above (see SuppressedVideosContext). */
+  suppressedVideoIds?: Set<string>;
 }) {
   return (
     <div className="text-sm break-words">
-      <VideoGroupContext.Provider value={videoGroups ?? EMPTY_GROUPS}>
+      <SuppressedVideosContext.Provider value={suppressedVideoIds ?? EMPTY_SET}>
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           rehypePlugins={[
@@ -216,13 +216,13 @@ function MarkdownImpl({
         >
           {content}
         </ReactMarkdown>
-      </VideoGroupContext.Provider>
+      </SuppressedVideosContext.Provider>
     </div>
   );
 }
 
-/** Stable empty-map identity so a groups-less Markdown keeps memo stable. */
-const EMPTY_GROUPS = new Map<string, YouTubeVideoOption[]>();
+/** Stable empty-set identity so a suppression-less Markdown keeps memo stable. */
+const EMPTY_SET = new Set<string>();
 
 // Memoize so unrelated store updates don't re-parse Markdown; during streaming
 // `content` changes each token, which still re-renders as intended.

@@ -179,8 +179,6 @@ export const en = {
   "chat.viewChart": "View chart",
   "chat.playVideo": "Play video",
   "chat.openOnYouTube": "Open on YouTube",
-  "chat.popOutVideo": "Pop out into a separate window",
-  "chat.popOut": "Pop out",
   "chat.inlineVideoUnavailable":
     "Inline playback needs gst-plugins-good — opening in your browser instead.",
   "chat.downloadImage": "Download",

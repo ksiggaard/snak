@@ -130,8 +130,6 @@
     "chat.viewChart": "Vis diagram",
     "chat.playVideo": "Afspil video",
     "chat.openOnYouTube": "Åbn på YouTube",
-    "chat.popOutVideo": "Pop ud i et separat vindue",
-    "chat.popOut": "Pop ud",
     "chat.inlineVideoUnavailable": "Indlejret afspilning kræver gst-plugins-good — åbner i din browser i stedet.",
     "chat.downloadImage": "Download",
     "chat.imageSaved": "Billede gemt.",

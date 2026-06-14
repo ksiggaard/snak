@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import { PictureInPicture2, Play, Video } from "lucide-react";
+import { Play, Video } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { mediaPlaybackAvailable } from "@/lib/media";
 import { openExternal } from "@/lib/openExternal";
-import { popOutVideo } from "@/lib/videoWindow";
 import {
   parseYouTubeUrl,
   youTubeEmbedSrc,
@@ -26,7 +25,7 @@ import { useT } from "@/store/i18n";
  * tool-result images, so showing them adds no network request.
  *
  * Codecs: if inline playback would crash the webview (missing GStreamer sink),
- * Play / pop-out open the active video in the system browser instead.
+ * Play opens the active video in the system browser instead.
  */
 export function YouTubeEmbed({
   options,
@@ -60,12 +59,6 @@ export function YouTubeEmbed({
   const onPlay = async () => {
     const ok = canEmbed ?? (await mediaPlaybackAvailable());
     if (ok) setPlaying(true);
-    else void openExternal(active.href);
-  };
-
-  const onPopOut = async () => {
-    const ok = canEmbed ?? (await mediaPlaybackAvailable());
-    if (ok) void popOutVideo(videoRef, label);
     else void openExternal(active.href);
   };
 
@@ -139,6 +132,11 @@ export function YouTubeEmbed({
                   <Play className="size-4 fill-current" />
                 </span>
               )}
+              {o.label && (
+                <span className="bg-background/80 text-foreground absolute top-0.5 left-0.5 rounded px-1 py-0.5 text-[9px] font-semibold backdrop-blur-sm">
+                  {o.label}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -156,20 +154,13 @@ export function YouTubeEmbed({
           className="hover:text-foreground flex min-w-0 flex-1 items-center gap-1.5 transition-colors"
         >
           <Video className="size-3.5 shrink-0" />
+          {active.label && (
+            <span className="text-foreground shrink-0 font-semibold">
+              {active.label} —
+            </span>
+          )}
           <span className="truncate underline underline-offset-2">{label}</span>
         </a>
-        {canEmbed !== false && (
-          <button
-            type="button"
-            onClick={() => void onPopOut()}
-            aria-label={t("chat.popOutVideo")}
-            title={t("chat.popOutVideo")}
-            className="hover:text-foreground inline-flex shrink-0 cursor-pointer items-center gap-1 transition-colors"
-          >
-            <PictureInPicture2 className="size-3.5" />
-            {t("chat.popOut")}
-          </button>
-        )}
       </div>
       {canEmbed === false && (
         <p className="text-muted-foreground border-border border-t px-3 py-1.5 text-xs">

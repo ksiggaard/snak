@@ -22,12 +22,62 @@ export interface YouTubeRef {
  */
 export interface YouTubeVideoOption {
   id: string;
-  /** Canonical watch URL (opened in the browser / used for pop-out). */
+  /** Canonical watch URL (opened in the system browser). */
   href: string;
   /** Thumbnail data URL, if a matching tool-result image was found. */
   poster?: string;
   /** Result title, if known (streaming-only — not persisted). */
   title?: string;
+  /** Persistent reference label ("Video A", "Video B", …), if assigned. */
+  label?: string;
+}
+
+/** A tool-result image whose `source` is a YouTube watch URL is really a video
+ * (search-result thumbnail), not a picture — so it's presented and referenced
+ * as a video rather than an image. */
+export function isYouTubeThumb(img: { source?: string }): boolean {
+  return img.source != null && parseYouTubeUrl(img.source) != null;
+}
+
+/**
+ * Split a message's images into real images and YouTube video thumbnails.
+ * `videosEnabled` mirrors the youtube plugin: when off, nothing is treated as a
+ * video (everything stays an image), so the UI/manifest behaviour matches.
+ */
+export function partitionVideoThumbs<T extends { source?: string }>(
+  images: readonly T[],
+  videosEnabled: boolean,
+): { images: T[]; videoThumbs: T[] } {
+  if (!videosEnabled) return { images: [...images], videoThumbs: [] };
+  const imgs: T[] = [];
+  const videoThumbs: T[] = [];
+  for (const im of images) (isYouTubeThumb(im) ? videoThumbs : imgs).push(im);
+  return { images: imgs, videoThumbs };
+}
+
+/**
+ * Conversation-wide label offsets for images and videos, counted separately by
+ * order of appearance (so "Image A/B…" and "Video A/B…" are independent stable
+ * sequences). Mirrors `imageLabelOffsets` but partitions YouTube thumbnails out
+ * into their own video sequence when `videosEnabled`.
+ */
+export function mediaLabelOffsets(
+  messages: readonly { images?: { source?: string }[] }[],
+  videosEnabled: boolean,
+): { imageOffsets: number[]; videoOffsets: number[] } {
+  const imageOffsets: number[] = [];
+  const videoOffsets: number[] = [];
+  let imgTotal = 0;
+  let vidTotal = 0;
+  for (const m of messages) {
+    imageOffsets.push(imgTotal);
+    videoOffsets.push(vidTotal);
+    for (const im of m.images ?? []) {
+      if (videosEnabled && isYouTubeThumb(im)) vidTotal++;
+      else imgTotal++;
+    }
+  }
+  return { imageOffsets, videoOffsets };
 }
 
 /** Canonical watch URL for a bare video id. */

@@ -37,14 +37,16 @@ import {
   type ChatStyle,
 } from "@/lib/appearance";
 import { formatDuration, parseDbTime, relativeTime } from "@/lib/time";
-import { imageLabel, imageLabelOffsets } from "@/lib/imageLabels";
+import { imageLabel } from "@/lib/imageLabels";
 import { hasRenderer } from "@/lib/plugins";
 import {
   embeddedYouTubeIds,
+  mediaLabelOffsets,
   parseYouTubeUrl,
-  watchUrl,
+  partitionVideoThumbs,
   type YouTubeVideoOption,
 } from "@/lib/youtube";
+import { YouTubeEmbed } from "@/components/chat/YouTubeEmbed";
 import { selectRegistry, usePlugins } from "@/store/plugins";
 import type { Bot } from "@/types/db";
 
@@ -424,6 +426,7 @@ function ChatMessage({
   mentionBot,
   latestReply,
   imageLabelStart,
+  videoLabelStart,
 }: {
   m: MessageView;
   chatStyle: ChatStyle;
@@ -434,6 +437,9 @@ function ChatMessage({
   /** Count of images in the thread before this message — its i-th image is
    *  labeled `imageLabel(imageLabelStart + i)` (T-image-refs). */
   imageLabelStart?: number;
+  /** Count of videos (YouTube search results) before this message — its k-th
+   *  video is labeled `Video ${imageLabel(videoLabelStart + k)}`. */
+  videoLabelStart?: number;
   /** Persona that authored this reply via an @-mention (T43, m.bot_id) —
    *  renders with a distinct `@Name` treatment. null = normal reply. */
   mentionBot?: Bot | null;
@@ -453,80 +459,41 @@ function ChatMessage({
   const injected = m.role === "assistant" && mentionBot != null;
   const botName = asBot ? (injected ? `@${asBot.name}` : asBot.name) : "";
 
-  // YouTube embeds (com.snak.youtube): when a tool-result thumbnail belongs to a
-  // video that the message text embeds as an inline player, drop the now-
-  // redundant standalone thumbnail and hand its (already-downloaded) data to the
-  // player as its poster — so we show one element, not an image plus a blank
-  // video box. Only assistant messages with the plugin enabled are affected.
+  // YouTube embeds (com.snak.youtube): a tool-result thumbnail whose source is a
+  // YouTube URL is a *video* (a search result), not a picture — so it's split
+  // out of the image grid and presented as a labeled video gallery ("Video A/B…")
+  // that's referenceable in conversation. The in-text link for a gallery video
+  // is suppressed (see suppressedVideoIds → Markdown) so we don't double-render.
   const ytEnabled = usePlugins((s) =>
     hasRenderer(selectRegistry(s), "youtube"),
   );
-  const { videoGroups, hiddenImageIds } = useMemo(() => {
-    const groups = new Map<string, YouTubeVideoOption[]>();
-    const hidden = new Set<number>();
-    if (ytEnabled && m.role === "assistant") {
-      // Tool-result thumbnails that are YouTube videos carry the watch URL in
-      // `source`; reuse their already-downloaded image as the poster/option.
-      const thumbs = m.images
-        .map((img, i) => {
-          const src = img.source;
-          const ref = src ? parseYouTubeUrl(src) : null;
-          return ref && src
-            ? {
-                i,
-                option: {
-                  id: ref.id,
-                  href: src,
-                  poster: imageDataUrl(img),
-                  title: img.title,
-                } satisfies YouTubeVideoOption,
-              }
-            : null;
-        })
-        .filter((x): x is NonNullable<typeof x> => x !== null);
-      const embedded = embeddedYouTubeIds(m.content);
+  const { realImages, videoOptions, activeVideoId, suppressedVideoIds } =
+    useMemo(() => {
+      const { images: real, videoThumbs } = partitionVideoThumbs(
+        m.images,
+        ytEnabled && m.role === "assistant",
+      );
+      const options: YouTubeVideoOption[] = videoThumbs.map((img, k) => ({
+        id: parseYouTubeUrl(img.source!)!.id,
+        href: img.source!,
+        poster: imageDataUrl(img),
+        title: img.title,
+        label: `Video ${imageLabel((videoLabelStart ?? 0) + k)}`,
+      }));
+      // The video the message linked (if any) is the gallery's default-active.
+      const ids = new Set(options.map((o) => o.id));
+      const embedded = embeddedYouTubeIds(m.content).find((id) => ids.has(id));
+      return {
+        realImages: real,
+        videoOptions: options,
+        activeVideoId: embedded ?? options[0]?.id,
+        suppressedVideoIds: ids,
+      };
+    }, [ytEnabled, m.role, m.content, m.images, videoLabelStart]);
 
-      if (embedded.length === 1 && thumbs.length > 0) {
-        // One player + the query's thumbnails → a video picker: active video
-        // first, then the other options; all thumbnails move into the picker.
-        const activeId = embedded[0];
-        const seen = new Set<string>();
-        const options: YouTubeVideoOption[] = [];
-        const activeThumb = thumbs.find((t) => t.option.id === activeId);
-        options.push(
-          activeThumb?.option ?? { id: activeId, href: watchUrl(activeId) },
-        );
-        seen.add(activeId);
-        for (const t of thumbs) {
-          if (!seen.has(t.option.id)) {
-            options.push(t.option);
-            seen.add(t.option.id);
-          }
-        }
-        for (const t of thumbs) hidden.add(t.i);
-        groups.set(activeId, options);
-      } else {
-        // Otherwise (no player, or several) merge each matching thumbnail into
-        // its own single-video player as a poster; leave the rest as images.
-        const embSet = new Set(embedded);
-        for (const t of thumbs) {
-          if (embSet.has(t.option.id) && !groups.has(t.option.id)) {
-            groups.set(t.option.id, [t.option]);
-            hidden.add(t.i);
-          }
-        }
-      }
-    }
-    return { videoGroups: groups, hiddenImageIds: hidden };
-  }, [ytEnabled, m.role, m.content, m.images]);
-
-  const images = m.images.length > hiddenImageIds.size && (
+  const imageGrid = realImages.length > 0 && (
     <div className="flex flex-wrap gap-2">
-      {m.images.map((img, i) => {
-        // A thumbnail merged into its video player (above) isn't shown again
-        // here; its label index is still reserved so the remaining labels keep
-        // matching the manifest the model received.
-        if (hiddenImageIds.has(i)) return null;
+      {realImages.map((img, i) => {
         // Persistent positional label (Image A, B, …) shown so the user can
         // reference a specific image to the model; the label text is kept in
         // English to match the manifest the model receives (see imageLabels).
@@ -551,6 +518,15 @@ function ChatMessage({
           </button>
         );
       })}
+    </div>
+  );
+  const videoGallery = videoOptions.length > 0 && activeVideoId && (
+    <YouTubeEmbed options={videoOptions} initialId={activeVideoId} />
+  );
+  const images = (imageGrid || videoGallery) && (
+    <div className="flex flex-col gap-2">
+      {imageGrid}
+      {videoGallery}
     </div>
   );
   // Document attachments (T39) — rendered alongside images, so they appear in
@@ -588,7 +564,7 @@ function ChatMessage({
       // Assistant text is Markdown (GFM + highlighted code fences).
       // react-markdown tolerates partial/unclosed Markdown, so this
       // is safe to render against the growing streaming placeholder.
-      <Markdown content={m.content} videoGroups={videoGroups} />
+      <Markdown content={m.content} suppressedVideoIds={suppressedVideoIds} />
     ) : (
       <span className="whitespace-pre-wrap">{m.content}</span>
     ));
@@ -841,10 +817,15 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
       lastAssistantIndex = k;
   }
 
-  // Per-message image-label offsets (Image A, B, … by order of appearance),
-  // matching the labels injected into the API history so a user reference like
-  // "Image B" lines up with what the model was told (T-image-refs).
-  const imageOffsets = imageLabelOffsets(messages);
+  // Per-message label offsets (Image A/B… and Video A/B… by order of
+  // appearance), matching the labels injected into the API history so a user
+  // reference like "Image B" / "Video B" lines up with what the model was told.
+  // Videos (YouTube search results) are a separate sequence when the plugin is
+  // on (see partitionVideoThumbs); off → everything counts as images.
+  const ytEnabled = usePlugins((s) =>
+    hasRenderer(selectRegistry(s), "youtube"),
+  );
+  const { imageOffsets, videoOffsets } = mediaLabelOffsets(messages, ytEnabled);
 
   if (messages.length === 0 && !pending) {
     // Empty chat: a persona greets with its own starters (T38); a plain new
@@ -906,6 +887,7 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
             bot={bot}
             latestReply={idx === lastAssistantIndex}
             imageLabelStart={imageOffsets[idx]}
+            videoLabelStart={videoOffsets[idx]}
             mentionBot={
               m.bot_id ? (bots.find((b) => b.id === m.bot_id) ?? null) : null
             }
