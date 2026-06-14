@@ -1,4 +1,6 @@
+import type { StreamEvent } from "@/lib/chat";
 import { listAttachments, listMessages } from "@/lib/db";
+import { planVariants } from "@/lib/variations";
 import type { Message } from "@/types/db";
 
 export interface MessageImage {
@@ -13,7 +15,24 @@ export interface MessageToolCall {
   name: string;
   /** Populated for the built-in `web__fetch_url` tool. */
   url?: string;
+  /** Correlation id (matches stream `tool_output`/`tool_done` events). */
+  id?: string;
+  /** Resolved command line / target, for tools that run one (sys diagnostics). */
+  command?: string;
+  /** Captured output (the tool's result text / streamed stdout), shown in the
+   * collapsible activity panel. Persisted, capped. */
+  output?: string;
+  /** False when the tool errored; undefined/true otherwise. */
+  ok?: boolean;
+  /** Transient (streaming-only, never persisted): the tool is still executing,
+   * so the activity panel renders expanded with a spinner. */
+  running?: boolean;
 }
+
+/** Cap on persisted tool output, so a huge command result can't bloat the DB
+ * row. The model already received the full (separately-capped) result; this is
+ * only the reviewable UI copy. */
+export const TOOL_OUTPUT_PERSIST_BUDGET = 20_000;
 
 /** A document attached to a user message (T39): the original file name plus
  * the *extracted text* (stored in the attachment row's `data`). */
@@ -30,6 +49,62 @@ export interface MessageView extends Message {
   images: MessageImage[];
   documents: MessageDocument[];
   toolCalls: MessageToolCall[];
+  /** Sibling variant ids (oldest→newest) when this reply belongs to a variant
+   * group (T54), incl. this row's own id; undefined for ungrouped rows. The
+   * UI shows the carousel + regenerate controls only when this is present. */
+  variantIds?: string[];
+}
+
+/**
+ * Fold a stream event's tool-lifecycle fields into the running `toolCalls`
+ * accumulator (mutated in place): a `toolCall` appends a record rendered as a
+ * live panel; `toolOutput` chunks append to its captured output; `toolDone`
+ * stops its spinner. Text and approval events are handled by the caller (they
+ * have side effects beyond the accumulator). Shared by the send + regenerate
+ * streaming paths so both surface tool activity identically.
+ */
+export function applyToolEvent(
+  event: StreamEvent,
+  toolCalls: MessageToolCall[],
+): void {
+  if (event.toolCall) {
+    toolCalls.push({
+      id: event.toolCall.id,
+      name: event.toolCall.name,
+      url: event.toolCall.url,
+      command: event.toolCall.command,
+      output: "",
+      running: true,
+    });
+  }
+  if (event.toolOutput) {
+    const tc = toolCalls.find((c) => c.id === event.toolOutput!.id);
+    if (tc) tc.output = (tc.output ?? "") + event.toolOutput.chunk + "\n";
+  }
+  if (event.toolDone) {
+    const tc = toolCalls.find((c) => c.id === event.toolDone!.id);
+    if (tc) {
+      tc.running = false;
+      tc.ok = event.toolDone.ok;
+    }
+  }
+}
+
+/** Strip the transient `running` flag and cap the captured output for storage,
+ * yielding the JSON payload of a persisted `tool_call` attachment. */
+export function persistableToolCall(tc: MessageToolCall): MessageToolCall {
+  const output =
+    tc.output && tc.output.length > TOOL_OUTPUT_PERSIST_BUDGET
+      ? tc.output.slice(0, TOOL_OUTPUT_PERSIST_BUDGET) + "\n[… truncated]"
+      : tc.output;
+  return {
+    name: tc.name,
+    url: tc.url,
+    id: tc.id,
+    command: tc.command,
+    output: output || undefined,
+    ok: tc.ok,
+  };
 }
 
 /** Parse a persisted `tool_call` attachment's JSON payload. Tolerant of
@@ -41,6 +116,10 @@ function parseToolCall(data: string): MessageToolCall | null {
       return {
         name: obj.name,
         url: typeof obj.url === "string" ? obj.url : undefined,
+        id: typeof obj.id === "string" ? obj.id : undefined,
+        command: typeof obj.command === "string" ? obj.command : undefined,
+        output: typeof obj.output === "string" ? obj.output : undefined,
+        ok: typeof obj.ok === "boolean" ? obj.ok : undefined,
       };
     }
   } catch {
@@ -58,12 +137,18 @@ export async function loadThreadMessages(
   threadId: string,
 ): Promise<MessageView[]> {
   const messages = await listMessages(threadId);
+  // Collapse variant groups (T54) to one slot each — the *selected* variant,
+  // positioned at the group's anchor — while carrying the sibling ids for the
+  // carousel. Ungrouped rows pass through unchanged.
+  const slots = planVariants(messages);
   return Promise.all(
-    messages.map(async (m): Promise<MessageView> => {
+    slots.map(async ({ emit: m, variantIds }): Promise<MessageView> => {
+      const variants =
+        variantIds && variantIds.length > 0 ? { variantIds } : {};
       // System rows and synthetic compaction summaries (T28) carry no
       // attachments, so skip the query for them.
       if (m.role === "system" || m.kind === "summary")
-        return { ...m, images: [], documents: [], toolCalls: [] };
+        return { ...m, images: [], documents: [], toolCalls: [], ...variants };
       const attachments = await listAttachments(m.id);
       const images = attachments
         .filter((a) => a.kind === "image")
@@ -79,7 +164,7 @@ export async function loadThreadMessages(
         .filter((a) => a.kind === "tool_call")
         .map((a) => parseToolCall(a.data))
         .filter((tc): tc is MessageToolCall => tc !== null);
-      return { ...m, images, documents, toolCalls };
+      return { ...m, images, documents, toolCalls, ...variants };
     }),
   );
 }

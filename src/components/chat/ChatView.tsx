@@ -108,6 +108,7 @@ export function ChatView() {
   const currentThreadId = useThreads((s) => s.currentThreadId);
   const threads = useThreads((s) => s.threads);
   const draftProvider = useThreads((s) => s.draftProvider);
+  const draftModel = useThreads((s) => s.draftModel);
   const draftIncognito = useThreads((s) => s.draftIncognito);
   const draftBotId = useThreads((s) => s.draftBotId);
 
@@ -127,6 +128,7 @@ export function ChatView() {
   // mirrors ModelPicker so the key-gating in Composer matches what will be used.
   const current = threads.find((t) => t.id === currentThreadId);
   const provider = current?.provider ?? draftProvider;
+  const model = current?.model ?? draftModel;
 
   // Incognito (T29): the saved thread's flag, or the draft flag while unsaved.
   const incognito = current ? !!current.ephemeral : draftIncognito;
@@ -146,10 +148,13 @@ export function ChatView() {
     providers.find((p) => p.id === provider)?.label ?? provider;
   const providerLocal = isKeylessProvider(provider);
 
-  // Show "Thinking…" only until the first streamed token arrives; after that
-  // the growing assistant bubble conveys progress.
+  // Show "Thinking…" until the first streamed token arrives (after that the
+  // growing assistant bubble conveys progress), and again in the gap after a
+  // tool call finishes while the model composes its follow-up — so a slow
+  // post-tool round doesn't look like the persona stopped responding.
   const last = messages[messages.length - 1];
-  const pending = busy && (!last || last.role === "user");
+  const awaitingModel = useThreads((s) => s.awaitingModel);
+  const pending = busy && (!last || last.role === "user" || awaitingModel);
 
   return (
     <div className="relative flex flex-1 flex-row gap-3 overflow-hidden">
@@ -187,6 +192,7 @@ export function ChatView() {
           onCancel={() => void cancel()}
           busy={busy}
           provider={provider}
+          model={model}
           providerEnabled={providerEnabled}
           anyProvider={anyProvider}
         />

@@ -2303,3 +2303,101 @@ cursor is.
   `--sidebar-primary*` left as-is. `DEFAULT_PICKER_COLORS.dark` updated to match so the
   Appearance swatches + reset target the new defaults; light mode unchanged. Verified: full
   frontend gate.
+
+---
+
+## T52 — Web search for small models (search_web tool, configurable backend)
+
+- **Status:** done
+- **Owner:** Claude (T52)
+- **Priority:** P2
+- **Layer:** Rust (extend built-in `web` MCP server) + Frontend (settings + key)
+- **Depends on:** T13 (MCP + built-in web server)
+
+(IDEA 23.) Small models can't guess the URLs to `fetch_url`. Extend the built-in `web`
+server with a `search_web` tool so the model can search → get URLs → fetch them. Backend is
+**configurable**: keyless DuckDuckGo by default, optional API-key provider (Brave/Serper).
+
+**Acceptance criteria:**
+- A `web__search_web` tool returning a ranked title/URL/snippet list for a query.
+- Default keyless backend (works out of the box); switchable to a keyed provider whose API
+  key is stored in the keychain (never in the webview).
+- The tool-call loop and no-tools invariant are unchanged; the system prompt nudges
+  search-then-fetch.
+
+**Notes:**
+- 2026-06-13 (Claude): New `src-tauri/src/mcp/web_search.rs` — `tool_def()` (the `search_web`
+  descriptor) + `search(client, args, provider)` dispatching by backend: **DuckDuckGo** (keyless,
+  scrapes `html.duckduckgo.com/html/`, pure `parse_duckduckgo_html`/`decode_ddg_href`/
+  `percent_decode` helpers, unit-tested), **Brave** (`api.search.brave.com`, `X-Subscription-Token`)
+  and **Serper** (`google.serper.dev`, `X-API-KEY`) reading the key in-process via
+  `keys::get_api_key("search.<provider>")`. `web_browse::tools()` now advertises both tools and
+  `web_browse::call_tool` gained a `search_provider: Option<&str>` param routed from `mcp::mod`'s
+  `ServerConfig.search_provider` (new `#[serde(default)]` field) through `builtin_call`. No
+  `chat_stream` signature change — the backend rides on the web server's config entry.
+  `TOOL_SYSTEM_PROMPT` (`commands/chat.rs`) updated to mention search-then-fetch. Frontend:
+  `McpServer.search_provider` (snake_case to match the nested Rust field) defaulting to
+  `duckduckgo` on the built-in web server (preserved through `withBuiltins`); a provider `<select>`
+  + keyed-provider API-key field in the web server's row in `settings/McpServers.tsx`
+  (`setSearchApiKey` → keychain account `search.<id>`). New `mcp.search*` i18n keys in the catalog
+  + all five packs. Search is defensive (parse failures → "no results" text, fed back as a tool
+  result, never aborting the turn). Verified: `cargo build`/`clippy`/`fmt`/`test` (83, +7
+  web_search), `npm run build`/`lint`/`test` (461).
+
+---
+
+## T53 — Context-size display at the bottom of the chat
+
+- **Status:** done
+- **Owner:** Claude (T53)
+- **Priority:** P2
+- **Layer:** Frontend + settings (per-model window map)
+- **Depends on:** T16 (usage), T28 (compaction), T39 (documents)
+
+(IDEA 24.) Show how much context the next message will consume. Live **estimate** by default;
+**optionally** register a per-model max context window to also show `used / max (%)` with a bar.
+
+**Acceptance criteria:**
+- A readout at the bottom of the chat showing the estimated tokens of the next request, updating
+  live as the thread/draft changes.
+- A settings option to register a max context window per model; when set, the readout adds a
+  `used / max (%)` usage bar; models without an entry show just the estimate.
+
+**Notes:**
+- 2026-06-13 (Claude): Pure estimator `src/lib/contextSize.ts` (`estimateTokens` ≈ `len/4`,
+  `estimateMessagesTokens` over the post-compaction history via `compactHistory` so document text
+  rides in content + a flat per-image allowance, `estimateContextTokens` adds the unsent draft) —
+  unit-tested. Display: `src/components/chat/ContextMeter.tsx` mounted at the bottom of `Composer`
+  (between staged attachments and the button row); always shows `~N tokens` (labelled estimate),
+  and `used / max (%)` + a fill bar (warns amber ≥90%, destructive ≥100%) when the active model has
+  a configured window. Per-model windows are a JSON `{ model: maxTokens }` in the `settings` table
+  (`MODEL_CONTEXT_WINDOWS_KEY`, helpers in `db.ts`), a `useContextWindows` store loaded at startup
+  in `App.tsx`, and a `settings/ContextWindows` card (added to `SettingsView`) that picks from the
+  configured models. `ChatView` passes the effective `model` to `Composer`. New `composer.context*`
+  + `contextWindows.*` + `settings.nav.contextWindows` i18n keys in the catalog + all five packs.
+  Estimates are client-side (no tokenizer); exact usage is still captured post-send by T16.
+  Verified: `npm run build`/`lint`/`test` (461, incl. new estimator tests).
+
+---
+
+## T54 — Mermaid diagram background when enlarged
+
+- **Status:** done
+- **Owner:** Claude (T54)
+- **Priority:** P3
+- **Layer:** Frontend
+- **Depends on:** T42 (Mermaid), T44 (lightbox)
+
+(IDEA 25.) An enlarged Mermaid diagram (the lightbox) had no background, so it sat transparent
+on the dark backdrop. Add a themed background behind the enlarged diagram (and bake it into the
+downloaded SVG). Inline in-chat diagrams are unchanged.
+
+**Notes:**
+- 2026-06-13 (Claude): `src/lib/images.ts` gained `withSvgBackground(svg, bg)` (inserts an opaque
+  `<rect>` covering the `viewBox`, falling back to 100%, as the first child); `fitSvg(svg, bg?)` and
+  `downloadSvg(svg, bg?)` thread it through so both the on-screen enlargement and the saved `.svg`
+  carry the background. The lightbox store's svg content gained an optional `bg`; `Mermaid` resolves
+  it from `--card` at click time via the new `resolveCssVarColor` helper in `lib/theme.ts` (probes a
+  throwaway element so the active/installed theme — oklch, hex, or override — normalises to a
+  portable `rgb()`). `ImageLightbox` also sets the wrapper `bg-card` + padding so the letterbox
+  margins read as a card. Unit-tested in `images.test.ts`. Verified: `npm run build`/`lint`/`test`.

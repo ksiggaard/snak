@@ -8,6 +8,7 @@
 use anyhow::{anyhow, Context};
 use serde_json::json;
 
+use super::web_search;
 use super::ToolDef;
 
 /// The id used to namespace this server's tools (`web__fetch_url`).
@@ -17,33 +18,42 @@ pub const SERVER_ID: &str = "web";
 /// blow the context window. Generous but bounded.
 const MAX_TEXT_LEN: usize = 20_000;
 
-/// The tools this built-in server advertises. One tool: fetch a URL.
+/// The tools this built-in server advertises: fetch a URL, and search the web
+/// (T52) so a model without a URL can discover one to fetch.
 pub fn tools() -> Vec<ToolDef> {
-    vec![ToolDef {
-        name: "fetch_url".to_string(),
-        description: "Fetch a web page over HTTP(S) and return its readable text \
-                      content (HTML tags, scripts, and styles stripped). Use this \
-                      to look up current information from a specific URL."
-            .to_string(),
-        input_schema: json!({
-            "type": "object",
-            "properties": {
-                "url": {
-                    "type": "string",
-                    "description": "The absolute http:// or https:// URL to fetch."
-                }
-            },
-            "required": ["url"]
-        }),
-    }]
+    vec![
+        ToolDef {
+            name: "fetch_url".to_string(),
+            description: "Fetch a web page over HTTP(S) and return its readable text \
+                          content (HTML tags, scripts, and styles stripped). Use this \
+                          to look up current information from a specific URL."
+                .to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "The absolute http:// or https:// URL to fetch."
+                    }
+                },
+                "required": ["url"]
+            }),
+        },
+        web_search::tool_def(),
+    ]
 }
 
-/// Execute one tool call against the built-in server. Only `fetch_url` exists.
+/// Execute one tool call against the built-in server: `fetch_url` or
+/// `search_web` (T52). `search_provider` selects the search backend.
 pub async fn call_tool(
     client: &reqwest::Client,
     tool: &str,
     args: &serde_json::Value,
+    search_provider: Option<&str>,
 ) -> anyhow::Result<String> {
+    if tool == "search_web" {
+        return web_search::search(client, args, search_provider).await;
+    }
     if tool != "fetch_url" {
         return Err(anyhow!("unknown built-in tool: {tool}"));
     }
@@ -195,9 +205,10 @@ mod tests {
     }
 
     #[test]
-    fn advertises_one_tool() {
+    fn advertises_fetch_and_search_tools() {
         let t = tools();
-        assert_eq!(t.len(), 1);
-        assert_eq!(t[0].name, "fetch_url");
+        assert_eq!(t.len(), 2);
+        assert!(t.iter().any(|d| d.name == "fetch_url"));
+        assert!(t.iter().any(|d| d.name == "search_web"));
     }
 }

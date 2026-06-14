@@ -37,12 +37,27 @@ const MAX_TOOL_ROUNDS: usize = 5;
 /// conservative models (notably `mistral-large`) answer about web pages from
 /// memory instead of calling `web__fetch_url`, producing confident
 /// hallucinations. Nudges tool use and forbids fabricating fetched content.
-const TOOL_SYSTEM_PROMPT: &str = "You have tools available, including \
-`web__fetch_url`, which returns the readable text of a web page. When the user \
-shares a URL or asks about the contents of a specific web page, you MUST call \
-`web__fetch_url` to read it before answering — never summarize or describe a page \
-from memory. If a fetch fails or returns no usable content, say you couldn't read \
-the page rather than guessing.";
+const TOOL_SYSTEM_PROMPT: &str = "You have tools available. `web__fetch_url` \
+returns the readable text of a web page, and `web__search_web` returns a ranked \
+list of results (title, URL, snippet) for a query. When the user shares a URL or \
+asks about the contents of a specific web page, you MUST call `web__fetch_url` to \
+read it before answering. When you need current information but don't have a URL, \
+call `web__search_web` first to find relevant pages, then `web__fetch_url` on the \
+most relevant result to read it. Never summarize or describe a page from memory. \
+The `sys__*` tools inspect the local machine (read files and directories, check \
+permissions, and run read-only diagnostic commands such as listing processes, \
+disk, memory, and network). Use them when the user asks about the state of their \
+system. CRITICAL: after a tool returns a result, you MUST continue and write a \
+reply that answers the user's question using that result — do not stop after \
+calling a tool. If a tool call fails or returns no usable content, say so rather \
+than guessing.";
+
+/// Appended as a trailing `user` turn after each tool-result round, to re-anchor
+/// the model on answering instead of drifting (small local models otherwise tend
+/// to greet generically once a tool turn ends the context).
+const POST_TOOL_NUDGE: &str = "The tool results above are now available to you. \
+Using them, give a direct answer to my previous question. Do not greet me or ask \
+what I need next — just answer the question.";
 
 /// Shared cancellation flag for the in-flight stream, held in Tauri managed
 /// state. Only one stream runs at a time from the chat UI.
@@ -166,11 +181,23 @@ pub async fn chat_stream(
                 }
             }
 
+            // The resolved command line / target (for tools that run one) rides
+            // along on the start event so the UI's live panel can show `$ …`.
+            let command = if mcp::requires_approval(&call.name) {
+                Some(mcp::describe_call(call).1)
+            } else {
+                None
+            };
             on_delta
-                .send(StreamDelta::tool(call))
+                .send(StreamDelta::tool(call, command))
                 .map_err(|e| format!("channel send failed: {e}"))?;
 
-            let content = mcp::call_tool(&client, &servers, call).await;
+            // Runs the tool, streaming any live output to the UI as it arrives.
+            let content = mcp::call_tool(&client, &servers, call, &on_delta).await;
+            let ok = !content.starts_with("tool error:");
+            on_delta
+                .send(StreamDelta::tool_done(&call.id, ok))
+                .map_err(|e| format!("channel send failed: {e}"))?;
             results.push(ToolResult {
                 tool_call_id: call.id.clone(),
                 name: call.name.clone(),
@@ -202,6 +229,18 @@ pub async fn chat_stream(
             images: Vec::new(),
             tool_calls: Vec::new(),
             tool_results: results,
+        });
+        // Re-anchor the task right next to the generation point. Weaker (small,
+        // local) models often lose the thread after a tool turn and fall back to
+        // a generic persona greeting; a trailing instruction to actually answer
+        // pulls them back on task. Harmless for strong models. (Loop-local only:
+        // these synthetic turns never touch the DB.)
+        history.push(ChatMessage {
+            role: "user".into(),
+            content: POST_TOOL_NUDGE.into(),
+            images: Vec::new(),
+            tool_calls: Vec::new(),
+            tool_results: Vec::new(),
         });
     }
 

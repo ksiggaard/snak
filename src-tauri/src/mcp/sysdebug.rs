@@ -24,6 +24,7 @@ use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context};
 use serde_json::{json, Value};
+use tokio::io::{AsyncBufReadExt, BufReader};
 
 use super::ToolDef;
 
@@ -33,6 +34,13 @@ pub const SERVER_ID: &str = "sys";
 /// Max characters of any single tool result handed back to the model, so a huge
 /// file or command output can't blow the context window. Generous but bounded.
 const MAX_TEXT_LEN: usize = 20_000;
+/// A much tighter cap on the *model-facing* copy of a diagnostic command's
+/// output. The full output still streams to the UI panel (the human sees
+/// everything); the model only needs enough to answer, and small local models
+/// have a small context window — a 300-line `ps aux` would overflow it and push
+/// the user's question out of context. These bound the returned copy only.
+const MODEL_RESULT_MAX_LINES: usize = 80;
+const MODEL_RESULT_MAX_CHARS: usize = 6_000;
 /// Max bytes we read off disk for `read_file` before truncating (covers
 /// `MAX_TEXT_LEN` chars comfortably even for multi-byte UTF-8).
 const MAX_READ_BYTES: u64 = 256 * 1024;
@@ -336,7 +344,7 @@ pub fn describe(tool: &str, args: &Value) -> (String, String) {
 /// Execute one read-only tool call. Errors are returned as `Err` and surfaced to
 /// the model as a failed `tool_result` by the chat loop (a bad call never aborts
 /// the turn).
-pub async fn call_tool(tool: &str, args: &Value) -> anyhow::Result<String> {
+pub async fn call_tool(tool: &str, args: &Value, emit: super::LineSink<'_>) -> anyhow::Result<String> {
     match tool {
         "list_directory" => list_directory(require_str(args, "path")?),
         "read_file" => read_file(require_str(args, "path")?),
@@ -350,7 +358,9 @@ pub async fn call_tool(tool: &str, args: &Value) -> anyhow::Result<String> {
                 .unwrap_or(false);
             search_files(root, pattern, content)
         }
-        "run_diagnostic" => run_diagnostic(args).await,
+        // Only the command runner streams live output (one stdout line per
+        // chunk); the filesystem tools return their result in one shot.
+        "run_diagnostic" => run_diagnostic(args, emit).await,
         other => Err(anyhow!("unknown system tool: {other}")),
     }
 }
@@ -574,7 +584,7 @@ fn first_content_match(bytes: &[u8], needle: &str) -> Option<String> {
 // Diagnostic commands (read-only, fixed argv, no shell)
 // ---------------------------------------------------------------------------
 
-async fn run_diagnostic(args: &Value) -> anyhow::Result<String> {
+async fn run_diagnostic(args: &Value, emit: super::LineSink<'_>) -> anyhow::Result<String> {
     let probe_key = require_str(args, "probe")?;
     let probe = find_probe(probe_key).ok_or_else(|| anyhow!("unknown probe `{probe_key}`"))?;
 
@@ -591,25 +601,90 @@ async fn run_diagnostic(args: &Value) -> anyhow::Result<String> {
         command.arg(path);
     }
 
-    let run = command.output();
-    let output = match tokio::time::timeout(DIAGNOSTIC_TIMEOUT, run).await {
-        Err(_) => bail!("`{}` timed out after {:?}", probe.prog, DIAGNOSTIC_TIMEOUT),
-        Ok(Err(e)) if e.kind() == std::io::ErrorKind::NotFound => {
+    // Spawn with piped stdout so we can stream each line to the UI as it is
+    // produced (the "live terminal" view), accumulating the same text we return
+    // to the model. stderr is captured separately and appended on a non-zero
+    // exit. The whole read is bounded by DIAGNOSTIC_TIMEOUT.
+    command
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+
+    let mut child = match command.spawn() {
+        Ok(c) => c,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             bail!("`{}` is not installed on this system", probe.prog)
         }
-        Ok(Err(e)) => return Err(e).with_context(|| format!("running {}", probe.prog)),
-        Ok(Ok(o)) => o,
+        Err(e) => return Err(e).with_context(|| format!("running {}", probe.prog)),
     };
 
-    let mut out = String::from_utf8_lossy(&output.stdout).into_owned();
-    if !output.status.success() {
-        let err = String::from_utf8_lossy(&output.stderr);
-        out.push_str(&format!("\n[exit {}] {}", output.status, err.trim()));
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| anyhow!("no child stdout"))?;
+
+    let prog = probe.prog;
+    let collect = async {
+        let mut acc = String::new();
+        let mut lines = BufReader::new(stdout).lines();
+        // Read stdout to EOF, emitting each line live.
+        while let Some(line) = lines.next_line().await? {
+            emit(&line);
+            acc.push_str(&line);
+            acc.push('\n');
+        }
+        // stdout is drained; now reap the exit status (+ stderr on failure).
+        let status = child.wait().await?;
+        let mut stderr = String::new();
+        if let Some(mut e) = child.stderr.take() {
+            use tokio::io::AsyncReadExt;
+            let _ = e.read_to_string(&mut stderr).await;
+        }
+        Ok::<_, anyhow::Error>((acc, status, stderr))
+    };
+
+    let (mut out, status, stderr) = match tokio::time::timeout(DIAGNOSTIC_TIMEOUT, collect).await {
+        Err(_) => bail!("`{prog}` timed out after {DIAGNOSTIC_TIMEOUT:?}"),
+        Ok(r) => r.with_context(|| format!("running {prog}"))?,
+    };
+
+    if !status.success() {
+        let note = format!("[exit {}] {}", status, stderr.trim());
+        emit(&note);
+        out.push('\n');
+        out.push_str(&note);
     }
     if out.trim().is_empty() {
-        out = format!("(no output from {})", probe.prog);
+        out = format!("(no output from {prog})");
     }
-    Ok(cap_text(out))
+    // The full `out` already streamed to the UI line-by-line; the model gets a
+    // tightly-trimmed copy so a long listing can't evict the question from a
+    // small context window.
+    Ok(trim_for_model(out))
+}
+
+/// Trim a command's output to the model-facing budget (lines, then chars),
+/// leaving the human-facing UI copy untouched. Appends a clear marker so the
+/// model knows the listing was abbreviated. Pure / unit-tested.
+fn trim_for_model(text: String) -> String {
+    let total_lines = text.lines().count();
+    let kept: Vec<&str> = text.lines().take(MODEL_RESULT_MAX_LINES).collect();
+    let omitted_lines = total_lines.saturating_sub(kept.len());
+    let mut out = kept.join("\n");
+
+    let char_truncated = out.chars().count() > MODEL_RESULT_MAX_CHARS;
+    if char_truncated {
+        out = out.chars().take(MODEL_RESULT_MAX_CHARS).collect();
+    }
+
+    if omitted_lines > 0 {
+        out.push_str(&format!(
+            "\n[… {omitted_lines} more lines omitted to fit the context window — \
+             run a narrower probe or filter if you need them]"
+        ));
+    } else if char_truncated {
+        out.push_str("\n[… output truncated to fit the context window]");
+    }
+    out
 }
 
 // ---------------------------------------------------------------------------

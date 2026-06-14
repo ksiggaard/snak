@@ -35,6 +35,7 @@ import { useBots } from "@/store/bots";
 import { usePlugins } from "@/store/plugins";
 import { useI18n, useT } from "@/store/i18n";
 import { useModels } from "@/store/models";
+import { useContextWindows } from "@/store/contextWindows";
 import { useKeys } from "@/store/keys";
 import { useOllama } from "@/store/ollama";
 import { useView } from "@/store/view";
@@ -51,6 +52,7 @@ function App() {
   const initBots = useBots((s) => s.init);
   const loadPlugins = usePlugins((s) => s.load);
   const loadModels = useModels((s) => s.load);
+  const loadContextWindows = useContextWindows((s) => s.load);
   const loadKeys = useKeys((s) => s.load);
   const refreshOllama = useOllama((s) => s.refresh);
   const loadUserLanguagePacks = useI18n((s) => s.loadUserPacks);
@@ -85,6 +87,9 @@ function App() {
     void loadKeys();
     void loadPlugins();
     void loadModels();
+    // Per-model max context windows (T53) — used by the composer's context
+    // readout; empty by default so it just shows an estimate until configured.
+    void loadContextWindows();
     // Probe the local Ollama daemon once at startup (T37) — fire-and-forget;
     // the composer/settings react to the store as the answer lands.
     void refreshOllama();
@@ -98,6 +103,7 @@ function App() {
     loadKeys,
     loadPlugins,
     loadModels,
+    loadContextWindows,
     refreshOllama,
     loadUserLanguagePacks,
   ]);

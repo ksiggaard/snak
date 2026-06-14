@@ -12,14 +12,18 @@ import { Switch } from "@/components/ui/switch";
 import { NativeSelect } from "@/components/NativeSelect";
 import {
   BUILTIN_SYSDEBUG_SERVER,
+  BUILTIN_WEB_SERVER,
+  KEYED_SEARCH_PROVIDERS,
   listTools,
   loadAllowCloudSysTools,
   loadServers,
   saveServers,
   setAllowCloudSysTools,
+  setSearchApiKey,
   type McpListedTool,
   type McpServer,
   type McpTransport,
+  type WebSearchProvider,
 } from "@/lib/mcp";
 import { confirmDialog } from "@/store/confirm";
 import { t as tNow, useT } from "@/store/i18n";
@@ -45,6 +49,35 @@ export function McpServers() {
   const [draftLabel, setDraftLabel] = useState("");
   const [draftTransport, setDraftTransport] = useState<McpTransport>("stdio");
   const [draftTarget, setDraftTarget] = useState("");
+
+  // Web-search API key entry (T52), for keyed providers (Brave/Serper).
+  const [searchKey, setSearchKey] = useState("");
+  const [searchKeySaved, setSearchKeySaved] = useState(false);
+
+  /** Change the built-in web server's search backend. */
+  function setSearchProvider(provider: WebSearchProvider) {
+    setSearchKey("");
+    setSearchKeySaved(false);
+    void persist(
+      servers.map((s) =>
+        s.id === BUILTIN_WEB_SERVER.id
+          ? { ...s, search_provider: provider }
+          : s,
+      ),
+    );
+  }
+
+  async function saveSearchKey(provider: WebSearchProvider) {
+    const key = searchKey.trim();
+    if (!key) return;
+    try {
+      await setSearchApiKey(provider, key);
+      setSearchKey("");
+      setSearchKeySaved(true);
+    } catch (e) {
+      setError(String(e));
+    }
+  }
 
   useEffect(() => {
     void loadServers().then(setServers);
@@ -182,6 +215,60 @@ export function McpServers() {
                   )}
                 </div>
               </div>
+              {s.id === BUILTIN_WEB_SERVER.id && s.enabled && (
+                <div className="bg-muted/40 flex flex-col gap-2 rounded-md border p-2 text-xs">
+                  <span className="text-muted-foreground">
+                    {t("mcp.searchProviderHint")}
+                  </span>
+                  <NativeSelect
+                    className="h-9 self-start"
+                    value={s.search_provider ?? "duckduckgo"}
+                    onChange={(e) =>
+                      setSearchProvider(e.target.value as WebSearchProvider)
+                    }
+                    aria-label={t("mcp.searchProvider")}
+                  >
+                    <option value="duckduckgo">
+                      {t("mcp.searchProviderDuckduckgo")}
+                    </option>
+                    <option value="brave">
+                      {t("mcp.searchProviderBrave")}
+                    </option>
+                    <option value="serper">
+                      {t("mcp.searchProviderSerper")}
+                    </option>
+                  </NativeSelect>
+                  {s.search_provider &&
+                    KEYED_SEARCH_PROVIDERS.includes(s.search_provider) && (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="password"
+                          autoComplete="off"
+                          placeholder={t("mcp.searchApiKeyPlaceholder", {
+                            provider: s.search_provider,
+                          })}
+                          value={searchKey}
+                          onChange={(e) => {
+                            setSearchKey(e.target.value);
+                            setSearchKeySaved(false);
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={!searchKey.trim()}
+                          onClick={() =>
+                            void saveSearchKey(s.search_provider!)
+                          }
+                        >
+                          {searchKeySaved
+                            ? t("mcp.searchApiKeySaved")
+                            : t("common.save")}
+                        </Button>
+                      </div>
+                    )}
+                </div>
+              )}
               {s.id === BUILTIN_SYSDEBUG_SERVER.id && s.enabled && (
                 <div className="bg-muted/40 flex flex-col gap-2 rounded-md border p-2 text-xs">
                   <div className="text-muted-foreground flex items-start gap-1.5">

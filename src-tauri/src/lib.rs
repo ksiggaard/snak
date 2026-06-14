@@ -157,6 +157,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/016_message_bot.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 17,
+            description: "response variations: messages.variant_group + variant_selected (T54)",
+            sql: include_str!("../migrations/017_message_variants.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

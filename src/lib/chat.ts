@@ -30,9 +30,25 @@ export interface ChatResult {
 
 /** A tool the model invoked mid-stream (rendered as a distinct chip). */
 export interface ToolCallEvent {
+  /** Correlation id for the matching `toolOutput`/`toolDone` events. */
+  id: string;
   name: string;
   /** Populated for the built-in `web__fetch_url` tool. */
   url?: string;
+  /** Resolved command line / target, for tools that run one (sys diagnostics). */
+  command?: string;
+}
+
+/** A chunk of a running tool's live output (a stdout line), keyed by call id. */
+export interface ToolOutputEvent {
+  id: string;
+  chunk: string;
+}
+
+/** Marks a tool call finished, so the UI collapses its live panel. */
+export interface ToolDoneEvent {
+  id: string;
+  ok: boolean;
 }
 
 /**
@@ -58,6 +74,8 @@ export interface ApprovalRequestEvent {
 export interface StreamEvent {
   text?: string;
   toolCall?: ToolCallEvent;
+  toolOutput?: ToolOutputEvent;
+  toolDone?: ToolDoneEvent;
   approvalRequest?: ApprovalRequestEvent;
 }
 

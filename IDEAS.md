@@ -27,7 +27,7 @@ into tasks when they firm up.
 20. Bug: Quick chat CTRL+SPACE - It's loading models but never finding them. → **T49**
 21. Quick chat should appear on the screen where the mouse cursor is. → **T50**
 22. Default darkmode theme is Accent=#dc8add. Background=#163e54 and Mix color=#000000. It matches the logo better. → **T51**
-23. Smaller models struggle to search the web for information. We need to make that possible. How do we make the harness find the URLs to fetch to gather information that the smaller models is missing.
-24. Context size display in bottom of the chat. This allows us to know much context each chat consume in the model.
-25. Backgrounds on mermaid charts, when enlarged.
+23. Smaller models struggle to search the web for information. We need to make that possible. How do we make the harness find the URLs to fetch to gather information that the smaller models is missing.Extend browser plugin to include this functionality. → **T52**
+24. Context size display in bottom of the chat. This allows us to know much context each chat consume in the model. → **T53**
+25. Backgrounds on mermaid charts, when enlarged. → **T54**
 

@@ -117,6 +117,13 @@ export interface Message {
    * NULL for normal turns — including a thread persona's own replies, which
    * render off the thread's bot instead. */
   bot_id: string | null;
+  /** Variation grouping (T54, migration 017). Assistant `normal` replies that
+   * share a `variant_group` are alternatives at the same slot; the group id is
+   * the original variant's id. NULL for user/system rows and `summary` rows. */
+  variant_group: string | null;
+  /** 1 if this is the selected variant of its group — the only one sent as
+   * context. 0 for the other (browsable but un-injected) variants (T54). */
+  variant_selected: number;
   created_at: string;
 }
 

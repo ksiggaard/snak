@@ -41,7 +41,31 @@ export interface McpServer {
   enabled: boolean;
   /** Built-in servers can be toggled but not removed. */
   builtin?: boolean;
+  /** For the built-in `web` server: the web-search backend (T52). snake_case to
+   * match the Rust `ServerConfig` field — nested command args aren't
+   * camelCase-converted by Tauri. */
+  search_provider?: WebSearchProvider;
 }
+
+/** Web-search backends for the built-in `web` server (T52). */
+export type WebSearchProvider = "duckduckgo" | "brave" | "serper";
+
+/** Search providers that require an API key (stored in the keychain under
+ * account `search.<id>`); DuckDuckGo is keyless. */
+export const KEYED_SEARCH_PROVIDERS: WebSearchProvider[] = ["brave", "serper"];
+
+/** Keychain account a keyed search provider's API key is stored under. The Rust
+ * `web_search` backend reads the same account in-process (T52). */
+export const searchKeyAccount = (provider: WebSearchProvider): string =>
+  `search.${provider}`;
+
+/** Store a search provider's API key in the OS keychain (never read back into
+ * the webview — the Rust search backend reads it in-process). */
+export const setSearchApiKey = (
+  provider: WebSearchProvider,
+  key: string,
+): Promise<void> =>
+  invoke("set_api_key", { provider: searchKeyAccount(provider), key });
 
 /** A tool exposed by a server, as returned by `mcp_list_tools`. */
 export interface McpListedTool {
@@ -57,6 +81,7 @@ export const BUILTIN_WEB_SERVER: McpServer = {
   transport: "builtin",
   enabled: true,
   builtin: true,
+  search_provider: "duckduckgo",
 };
 
 /**
@@ -88,7 +113,14 @@ export const BUILTIN_SERVERS: McpServer[] = [
 export function withBuiltins(servers: McpServer[]): McpServer[] {
   const builtins = BUILTIN_SERVERS.map((b) => {
     const existing = servers.find((s) => s.id === b.id);
-    return { ...b, enabled: existing ? existing.enabled : b.enabled };
+    return {
+      ...b,
+      enabled: existing ? existing.enabled : b.enabled,
+      // Preserve a user-chosen search backend on the web server (T52).
+      ...(existing?.search_provider
+        ? { search_provider: existing.search_provider }
+        : {}),
+    };
   });
   const builtinIds = new Set(BUILTIN_SERVERS.map((b) => b.id));
   const rest = servers.filter((s) => !builtinIds.has(s.id));

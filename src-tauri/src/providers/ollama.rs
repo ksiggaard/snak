@@ -11,19 +11,33 @@
 //! OpenAI usage parsing applies as-is. Cache fields stay 0 (Ollama reports
 //! no cache counters).
 
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use anyhow::{anyhow, Context};
+use serde_json::{json, Value};
 use tauri::ipc::Channel;
 
-use super::{openai, u64_field, ChatResponse, CompletionRequest, Provider, StreamDelta};
+use super::{
+    for_each_line, is_cancelled, openai_tools, u64_field, ChatMessage, ChatResponse,
+    CompletionRequest, Provider, StreamDelta, ToolCall, Usage,
+};
 
 /// Where the local Ollama daemon listens by default.
 pub(crate) const BASE_URL: &str = "http://localhost:11434";
 
-/// Ollama ignores the Authorization header entirely; the shared OpenAI driver
-/// always sends a bearer token, so this placeholder goes on the wire.
-const SYNTHETIC_API_KEY: &str = "ollama";
+/// Context window (`num_ctx`) requested for every chat. Ollama's default is
+/// small (often 2k–4k) and silently truncates from the *front* when exceeded —
+/// which drops the system prompt and the user's question once a tool result is
+/// appended, leaving a small model to answer with a generic greeting. A roomier
+/// window keeps the question in context. Set via the native `/api/chat`
+/// endpoint's `options` (the OpenAI-compat `/v1` endpoint can't set it).
+const NUM_CTX: u64 = 8192;
+
+/// Monotonic counter giving each streamed tool call a process-unique id. Native
+/// Ollama tool calls carry no id of their own; a per-response index would
+/// collide across the chat loop's rounds (each `stream()` starts fresh), so the
+/// frontend would merge two rounds' panels. A global counter avoids that.
+static TOOL_CALL_SEQ: AtomicU64 = AtomicU64::new(0);
 
 pub struct Ollama;
 
@@ -35,19 +49,152 @@ impl Provider for Ollama {
         channel: &Channel<StreamDelta>,
         cancel: &AtomicBool,
     ) -> anyhow::Result<ChatResponse> {
-        openai::chat_completions_stream(
-            client,
-            &format!("{BASE_URL}/v1"),
-            SYNTHETIC_API_KEY,
-            req.model,
-            req.messages,
-            req.tools,
-            channel,
-            cancel,
-        )
-        .await
-        .map_err(friendly_connect_error)
+        native_chat(client, req, channel, cancel)
+            .await
+            .map_err(friendly_connect_error)
     }
+}
+
+/// Stream a completion from Ollama's **native** `/api/chat` endpoint. Unlike the
+/// OpenAI-compat `/v1` path (which Mistral shares), this lets us set `num_ctx`
+/// via `options`, and parses Ollama's newline-delimited JSON stream rather than
+/// SSE. Tool calls arrive complete in a single `message.tool_calls` (not as
+/// incremental deltas), so no accumulator is needed.
+async fn native_chat(
+    client: &reqwest::Client,
+    req: &CompletionRequest<'_>,
+    channel: &Channel<StreamDelta>,
+    cancel: &AtomicBool,
+) -> anyhow::Result<ChatResponse> {
+    let mut body = json!({
+        "model": req.model,
+        "stream": true,
+        "messages": build_native_messages(req.messages),
+        "options": { "num_ctx": NUM_CTX },
+    });
+    // Attach tools only when present — keeps the tool-less request minimal.
+    if !req.tools.is_empty() {
+        body["tools"] = Value::Array(openai_tools(req.tools));
+    }
+
+    let resp = client
+        .post(format!("{BASE_URL}/api/chat"))
+        .json(&body)
+        .send()
+        .await
+        .context("ollama chat request failed")?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        let text = resp.text().await.unwrap_or_default();
+        return Err(anyhow!("ollama error {status}: {text}"));
+    }
+
+    let mut content = String::new();
+    let mut model_out = req.model.to_string();
+    let mut usage = Usage::default();
+    let mut tool_calls: Vec<ToolCall> = Vec::new();
+
+    for_each_line(resp, |line| {
+        if is_cancelled(cancel) {
+            return Ok(false);
+        }
+        let v: Value = serde_json::from_str(line).context("parsing ollama chat stream")?;
+        if let Some(m) = v.get("model").and_then(|m| m.as_str()) {
+            model_out = m.to_string();
+        }
+        if let Some(t) = v.pointer("/message/content").and_then(|t| t.as_str()) {
+            if !t.is_empty() {
+                content.push_str(t);
+                channel
+                    .send(StreamDelta::text(t))
+                    .map_err(|e| anyhow!("channel send failed: {e}"))?;
+            }
+        }
+        if let Some(calls) = v.pointer("/message/tool_calls").and_then(|c| c.as_array()) {
+            for call in calls {
+                let name = call
+                    .pointer("/function/name")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                let arguments = call
+                    .pointer("/function/arguments")
+                    .cloned()
+                    .unwrap_or_else(|| json!({}));
+                let id = format!("ollama-{}", TOOL_CALL_SEQ.fetch_add(1, Ordering::Relaxed));
+                tool_calls.push(ToolCall {
+                    id,
+                    name,
+                    arguments,
+                });
+            }
+        }
+        // The final message carries `done: true` plus the token counts.
+        if v.get("done").and_then(|d| d.as_bool()) == Some(true) {
+            usage.input_tokens = u64_field(&v, "prompt_eval_count");
+            usage.output_tokens = u64_field(&v, "eval_count");
+            return Ok(false);
+        }
+        Ok(true)
+    })
+    .await?;
+
+    Ok(ChatResponse {
+        content,
+        model: model_out,
+        usage,
+        tool_calls,
+    })
+}
+
+/// Build the native `/api/chat` `messages` array from our `ChatMessage`s,
+/// including the Rust-synthesized assistant tool-call turns and `tool` result
+/// turns. Native Ollama carries tool-call arguments as a JSON *object* (not a
+/// string, as the OpenAI shape does) and results as `tool` role messages keyed
+/// by `tool_name`. Pure / unit-tested.
+fn build_native_messages(messages: &[ChatMessage]) -> Vec<Value> {
+    let mut out = Vec::new();
+    for m in messages {
+        if !m.tool_calls.is_empty() {
+            let calls: Vec<Value> = m
+                .tool_calls
+                .iter()
+                .map(|tc| {
+                    json!({
+                        "function": { "name": tc.name, "arguments": tc.arguments }
+                    })
+                })
+                .collect();
+            let mut turn = json!({ "role": "assistant", "tool_calls": calls });
+            if !m.content.is_empty() {
+                turn["content"] = Value::String(m.content.clone());
+            }
+            out.push(turn);
+        } else if !m.tool_results.is_empty() {
+            // One `tool` message per result (native uses `tool_name`, not an id).
+            for tr in &m.tool_results {
+                out.push(json!({
+                    "role": "tool",
+                    "tool_name": tr.name,
+                    "content": tr.content,
+                }));
+            }
+        } else {
+            let mut turn = json!({ "role": m.role, "content": m.content });
+            if !m.images.is_empty() {
+                // Native images: a bare base64 array on the message.
+                let imgs: Vec<Value> = m
+                    .images
+                    .iter()
+                    .map(|i| Value::String(i.data.clone()))
+                    .collect();
+                turn["images"] = Value::Array(imgs);
+            }
+            out.push(turn);
+        }
+    }
+    out
 }
 
 /// If the error chain contains a reqwest *connect* failure (daemon not
@@ -194,6 +341,82 @@ pub async fn fetch_running(client: &reqwest::Client) -> anyhow::Result<Vec<Ollam
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::providers::{ImagePart, ToolResult};
+
+    fn msg(role: &str, content: &str) -> ChatMessage {
+        ChatMessage {
+            role: role.into(),
+            content: content.into(),
+            images: vec![],
+            tool_calls: vec![],
+            tool_results: vec![],
+        }
+    }
+
+    #[test]
+    fn native_plain_turn_maps_role_and_content() {
+        let out = build_native_messages(&[msg("user", "hi")]);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0]["role"], "user");
+        assert_eq!(out[0]["content"], "hi");
+        assert!(out[0].get("tool_calls").is_none());
+    }
+
+    #[test]
+    fn native_assistant_tool_call_carries_object_arguments() {
+        let mut m = msg("assistant", "");
+        m.tool_calls = vec![ToolCall {
+            id: "ollama-0".into(),
+            name: "sys__run_diagnostic".into(),
+            arguments: json!({ "probe": "processes" }),
+        }];
+        let out = build_native_messages(&[m]);
+        assert_eq!(out[0]["role"], "assistant");
+        assert_eq!(
+            out[0]["tool_calls"][0]["function"]["name"],
+            "sys__run_diagnostic"
+        );
+        // Arguments are a JSON object on the native wire (not a string).
+        assert!(out[0]["tool_calls"][0]["function"]["arguments"].is_object());
+        assert_eq!(
+            out[0]["tool_calls"][0]["function"]["arguments"]["probe"],
+            "processes"
+        );
+    }
+
+    #[test]
+    fn native_tool_results_become_tool_role_messages() {
+        let mut m = msg("tool", "");
+        m.tool_results = vec![
+            ToolResult {
+                tool_call_id: "ollama-0".into(),
+                name: "a".into(),
+                content: "r1".into(),
+            },
+            ToolResult {
+                tool_call_id: "ollama-1".into(),
+                name: "b".into(),
+                content: "r2".into(),
+            },
+        ];
+        let out = build_native_messages(&[m]);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0]["role"], "tool");
+        assert_eq!(out[0]["tool_name"], "a");
+        assert_eq!(out[0]["content"], "r1");
+        assert_eq!(out[1]["tool_name"], "b");
+    }
+
+    #[test]
+    fn native_user_images_become_base64_array() {
+        let mut m = msg("user", "look");
+        m.images = vec![ImagePart {
+            media_type: "image/png".into(),
+            data: "QQ==".into(),
+        }];
+        let out = build_native_messages(&[m]);
+        assert_eq!(out[0]["images"][0], "QQ==");
+    }
 
     #[test]
     fn parses_a_realistic_tags_payload() {

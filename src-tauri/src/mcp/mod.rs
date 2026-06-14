@@ -23,13 +23,20 @@
 
 pub mod sysdebug;
 pub mod web_browse;
+pub mod web_search;
 
 use anyhow::{anyhow, Context};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use tauri::ipc::Channel;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
-use crate::providers::{ToolCall, ToolDef};
+use crate::providers::{StreamDelta, ToolCall, ToolDef};
+
+/// A sink for a running tool's live output: each call streams one chunk (e.g. a
+/// stdout line) to the UI. `Sync` so it can be held across `.await` in the
+/// `Send` command future. A no-op sink is used by tools that don't stream.
+pub type LineSink<'a> = &'a (dyn Fn(&str) + Sync);
 
 /// Transport kind for a configured server, as persisted by the frontend.
 #[derive(Debug, Clone, Deserialize)]
@@ -61,6 +68,10 @@ pub struct ServerConfig {
     pub url: Option<String>,
     #[serde(default = "default_true")]
     pub enabled: bool,
+    /// For the built-in `web` server: the web-search backend to use
+    /// (`duckduckgo` (default) / `brave` / `serper`). Ignored by other servers.
+    #[serde(default)]
+    pub search_provider: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -118,8 +129,14 @@ pub async fn call_tool(
     client: &reqwest::Client,
     servers: &[ServerConfig],
     call: &ToolCall,
+    on_delta: &Channel<StreamDelta>,
 ) -> String {
-    match call_tool_inner(client, servers, call).await {
+    // Live output is streamed to the UI as `tool_output` deltas keyed to this
+    // call. A closed channel (frontend gone) is harmless — drop the chunk.
+    let emit = move |chunk: &str| {
+        let _ = on_delta.send(StreamDelta::tool_output(&call.id, chunk));
+    };
+    match call_tool_inner(client, servers, call, &emit).await {
         Ok(text) => text,
         Err(e) => format!("tool error: {e}"),
     }
@@ -129,6 +146,7 @@ async fn call_tool_inner(
     client: &reqwest::Client,
     servers: &[ServerConfig],
     call: &ToolCall,
+    emit: LineSink<'_>,
 ) -> anyhow::Result<String> {
     let (server_id, tool) = split_namespaced(&call.name);
     let server = servers
@@ -141,7 +159,17 @@ async fn call_tool_inner(
             )
         })?;
     match server.transport() {
-        Transport::Builtin => builtin_call(client, &server.id, tool, &call.arguments).await,
+        Transport::Builtin => {
+            builtin_call(
+                client,
+                &server.id,
+                tool,
+                &call.arguments,
+                server.search_provider.as_deref(),
+                emit,
+            )
+            .await
+        }
         Transport::Stdio => call_stdio_tool(server, tool, &call.arguments).await,
         Transport::Http => call_http_tool(client, server, tool, &call.arguments).await,
     }
@@ -161,10 +189,12 @@ async fn builtin_call(
     server_id: &str,
     tool: &str,
     args: &Value,
+    search_provider: Option<&str>,
+    emit: LineSink<'_>,
 ) -> anyhow::Result<String> {
     match server_id {
-        sysdebug::SERVER_ID => sysdebug::call_tool(tool, args).await,
-        _ => web_browse::call_tool(client, tool, args).await,
+        sysdebug::SERVER_ID => sysdebug::call_tool(tool, args, emit).await,
+        _ => web_browse::call_tool(client, tool, args, search_provider).await,
     }
 }
 
@@ -567,6 +597,7 @@ mod tests {
             command: None,
             url: None,
             enabled: false,
+            search_provider: None,
         };
         assert!(!cfg.enabled);
         assert!(matches!(cfg.transport(), Transport::Builtin));

@@ -2,6 +2,7 @@ import { useState, type ComponentType } from "react";
 import { ApiKeys } from "@/components/settings/ApiKeys";
 import { DefaultModel } from "@/components/settings/DefaultModel";
 import { Models } from "@/components/settings/Models";
+import { ContextWindows } from "@/components/settings/ContextWindows";
 import { OllamaSettings } from "@/components/settings/OllamaSettings";
 import { Memory } from "@/components/settings/Memory";
 import { Bots } from "@/components/settings/Bots";
@@ -33,6 +34,11 @@ const SECTIONS: Section[] = [
     Component: DefaultModel,
   },
   { id: "models", label: "settings.nav.models", Component: Models },
+  {
+    id: "context-windows",
+    label: "settings.nav.contextWindows",
+    Component: ContextWindows,
+  },
   { id: "ollama", label: "settings.nav.ollama", Component: OllamaSettings },
   { id: "memory", label: "settings.nav.memory", Component: Memory },
   { id: "bots", label: "settings.nav.bots", Component: Bots },

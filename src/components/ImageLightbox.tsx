@@ -32,9 +32,10 @@ export function ImageLightbox() {
     setStatus("idle");
   }
 
-  // Scaled-to-fit SVG markup (recomputed only when the diagram changes).
+  // Scaled-to-fit SVG markup with a baked themed background (recomputed only
+  // when the diagram changes).
   const fittedSvg = useMemo(
-    () => (content?.kind === "svg" ? fitSvg(content.svg) : null),
+    () => (content?.kind === "svg" ? fitSvg(content.svg, content.bg) : null),
     [content],
   );
 
@@ -54,7 +55,7 @@ export function ImageLightbox() {
       const saved =
         content.kind === "image"
           ? await downloadImage(content.image)
-          : await downloadSvg(content.svg);
+          : await downloadSvg(content.svg, content.bg);
       if (saved) {
         setStatus("saved");
         setTimeout(() => setStatus("idle"), 1500);
@@ -82,9 +83,13 @@ export function ImageLightbox() {
           onClick={(e) => e.stopPropagation()}
           // SVG comes from mermaid's own renderer (securityLevel:"strict"),
           // sanitized before it ever reaches us; `fitSvg` only rewrites the
-          // root <svg> sizing attributes.
+          // root <svg> sizing attributes + bakes in the background.
           dangerouslySetInnerHTML={{ __html: fittedSvg ?? content.svg }}
-          className="flex h-[82vh] w-[92vw] items-center justify-center rounded-lg [&>svg]:h-full [&>svg]:w-full"
+          // Themed background fills the letterbox margins around the diagram so
+          // the enlarged view reads as a card, not a transparent cutout (T54);
+          // falls back to `bg-card` when no resolved color was passed.
+          style={content.bg ? { backgroundColor: content.bg } : undefined}
+          className="bg-card flex h-[82vh] w-[92vw] items-center justify-center rounded-lg p-4 shadow-2xl [&>svg]:h-full [&>svg]:w-full"
         />
       )}
       <div

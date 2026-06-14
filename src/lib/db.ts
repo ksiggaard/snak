@@ -231,12 +231,28 @@ export async function addMessage(input: {
   /** Persona that authored this reply via an @-mention (T43); null/absent
    * for normal turns. */
   bot_id?: string | null;
+  /**
+   * Variation group (T54): the group a new variant joins. Pass an existing
+   * group id when regenerating to make this reply an alternative of that slot.
+   * Omit (undefined) for an ordinary reply — a `normal` assistant turn then
+   * becomes its own singleton group (group = own id); other roles/kinds get
+   * NULL. Pass `null` explicitly to force a standalone, ungrouped row.
+   */
+  variant_group?: string | null;
 }): Promise<Message> {
   const db = await getDb();
   const id = newId();
+  // Default grouping: a fresh assistant chat turn anchors its own group so the
+  // regenerate path is uniform; everything else stays ungrouped (NULL).
+  const variantGroup =
+    input.variant_group !== undefined
+      ? input.variant_group
+      : input.role === "assistant" && (input.kind ?? "normal") === "normal"
+        ? id
+        : null;
   await db.execute(
-    `INSERT INTO messages (id, thread_id, role, content, kind, duration_ms, bot_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    `INSERT INTO messages (id, thread_id, role, content, kind, duration_ms, bot_id, variant_group)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [
       id,
       input.thread_id,
@@ -245,6 +261,7 @@ export async function addMessage(input: {
       input.kind ?? "normal",
       input.duration_ms ?? null,
       input.bot_id ?? null,
+      variantGroup,
     ],
   );
   await touchThread(input.thread_id);
@@ -253,6 +270,25 @@ export async function addMessage(input: {
     [id],
   );
   return rows[0];
+}
+
+/**
+ * Select one variant of a group as the active one (T54): mark `messageId`
+ * selected and deselect its siblings in the same `groupId`. The selected
+ * variant is the only one sent as context. Does not bump the thread's
+ * updated_at — choosing a variation isn't a new activity.
+ */
+export async function selectVariant(
+  groupId: string,
+  messageId: string,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE messages
+        SET variant_selected = CASE WHEN id = $1 THEN 1 ELSE 0 END
+      WHERE variant_group = $2`,
+    [messageId, groupId],
+  );
 }
 
 export async function listMessages(threadId: string): Promise<Message[]> {
@@ -290,7 +326,7 @@ export async function lastMessages(
        FROM messages m
        JOIN (SELECT thread_id, MAX(rowid) AS last_rowid
                FROM messages
-              WHERE kind = 'normal'
+              WHERE kind = 'normal' AND variant_selected = 1
               GROUP BY thread_id) latest
          ON m.rowid = latest.last_rowid
       WHERE m.thread_id IN (${placeholders})`,
@@ -361,6 +397,36 @@ export async function setSetting(key: string, value: string): Promise<void> {
      ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
     [key, value],
   );
+}
+
+/** Settings key for the per-model max context window map (T53). A JSON object
+ * `{ "<model id>": <max tokens> }`; absent/empty = no windows configured. */
+export const MODEL_CONTEXT_WINDOWS_KEY = "model_context_windows";
+
+/** Read the per-model max-context-window map (T53). Tolerant of a missing or
+ * malformed value (returns `{}`); only finite positive numbers are kept. */
+export async function getModelContextWindows(): Promise<Record<string, number>> {
+  const raw = await getSetting(MODEL_CONTEXT_WINDOWS_KEY);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const out: Record<string, number> = {};
+    for (const [model, max] of Object.entries(parsed)) {
+      if (typeof max === "number" && Number.isFinite(max) && max > 0) {
+        out[model] = max;
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** Persist the per-model max-context-window map (T53). */
+export async function setModelContextWindows(
+  windows: Record<string, number>,
+): Promise<void> {
+  await setSetting(MODEL_CONTEXT_WINDOWS_KEY, JSON.stringify(windows));
 }
 
 // ---------------------------------------------------------------------------

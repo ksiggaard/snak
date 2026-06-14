@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from "react";
-import { resolveTheme } from "@/lib/theme";
+import { resolveCssVarColor, resolveTheme } from "@/lib/theme";
 import { openLightboxSvg } from "@/store/lightbox";
 import { useTheme } from "@/store/theme";
 import { useT } from "@/store/i18n";
@@ -66,7 +66,10 @@ export function Mermaid({ code }: { code: string }) {
     return (
       <button
         type="button"
-        onClick={() => openLightboxSvg(svg)}
+        // Enlarge with a themed background (T54) — mermaid emits a transparent
+        // SVG, which looks broken on the dark lightbox backdrop. Resolved from
+        // `--card` at click time so it tracks the active/installed theme.
+        onClick={() => openLightboxSvg(svg, resolveCssVarColor("--card"))}
         aria-label={t("chat.viewDiagram")}
         title={t("chat.viewDiagram")}
         className="focus-visible:ring-ring my-2 flex w-full cursor-zoom-in justify-center overflow-x-auto rounded-md focus-visible:ring-2 focus-visible:outline-none"

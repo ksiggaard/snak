@@ -131,14 +131,23 @@ beforeEach(() => {
       role: MessageView["role"];
       content: string;
       bot_id?: string | null;
+      variant_group?: string | null;
     }) => {
+      const id = `m${rows.length + 1}`;
       const m = {
-        id: `m${rows.length + 1}`,
+        id,
         kind: "normal" as const,
         duration_ms: null,
         created_at: "2026-06-13 00:00:00",
         ...input,
         bot_id: input.bot_id ?? null,
+        variant_group:
+          input.variant_group !== undefined
+            ? input.variant_group
+            : input.role === "assistant"
+              ? id
+              : null,
+        variant_selected: 1,
       };
       rows.push({ ...m, images: [], documents: [], toolCalls: [] });
       return m;

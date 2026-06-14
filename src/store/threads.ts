@@ -16,6 +16,7 @@ import {
   listUserMemory,
   purgeEphemeralThreads,
   renameThread,
+  selectVariant as dbSelectVariant,
   setSetting,
   setThreadArchived,
   setThreadFavorite,
@@ -32,11 +33,14 @@ import {
   type StreamEvent,
 } from "@/lib/chat";
 import {
+  applyToolEvent,
   loadThreadMessages,
+  persistableToolCall,
   type MessageToolCall,
   type MessageView,
 } from "@/lib/messages";
 import { buildCompactionRequest, compactHistory } from "@/lib/compaction";
+import { applyRegenSteer } from "@/lib/variations";
 import { buildBotSystemText } from "@/lib/bots";
 import { extractMentions } from "@/lib/mentions";
 import { runPersonaMemoryUpdate } from "@/lib/personaMemory";
@@ -125,6 +129,11 @@ interface ThreadsState {
   /** "Approve all this chat" was chosen — subsequent gated calls in the current
    * send auto-approve without prompting. Reset at the start of each `send`. */
   autoApproveSysTools: boolean;
+  /** A tool just finished and we're awaiting the model's follow-up text (the
+   * post-tool "thinking" gap). Drives the loading indicator so a slow round
+   * after a tool call doesn't look like a hang. Cleared on the next text token
+   * and when the stream ends. */
+  awaitingModel: boolean;
   error: string | null;
   initialized: boolean;
 
@@ -159,6 +168,21 @@ interface ThreadsState {
    * through the LLM. Does not stream or call a provider.
    */
   postNote: (content: string) => Promise<void>;
+  /**
+   * Regenerate an assistant reply (T54) as a new variation in its group,
+   * optionally steered by a free-text `direction` ("more professional", "less
+   * text", …). Re-runs the same provider/model on the history *before* that
+   * reply (excluding the group), persists the result as a new variant, and
+   * makes it the selected one — so only it counts as context. The other
+   * variants are kept for browsing.
+   */
+  regenerate: (messageId: string, direction: string) => Promise<void>;
+  /**
+   * Choose which variant of a group is active (T54): the selected variant is
+   * the only one sent as context. Browsing the carousel calls this so the
+   * shown variation is always the one in context.
+   */
+  selectVariant: (groupId: string, messageId: string) => Promise<void>;
   /**
    * Compact the current thread (T28): ask its provider/model to summarize the
    * history since the last compaction point and persist the result as a
@@ -308,6 +332,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   cancelling: false,
   pendingApproval: null,
   autoApproveSysTools: false,
+  awaitingModel: false,
   error: null,
   initialized: false,
 
@@ -444,6 +469,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       cancelling: false,
       pendingApproval: null,
       autoApproveSysTools: false,
+      awaitingModel: false,
       error: null,
     });
     try {
@@ -572,12 +598,9 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             }
             return;
           }
-          if (event.toolCall) {
-            toolCalls.push({
-              name: event.toolCall.name,
-              url: event.toolCall.url,
-            });
-          }
+          // Fold tool-lifecycle events (started / live output / finished) into
+          // the accumulator so the live activity panel updates as they arrive.
+          applyToolEvent(event, toolCalls);
           if (event.text) acc += event.text;
           set((s) => {
             const exists = s.messages.some((m) => m.id === STREAM_ID);
@@ -593,6 +616,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                     kind: "normal" as const,
                     duration_ms: null,
                     bot_id: attributeBotId,
+                    variant_group: null,
+                    variant_selected: 1,
                     created_at: "",
                     images: [],
                     documents: [],
@@ -605,6 +630,10 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                   ? { ...m, content: acc, toolCalls: [...toolCalls] }
                   : m,
               ),
+              // A tool finished → show "thinking" until the model's next token;
+              // a token arrived → clear it. Other events leave it unchanged.
+              ...(event.toolDone ? { awaitingModel: true } : {}),
+              ...(event.text ? { awaitingModel: false } : {}),
             };
           });
         };
@@ -632,7 +661,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
               message_id: assistantMsg.id,
               kind: "tool_call",
               media_type: "application/json",
-              data: JSON.stringify(tc),
+              data: JSON.stringify(persistableToolCall(tc)),
             });
           }
           // Record token usage for this response. Attribute it to the model
@@ -720,6 +749,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         cancelling: false,
         pendingApproval: null,
         autoApproveSysTools: false,
+        awaitingModel: false,
       });
     }
   },
@@ -742,9 +772,179 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       // Incognito threads never become last_thread_id (T29).
       if (!ephemeral) await setSetting(LAST_THREAD_KEY, id);
     }
-    await addMessage({ thread_id: id, role: "assistant", content });
+    // Synthetic notes are standalone (no variation/regenerate controls).
+    await addMessage({
+      thread_id: id,
+      role: "assistant",
+      content,
+      variant_group: null,
+    });
     set({ messages: await loadThreadMessages(id) });
     await get().refreshThreads();
+  },
+
+  regenerate: async (messageId, direction) => {
+    if (get().busy) return;
+    const id = get().currentThreadId;
+    if (!id) return;
+    const msgs = get().messages;
+    const i = msgs.findIndex((m) => m.id === messageId);
+    if (i < 0) return;
+    const target = msgs[i];
+    const groupId = target.variant_group;
+    // Only grouped assistant replies can branch (originals are self-grouped).
+    if (target.role !== "assistant" || !groupId) return;
+
+    const thread = get().threads.find((x) => x.id === id);
+    if (!thread) return;
+    const { provider, model, project_id: projectId, bot_id: threadBotId } =
+      thread;
+
+    set({
+      busy: true,
+      cancelling: false,
+      pendingApproval: null,
+      autoApproveSysTools: false,
+      awaitingModel: false,
+      error: null,
+    });
+    try {
+      // System context, exactly as a fresh reply would assemble it. The reply's
+      // own persona (an @-mention author wins over the thread persona) provides
+      // the bot block; the history is everything BEFORE this reply's slot, so
+      // the model answers the same prompt afresh.
+      const shared = await loadSharedSystemBlocks(projectId);
+      const attributeBotId = target.bot_id;
+      const replyBot = attributeBotId
+        ? await getBot(attributeBotId)
+        : threadBotId
+          ? await getBot(threadBotId)
+          : null;
+      const botBlock = replyBot ? await botSystemBlock(replyBot) : null;
+      const baseHistory: ApiMessage[] = [
+        ...shared.head,
+        ...(botBlock ? [botBlock] : []),
+        ...shared.tail,
+        ...compactHistory(msgs.slice(0, i)),
+      ];
+      // Steer for "a different variation" (+ optional direction), folded into
+      // the trailing user turn so the call stays valid for every provider.
+      const history = applyRegenSteer(
+        baseHistory,
+        direction,
+        (content): ApiMessage => ({ role: "user", content, images: [] }),
+      );
+
+      let acc = "";
+      const toolCalls: MessageToolCall[] = [];
+      const onDelta = (event: StreamEvent) => {
+        if (event.approvalRequest) {
+          const req = event.approvalRequest;
+          if (get().autoApproveSysTools) {
+            void approveToolCall(req.id, true);
+          } else {
+            set({ pendingApproval: req });
+          }
+          return;
+        }
+        applyToolEvent(event, toolCalls);
+        if (event.text) acc += event.text;
+        set((s) => {
+          const exists = s.messages.some((m) => m.id === STREAM_ID);
+          const base = exists
+            ? s.messages
+            : [
+                ...s.messages,
+                {
+                  id: STREAM_ID,
+                  thread_id: id,
+                  role: "assistant" as const,
+                  content: "",
+                  kind: "normal" as const,
+                  duration_ms: null,
+                  bot_id: attributeBotId,
+                  variant_group: groupId,
+                  variant_selected: 1,
+                  created_at: "",
+                  images: [],
+                  documents: [],
+                  toolCalls: [],
+                },
+              ];
+          return {
+            messages: base.map((m) =>
+              m.id === STREAM_ID
+                ? { ...m, content: acc, toolCalls: [...toolCalls] }
+                : m,
+            ),
+            ...(event.toolDone ? { awaitingModel: true } : {}),
+            ...(event.text ? { awaitingModel: false } : {}),
+          };
+        });
+      };
+
+      const started = Date.now();
+      const result = await chatStream(provider, model, history, onDelta);
+      if (result.content.length > 0 || toolCalls.length > 0) {
+        // New variant joins the existing group, then becomes the selected one.
+        const variantMsg = await addMessage({
+          thread_id: id,
+          role: "assistant",
+          content: result.content,
+          duration_ms: Math.round(Date.now() - started),
+          bot_id: attributeBotId,
+          variant_group: groupId,
+        });
+        for (const tc of toolCalls) {
+          await addAttachment({
+            message_id: variantMsg.id,
+            kind: "tool_call",
+            media_type: "application/json",
+            data: JSON.stringify(persistableToolCall(tc)),
+          });
+        }
+        const u = result.usage;
+        if (
+          u &&
+          (u.input_tokens > 0 ||
+            u.output_tokens > 0 ||
+            u.cache_creation_tokens > 0 ||
+            u.cache_read_tokens > 0)
+        ) {
+          await addUsage({
+            message_id: variantMsg.id,
+            thread_id: id,
+            provider,
+            model: result.model || model,
+            input_tokens: u.input_tokens,
+            output_tokens: u.output_tokens,
+            cache_creation_tokens: u.cache_creation_tokens,
+            cache_read_tokens: u.cache_read_tokens,
+          });
+        }
+        await dbSelectVariant(groupId, variantMsg.id);
+      }
+      set({ messages: await loadThreadMessages(id) });
+      await get().refreshThreads();
+    } catch (e) {
+      set({ error: friendlyError(e) });
+      set({ messages: await loadThreadMessages(id) });
+    } finally {
+      set({
+        busy: false,
+        cancelling: false,
+        pendingApproval: null,
+        autoApproveSysTools: false,
+        awaitingModel: false,
+      });
+    }
+  },
+
+  selectVariant: async (groupId, messageId) => {
+    const id = get().currentThreadId;
+    if (!id || get().busy) return;
+    await dbSelectVariant(groupId, messageId);
+    set({ messages: await loadThreadMessages(id) });
   },
 
   compact: async () => {

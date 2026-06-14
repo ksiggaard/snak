@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Canvas } from "@/components/chat/Canvas";
+import { ContextMeter } from "@/components/chat/ContextMeter";
 import { ModelPicker } from "@/components/chat/ModelPicker";
 import { canCompact } from "@/lib/compaction";
 import {
@@ -62,6 +63,8 @@ interface ComposerProps {
   busy?: boolean;
   /** Currently selected provider — Send is gated on it having a stored key. */
   provider: Provider;
+  /** Model in effect for this thread/draft — keys the context-size readout (T53). */
+  model: string;
   /** Whether the selected provider is currently enabled (T18). */
   providerEnabled: boolean;
   /** Whether any provider is enabled at all (false = all-disabled state). */
@@ -73,6 +76,7 @@ export function Composer({
   onCancel,
   busy,
   provider,
+  model,
   providerEnabled,
   anyProvider,
 }: ComposerProps) {
@@ -702,6 +706,15 @@ export function Composer({
             send();
           }
         }}
+      />
+      {/* Context-size readout (T53): live estimate of the next request, with a
+          usage bar when the active model has a configured max window. */}
+      <ContextMeter
+        model={model}
+        messages={threadMessages}
+        draftText={text}
+        draftImageCount={images.length}
+        draftDocuments={documents}
       />
       <div className="flex items-center gap-2">
         <Button

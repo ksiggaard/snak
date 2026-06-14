@@ -123,9 +123,16 @@ pub struct StreamDelta {
     /// Text chunk; empty (and omitted on the wire) for a tool-call event.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub text: String,
-    /// Set when the model called a tool this round.
+    /// Set when the model called a tool this round (the "tool started" event).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call: Option<ToolCallDelta>,
+    /// A chunk of a running tool's live output (e.g. a stdout line from a
+    /// system-diagnostic command), correlated to its call by `id`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_output: Option<ToolOutputDelta>,
+    /// Marks a tool call as finished (so the UI can collapse its live panel).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_done: Option<ToolDoneDelta>,
     /// Set when a tool call needs explicit user approval before it runs. The
     /// frontend shows an approve/deny card and replies via `approve_tool_call`.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -138,15 +145,50 @@ impl StreamDelta {
         Self {
             text: text.into(),
             tool_call: None,
+            tool_output: None,
+            tool_done: None,
             approval_request: None,
         }
     }
 
-    /// A tool-invocation notice (carries no text).
-    pub(crate) fn tool(call: &ToolCall) -> Self {
+    /// A tool-invocation notice (carries no text). `command` is the resolved
+    /// command line / target for tools that have one (system diagnostics), shown
+    /// in the live activity panel; `None` for tools without one.
+    pub(crate) fn tool(call: &ToolCall, command: Option<String>) -> Self {
         Self {
             text: String::new(),
-            tool_call: Some(ToolCallDelta::new(call)),
+            tool_call: Some(ToolCallDelta::new(call, command)),
+            tool_output: None,
+            tool_done: None,
+            approval_request: None,
+        }
+    }
+
+    /// A chunk of a running tool's live output, keyed to its call `id`.
+    pub(crate) fn tool_output(id: &str, chunk: impl Into<String>) -> Self {
+        Self {
+            text: String::new(),
+            tool_call: None,
+            tool_output: Some(ToolOutputDelta {
+                id: id.to_string(),
+                chunk: chunk.into(),
+            }),
+            tool_done: None,
+            approval_request: None,
+        }
+    }
+
+    /// A "tool finished" marker, keyed to its call `id`. `ok` is false when the
+    /// tool errored (the UI tints the collapsed panel accordingly).
+    pub(crate) fn tool_done(id: &str, ok: bool) -> Self {
+        Self {
+            text: String::new(),
+            tool_call: None,
+            tool_output: None,
+            tool_done: Some(ToolDoneDelta {
+                id: id.to_string(),
+                ok,
+            }),
             approval_request: None,
         }
     }
@@ -156,6 +198,8 @@ impl StreamDelta {
         Self {
             text: String::new(),
             tool_call: None,
+            tool_output: None,
+            tool_done: None,
             approval_request: Some(ApprovalRequest {
                 id: call.id.clone(),
                 tool_name: call.name.clone(),
@@ -185,23 +229,48 @@ pub struct ApprovalRequest {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolCallDelta {
+    /// Call id, correlating later `tool_output` / `tool_done` events to this chip.
+    pub id: String,
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    /// Resolved command line / target, for tools that run one (system
+    /// diagnostics). Shown as the `$ …` line of the live activity panel.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
 }
 
 impl ToolCallDelta {
-    fn new(call: &ToolCall) -> Self {
+    fn new(call: &ToolCall, command: Option<String>) -> Self {
         let url = call
             .arguments
             .get("url")
             .and_then(|u| u.as_str())
             .map(String::from);
         Self {
+            id: call.id.clone(),
             name: call.name.clone(),
             url,
+            command,
         }
     }
+}
+
+/// A chunk of a running tool's live output, streamed to the UI as it is
+/// produced and correlated to its call by `id`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolOutputDelta {
+    pub id: String,
+    pub chunk: String,
+}
+
+/// Marks a tool call as finished so the UI collapses its live panel.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolDoneDelta {
+    pub id: String,
+    pub ok: bool,
 }
 
 /// Everything a provider needs for one completion. `tools` is empty for an
@@ -384,6 +453,25 @@ pub(crate) async fn for_each_sse_data<F>(
 where
     F: FnMut(&str) -> anyhow::Result<bool>,
 {
+    for_each_line(resp, |line| {
+        if let Some(data) = line.strip_prefix("data:") {
+            on_data(data.trim())
+        } else {
+            Ok(true)
+        }
+    })
+    .await
+}
+
+/// Read a streamed response line by line, invoking `on_line` with each
+/// non-empty trimmed line (UTF-8 safe across chunk boundaries). Used for
+/// newline-delimited JSON streams (Ollama's native `/api/chat`), where each
+/// line is a complete JSON object rather than an SSE `data:` frame. The callback
+/// may return `Ok(false)` to stop early.
+pub(crate) async fn for_each_line<F>(resp: reqwest::Response, mut on_line: F) -> anyhow::Result<()>
+where
+    F: FnMut(&str) -> anyhow::Result<bool>,
+{
     let mut stream = resp.bytes_stream();
     let mut buf: Vec<u8> = Vec::new();
 
@@ -396,10 +484,8 @@ where
             let line = std::str::from_utf8(&line[..line.len() - 1])
                 .unwrap_or("")
                 .trim();
-            if let Some(data) = line.strip_prefix("data:") {
-                if !on_data(data.trim())? {
-                    return Ok(());
-                }
+            if !line.is_empty() && !on_line(line)? {
+                return Ok(());
             }
         }
     }
@@ -544,7 +630,7 @@ mod tests {
 
     #[test]
     fn tool_call_delta_extracts_url() {
-        let d = ToolCallDelta::new(&fetch_call());
+        let d = ToolCallDelta::new(&fetch_call(), None);
         assert_eq!(d.name, "web__fetch_url");
         assert_eq!(d.url.as_deref(), Some("https://example.com"));
     }
@@ -558,7 +644,7 @@ mod tests {
 
     #[test]
     fn stream_delta_tool_serializes_camelcase_without_text() {
-        let v = serde_json::to_value(StreamDelta::tool(&fetch_call())).unwrap();
+        let v = serde_json::to_value(StreamDelta::tool(&fetch_call(), None)).unwrap();
         // No `text` key (skipped when empty); tool call carried under camelCase key.
         assert!(v.get("text").is_none());
         assert_eq!(v["toolCall"]["name"], "web__fetch_url");

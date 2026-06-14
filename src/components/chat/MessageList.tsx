@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Check,
+  ChevronLeft,
+  ChevronRight,
   Copy,
   FileText,
   FoldVertical,
   Globe,
+  Loader2,
+  RefreshCw,
+  TriangleAlert,
   Wrench,
 } from "lucide-react";
 import {
@@ -14,8 +20,11 @@ import {
 } from "@/lib/messages";
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/components/chat/Markdown";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { BotAvatar } from "@/components/bots/BotAvatar";
 import { useBots } from "@/store/bots";
+import { useThreads } from "@/store/threads";
 import { openLightbox } from "@/store/lightbox";
 import { useSearch } from "@/store/search";
 import { useAppearance } from "@/store/appearance";
@@ -42,18 +51,106 @@ interface MessageListProps {
  * pill with an icon and the fetched URL — so it reads as system chrome the model
  * itself can't produce, and makes it evident how the model found its answer.
  */
-function ToolCallChip({ call }: { call: MessageToolCall }) {
+function ToolActivity({ call }: { call: MessageToolCall }) {
   const t = useT();
   const isFetch = call.name === "web__fetch_url";
   const label = isFetch ? (call.url ?? t("chat.webPage")) : call.name;
-  const Icon = isFetch ? Globe : Wrench;
-  return (
-    <div
-      title={label}
-      className="border-border bg-background/70 text-muted-foreground flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs"
-    >
-      <Icon className="size-3 shrink-0" aria-hidden />
+  const running = call.running === true;
+  const failed = call.ok === false;
+  // A command/output panel exists for the system-diagnostic tools; web-fetch and
+  // bare calls keep the simple pill (no disclosure).
+  const hasPanel = Boolean(call.command || call.output);
+  // Auto-expanded while the tool runs (the live terminal view); collapsed once
+  // it finishes, with a click to re-open and review what ran.
+  const [open, setOpen] = useState(false);
+  const expanded = running || open;
+
+  // Keep the streaming output pinned to the latest line as it grows.
+  const outRef = useRef<HTMLPreElement>(null);
+  useEffect(() => {
+    if (expanded && outRef.current)
+      outRef.current.scrollTop = outRef.current.scrollHeight;
+  }, [call.output, expanded]);
+
+  const Icon = running ? Loader2 : failed ? TriangleAlert : isFetch ? Globe : Wrench;
+  const header = (
+    <>
+      <Icon
+        className={cn(
+          "size-3 shrink-0",
+          running && "animate-spin",
+          failed && "text-destructive",
+        )}
+        aria-hidden
+      />
       <span className="text-foreground/90 truncate font-mono">{label}</span>
+      {running && (
+        <span className="text-muted-foreground shrink-0">
+          {t("chat.toolRunning")}
+        </span>
+      )}
+      {!running && hasPanel && (
+        <ChevronRight
+          className={cn(
+            "size-3 shrink-0 transition-transform",
+            expanded && "rotate-90",
+          )}
+          aria-hidden
+        />
+      )}
+    </>
+  );
+
+  // Non-expandable pill (web fetch / bare call): unchanged from before.
+  if (!hasPanel && !running) {
+    return (
+      <div
+        title={label}
+        className="border-border bg-background/70 text-muted-foreground flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs"
+      >
+        {header}
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-border bg-background/70 max-w-full overflow-hidden rounded-md border text-xs">
+      <button
+        type="button"
+        onClick={() => !running && setOpen((o) => !o)}
+        disabled={running}
+        title={label}
+        className={cn(
+          "text-muted-foreground flex w-full items-center gap-1.5 px-2 py-1",
+          !running && "hover:bg-muted/50 cursor-pointer",
+        )}
+      >
+        {header}
+      </button>
+      {expanded && (
+        <div className="border-border/60 border-t">
+          {call.command && (
+            <div className="text-foreground/80 bg-muted/30 px-2 py-1 font-mono break-all">
+              <span className="text-muted-foreground select-none">$ </span>
+              {call.command}
+            </div>
+          )}
+          {call.output ? (
+            <pre
+              ref={outRef}
+              className="text-foreground/80 max-h-64 overflow-auto px-2 py-1 font-mono text-[11px] leading-snug whitespace-pre-wrap"
+            >
+              {call.output}
+            </pre>
+          ) : (
+            running && (
+              <div className="text-muted-foreground px-2 py-1">
+                {t("chat.toolWorking")}
+              </div>
+            )
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -67,12 +164,15 @@ function AssistantMeta({
   durationMs,
   now,
   content,
+  trailing,
 }: {
   createdAt: string;
   durationMs: number | null;
   now: number;
   /** The reply's raw Markdown, copied verbatim. */
   content: string;
+  /** Inline controls rendered after the copy button (T54 variation controls). */
+  trailing?: React.ReactNode;
 }) {
   const t = useT();
   // Active-locale formatting (T32): labels + Intl locale follow the language.
@@ -113,7 +213,166 @@ function AssistantMeta({
           <Copy className="size-3.5" aria-hidden />
         )}
       </button>
+      {trailing}
     </div>
+  );
+}
+
+/**
+ * Modal for entering an optional steering direction before regenerating (T54).
+ * Dismisses on Escape or backdrop click; Enter in the field submits. Rendered
+ * via a portal so it overlays the whole window, not the message row.
+ */
+function DirectionModal({
+  busy,
+  onClose,
+  onSubmit,
+}: {
+  busy: boolean;
+  onClose: () => void;
+  onSubmit: (direction: string) => void;
+}) {
+  const t = useT();
+  // Mounted only while open (see VariationControls), so the field resets to ""
+  // on each open without a state-resetting effect.
+  const [direction, setDirection] = useState("");
+
+  // Escape closes the modal (matches the slash-palette/lightbox dismiss UX).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onMouseDown={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="bg-background w-full max-w-md rounded-lg border p-4 shadow-lg"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-sm font-semibold">{t("chat.newVariation")}</h2>
+        <p className="text-muted-foreground mt-1 text-xs">
+          {t("chat.variationHint")}
+        </p>
+        <Input
+          className="mt-3"
+          value={direction}
+          onChange={(e) => setDirection(e.target.value)}
+          placeholder={t("chat.directionPlaceholder")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onSubmit(direction);
+            }
+          }}
+          autoFocus
+        />
+        <div className="mt-4 flex justify-end gap-2">
+          <Button size="sm" variant="ghost" onClick={onClose}>
+            {t("common.cancel")}
+          </Button>
+          <Button size="sm" onClick={() => onSubmit(direction)} disabled={busy}>
+            {t("chat.directionGenerate")}
+          </Button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * Variation controls (T54) shown inline in the latest assistant reply's meta
+ * row, next to the copy button: a carousel to browse alternative variations
+ * (browsing *is* selecting — the shown one is the one sent as context) and an
+ * icon-only regenerate button that opens the direction modal. Renders only when
+ * the reply belongs to a variant group (`m.variantIds`).
+ */
+function VariationControls({ m }: { m: MessageView }) {
+  const t = useT();
+  const busy = useThreads((s) => s.busy);
+  const regenerate = useThreads((s) => s.regenerate);
+  const selectVariant = useThreads((s) => s.selectVariant);
+  const [open, setOpen] = useState(false);
+
+  const ids = m.variantIds ?? [];
+  const groupId = m.variant_group;
+  if (!groupId || ids.length === 0) return null;
+  const idx = ids.indexOf(m.id);
+  const total = ids.length;
+
+  const go = (delta: number) => {
+    const next = idx + delta;
+    if (busy || next < 0 || next >= total) return;
+    void selectVariant(groupId, ids[next]);
+  };
+
+  const submit = (direction: string) => {
+    if (busy) return;
+    setOpen(false);
+    void regenerate(m.id, direction);
+  };
+
+  return (
+    <>
+      {total > 1 && (
+        <span
+          className="flex items-center gap-0.5"
+          title={t("chat.variationHint")}
+        >
+          <button
+            type="button"
+            onClick={() => go(-1)}
+            disabled={busy || idx <= 0}
+            aria-label={t("chat.prevVariation")}
+            title={t("chat.prevVariation")}
+            className="hover:bg-muted hover:text-foreground rounded p-1 transition-colors disabled:opacity-40"
+          >
+            <ChevronLeft className="size-3.5" aria-hidden />
+          </button>
+          <span className="tabular-nums select-none">
+            {idx + 1}/{total}
+          </span>
+          <button
+            type="button"
+            onClick={() => go(1)}
+            disabled={busy || idx >= total - 1}
+            aria-label={t("chat.nextVariation")}
+            title={t("chat.nextVariation")}
+            className="hover:bg-muted hover:text-foreground rounded p-1 transition-colors disabled:opacity-40"
+          >
+            <ChevronRight className="size-3.5" aria-hidden />
+          </button>
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        disabled={busy}
+        aria-label={t("chat.newVariation")}
+        title={t("chat.newVariation")}
+        className="hover:bg-muted hover:text-foreground rounded p-1 transition-colors disabled:opacity-40"
+      >
+        <RefreshCw
+          className={cn("size-3.5", busy && "animate-spin")}
+          aria-hidden
+        />
+      </button>
+      {open && (
+        <DirectionModal
+          busy={busy}
+          onClose={() => setOpen(false)}
+          onSubmit={submit}
+        />
+      )}
+    </>
   );
 }
 
@@ -128,6 +387,7 @@ function ChatMessage({
   innerRef,
   bot,
   mentionBot,
+  latestReply,
 }: {
   m: MessageView;
   chatStyle: ChatStyle;
@@ -138,6 +398,9 @@ function ChatMessage({
   /** Persona that authored this reply via an @-mention (T43, m.bot_id) —
    *  renders with a distinct `@Name` treatment. null = normal reply. */
   mentionBot?: Bot | null;
+  /** True for the thread's most recent assistant reply (T54) — the only one
+   *  that shows the variation carousel + regenerate controls. */
+  latestReply?: boolean;
 }) {
   const t = useT();
   const isUser = m.role === "user";
@@ -196,7 +459,7 @@ function ChatMessage({
   const tools = m.role === "assistant" && m.toolCalls.length > 0 && (
     <div className="flex flex-col items-start gap-1">
       {m.toolCalls.map((tc, i) => (
-        <ToolCallChip key={i} call={tc} />
+        <ToolActivity key={tc.id ?? i} call={tc} />
       ))}
     </div>
   );
@@ -210,12 +473,19 @@ function ChatMessage({
     ) : (
       <span className="whitespace-pre-wrap">{m.content}</span>
     ));
+  // Variation controls (T54) — only on the latest reply, only when grouped.
+  // They ride in the meta row (next to copy), so they render inside AssistantMeta.
+  const variations =
+    m.role === "assistant" && latestReply && m.variantIds ? (
+      <VariationControls m={m} />
+    ) : null;
   const meta = m.role === "assistant" && (
     <AssistantMeta
       createdAt={m.created_at}
       durationMs={m.duration_ms}
       now={now}
       content={m.content}
+      trailing={variations}
     />
   );
   const flashRing = flashed && "ring-primary rounded-lg ring-2 ring-offset-2";
@@ -443,6 +713,15 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, pending, scrollToMessageId, consumeScroll]);
 
+  // The thread's most recent assistant reply gets the variation controls (T54).
+  // Includes the streaming placeholder (no variantIds → renders nothing), which
+  // correctly suppresses controls on the prior reply while a reply is in flight.
+  let lastAssistantIndex = -1;
+  for (let k = 0; k < messages.length; k++) {
+    if (messages[k].role === "assistant" && messages[k].kind === "normal")
+      lastAssistantIndex = k;
+  }
+
   if (messages.length === 0 && !pending) {
     return (
       <div className="text-muted-foreground flex flex-1 items-center justify-center text-sm">
@@ -474,7 +753,7 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
         CHAT_CONTAINER_CLASSES[chatStyle],
       )}
     >
-      {messages.map((m) =>
+      {messages.map((m, idx) =>
         m.kind === "summary" ? (
           // Compaction point (T28): a divider, not a chat bubble. The summary
           // text is kept available behind a disclosure — the API context for
@@ -513,6 +792,7 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
             flashed={flashId === m.id}
             now={now}
             bot={bot}
+            latestReply={idx === lastAssistantIndex}
             mentionBot={
               m.bot_id ? (bots.find((b) => b.id === m.bot_id) ?? null) : null
             }

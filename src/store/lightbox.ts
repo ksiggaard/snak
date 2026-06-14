@@ -10,13 +10,15 @@ import type { MessageImage } from "@/lib/messages";
 
 export type LightboxContent =
   | { kind: "image"; image: MessageImage }
-  | { kind: "svg"; svg: string };
+  // `bg` is the resolved (themed) background painted behind the enlarged
+  // diagram and baked into the downloaded SVG (T54); Mermaid emits none.
+  | { kind: "svg"; svg: string; bg?: string };
 
 interface LightboxState {
   content: LightboxContent | null;
   messageId: string | null;
   openImage: (image: MessageImage, messageId?: string | null) => void;
-  openSvg: (svg: string) => void;
+  openSvg: (svg: string, bg?: string) => void;
   close: () => void;
 }
 
@@ -25,7 +27,8 @@ export const useLightbox = create<LightboxState>((set) => ({
   messageId: null,
   openImage: (image, messageId = null) =>
     set({ content: { kind: "image", image }, messageId }),
-  openSvg: (svg) => set({ content: { kind: "svg", svg }, messageId: null }),
+  openSvg: (svg, bg) =>
+    set({ content: { kind: "svg", svg, bg }, messageId: null }),
   close: () => set({ content: null, messageId: null }),
 }));
 
@@ -35,6 +38,6 @@ export const openLightbox = (
   messageId?: string | null,
 ): void => useLightbox.getState().openImage(image, messageId);
 
-/** Imperative helper: open a rendered SVG diagram full-size. */
-export const openLightboxSvg = (svg: string): void =>
-  useLightbox.getState().openSvg(svg);
+/** Imperative helper: open a rendered SVG diagram full-size (optional themed bg, T54). */
+export const openLightboxSvg = (svg: string, bg?: string): void =>
+  useLightbox.getState().openSvg(svg, bg);

@@ -162,8 +162,17 @@ export const en = {
   "chat.ai": "ai",
   "chat.attachment": "attachment",
   "chat.webPage": "web page",
+  "chat.toolRunning": "running…",
+  "chat.toolWorking": "Working…",
   "chat.copy": "Copy",
   "chat.copied": "Copied",
+  // --- Response variations (T54) -------------------------------------------
+  "chat.newVariation": "New variation",
+  "chat.prevVariation": "Previous variation",
+  "chat.nextVariation": "Next variation",
+  "chat.variationHint": "Only the shown variation is sent as context.",
+  "chat.directionPlaceholder": "Optional direction — e.g. more professional",
+  "chat.directionGenerate": "Generate",
   "chat.copyCode": "Copy code",
   "chat.viewImage": "View image",
   "chat.viewDiagram": "View diagram",
@@ -240,6 +249,11 @@ export const en = {
   "composer.documentTooLarge": "“{name}” is too large to attach (max {max}).",
   "composer.documentTruncated":
     "“{name}” was truncated to {n} characters to fit the context budget.",
+  // Context-size readout (T53)
+  "composer.contextEstimate": "~{tokens} tokens",
+  "composer.contextEstimateHint":
+    "Estimated context for your next message (≈4 chars/token). The exact token count is recorded after sending.",
+  "composer.context": "{used} / {max} · {pct}%",
 
   // --- Document attachments (T39) -------------------------------------------------
   "document.chars": "{n} chars",
@@ -308,6 +322,7 @@ export const en = {
   "settings.nav.apiKeys": "API Keys",
   "settings.nav.defaultModel": "Default Model",
   "settings.nav.models": "Models",
+  "settings.nav.contextWindows": "Context windows",
   "settings.nav.ollama": "Local (Ollama)",
   "settings.nav.memory": "Memory",
   "settings.nav.shortcut": "Shortcut",
@@ -345,6 +360,15 @@ export const en = {
   "models.noModels": "No models yet — add one below.",
   "models.labelPlaceholder": "Label (e.g. Opus 4.8)",
   "models.idPlaceholder": "model id",
+
+  // --- Settings: context windows (T53) -------------------------------------------
+  "contextWindows.title": "Context windows",
+  "contextWindows.description":
+    "Set a max context window (in tokens) per model to show a usage bar in the chat. Models without an entry just show an estimate.",
+  "contextWindows.empty": "No context windows configured yet.",
+  "contextWindows.addLabel": "Add a model window",
+  "contextWindows.modelPlaceholder": "Select a model",
+  "contextWindows.maxTokens": "Max tokens",
 
   // --- Settings: local Ollama provider (T37) ---------------------------------------------------------
   "ollama.title": "Local (Ollama)",
@@ -514,6 +538,15 @@ export const en = {
   "mcp.addServer": "Add server",
   "mcp.availableTools": "Available tools",
   "mcp.refreshHint": "Refresh to list tools from enabled servers.",
+  // Web search backend (T52)
+  "mcp.searchProvider": "Web search",
+  "mcp.searchProviderHint":
+    "Backend for the search_web tool — it finds pages so the model can fetch them. DuckDuckGo needs no key; Brave and Serper use an API key stored in your keychain.",
+  "mcp.searchProviderDuckduckgo": "DuckDuckGo (keyless)",
+  "mcp.searchProviderBrave": "Brave Search (API key)",
+  "mcp.searchProviderSerper": "Serper (API key)",
+  "mcp.searchApiKeyPlaceholder": "{provider} API key",
+  "mcp.searchApiKeySaved": "Saved ✓",
   "mcp.sysLocalOnly":
     "System diagnostics is limited to local models (Ollama) — its data stays on this machine.",
   "mcp.sysCloudAllowed":
