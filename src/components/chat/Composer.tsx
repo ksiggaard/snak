@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Camera,
   FileText,
@@ -95,6 +95,12 @@ export function Composer({
   const [canvasOpen, setCanvasOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // --- Prompt history recall (shell-style) -----------------------------------
+  // `historyIndex` is the position in `userHistory` (0 = most recent) while
+  // "arrow mode" is active; null means inactive. Up from an empty field starts
+  // it; Up/Down walk the list; Right accepts; Esc cancels back to empty.
+  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+
   // --- Slash commands (T14) --------------------------------------------------
   // Built-in commands + the enabled plugin `slash-command` contributions, read
   // off the T12 host registry (the single seam — never plugin internals).
@@ -105,6 +111,10 @@ export function Composer({
   );
   // Feeds slash-command output into the conversation without an LLM round-trip.
   const postNote = useThreads((s) => s.postNote);
+  // Quick-action prefill (T-quick): a pending request to load text into the
+  // field, posted by the empty-screen suggestions. Applied via render-time sync
+  // below (keyed by nonce).
+  const composerInsert = useThreads((s) => s.composerInsert);
 
   // A command pending the user's explicit confirmation before it runs (the
   // safety gate for backend actions like /terminal — never auto-executed).
@@ -162,6 +172,29 @@ export function Composer({
     });
   }
 
+  // Quick-action prefill: when the store posts a new insert (nonce changed),
+  // drop its text into the field. Render-time setState — not a useEffect
+  // (forbidden by react-hooks/set-state-in-effect) — matching the repo's
+  // store→local pattern (see ModelPicker). `appliedNonce` is state (not a ref)
+  // so accessing it during render is allowed; the same text inserted twice
+  // still applies because each insert bumps the nonce.
+  const [appliedNonce, setAppliedNonce] = useState(0);
+  if (composerInsert && composerInsert.nonce !== appliedNonce) {
+    setAppliedNonce(composerInsert.nonce);
+    setText(composerInsert.text);
+    setHistoryIndex(null);
+  }
+  // Focus + caret-to-end after a prefill lands. A side-effect (no setState), so
+  // it's fine in an effect; keyed on the applied nonce so it runs once per
+  // insert, after the text has been committed.
+  useEffect(() => {
+    if (appliedNonce === 0) return;
+    const el = textareaRef.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, [appliedNonce]);
+
   // Whether the selected provider has a stored API key — from the cached keys
   // store (no keychain prompt). `null` while the cache is still loading, which
   // matches the previous "checking" state so Send isn't blocked before we know.
@@ -195,6 +228,49 @@ export function Composer({
     providerEnabled &&
     keyReady !== false &&
     canCompact(threadMessages);
+
+  // Previously-sent user prompts in this thread, most-recent first — the source
+  // for arrow-key history recall. Summary rows aren't real prompts.
+  const userHistory = useMemo(
+    () =>
+      threadMessages
+        .filter((m) => m.role === "user" && m.kind !== "summary")
+        .map((m) => m.content)
+        .reverse(),
+    [threadMessages],
+  );
+
+  /** Put the caret at the end of the textarea after React re-renders. */
+  function caretToEnd() {
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (el) el.setSelectionRange(el.value.length, el.value.length);
+    });
+  }
+
+  /** Show history entry `idx` as the current draft (arrow mode on). */
+  function showHistory(idx: number) {
+    const value = userHistory[idx];
+    setHistoryIndex(idx);
+    setText(value);
+    setCaret(value.length);
+    // A programmatic fill must not arm the slash/mention palettes.
+    setPaletteOpen(false);
+    setMentionOpen(false);
+    caretToEnd();
+  }
+
+  /** Leave arrow mode. `clear` empties the field (Esc / past-newest Down);
+   * otherwise the recalled text stays as an editable draft (Right accepts). */
+  function exitHistory(clear: boolean) {
+    setHistoryIndex(null);
+    if (clear) {
+      setText("");
+      setCaret(0);
+    } else {
+      caretToEnd();
+    }
+  }
 
   /**
    * Route picked/dropped/pasted files by `classifyFile` (T39): images keep the
@@ -312,6 +388,7 @@ export function Composer({
     setCanvasOpen(false);
     setPaletteOpen(false);
     setMentionOpen(false);
+    setHistoryIndex(null);
     setCaret(0);
   }
 
@@ -623,6 +700,9 @@ export function Composer({
         value={text}
         onChange={(e) => {
           const v = e.target.value;
+          // Editing a recalled prompt commits it to a normal draft — leave
+          // arrow mode but keep what the user is now typing.
+          if (historyIndex !== null) setHistoryIndex(null);
           setText(v);
           setCaret(e.target.selectionStart ?? v.length);
           // Open the palette when the user starts a slash command; reset the
@@ -698,6 +778,37 @@ export function Composer({
                   Math.min(mentionIndex, mentionMatches.length - 1)
                 ],
               );
+              return;
+            }
+          }
+          // Prompt history recall (shell-style). Only when neither palette is
+          // open; arrow mode starts from an empty field on ArrowUp.
+          if (!showPalette && !showMentionPalette) {
+            const idx = historyIndex;
+            if (e.key === "ArrowUp" && (idx !== null || text.length === 0)) {
+              if (userHistory.length === 0) return;
+              e.preventDefault();
+              showHistory(
+                idx !== null ? Math.min(idx + 1, userHistory.length - 1) : 0,
+              );
+              return;
+            }
+            if (idx !== null && e.key === "ArrowDown") {
+              e.preventDefault();
+              // Past the most recent → back to an empty line.
+              if (idx <= 0) exitHistory(true);
+              else showHistory(idx - 1);
+              return;
+            }
+            if (idx !== null && e.key === "ArrowRight") {
+              // Accept the suggestion: keep it, leave arrow mode, caret to end.
+              e.preventDefault();
+              exitHistory(false);
+              return;
+            }
+            if (idx !== null && e.key === "Escape") {
+              e.preventDefault();
+              exitHistory(true);
               return;
             }
           }

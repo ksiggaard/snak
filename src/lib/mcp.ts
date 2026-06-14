@@ -99,9 +99,25 @@ export const BUILTIN_SYSDEBUG_SERVER: McpServer = {
   builtin: true,
 };
 
+/**
+ * The built-in YouTube server (`youtube`). Ships **enabled** — two keyless tools:
+ * `search_youtube` (find / recommend a video, thumbnails shown inline) and
+ * `youtube_transcript` (pull a video's closed captions with `[mm:ss]` timestamps
+ * so the model can summarize it and answer timestamp questions). Works out of the
+ * box with no API key or external setup.
+ */
+export const BUILTIN_YOUTUBE_SERVER: McpServer = {
+  id: "youtube",
+  label: "YouTube (built-in)",
+  transport: "builtin",
+  enabled: true,
+  builtin: true,
+};
+
 /** All built-in servers, in display order (always present, never removable). */
 export const BUILTIN_SERVERS: McpServer[] = [
   BUILTIN_WEB_SERVER,
+  BUILTIN_YOUTUBE_SERVER,
   BUILTIN_SYSDEBUG_SERVER,
 ];
 

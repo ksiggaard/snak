@@ -3,6 +3,7 @@ import {
   BUILTIN_SERVERS,
   BUILTIN_SYSDEBUG_SERVER,
   BUILTIN_WEB_SERVER,
+  BUILTIN_YOUTUBE_SERVER,
   gateServersForChat,
   parseServers,
   withBuiltins,
@@ -17,16 +18,19 @@ const custom: McpServer = {
   enabled: true,
 };
 
-const N_BUILTINS = BUILTIN_SERVERS.length; // web + sys
+const N_BUILTINS = BUILTIN_SERVERS.length; // web + youtube + sys
 
 describe("withBuiltins", () => {
   it("prepends every built-in (with default enabled state) when absent", () => {
     const out = withBuiltins([custom]);
     expect(out[0].id).toBe(BUILTIN_WEB_SERVER.id);
     expect(out[0].enabled).toBe(true);
-    expect(out[1].id).toBe(BUILTIN_SYSDEBUG_SERVER.id);
+    expect(out[1].id).toBe(BUILTIN_YOUTUBE_SERVER.id);
+    // YouTube ships enabled (keyless, works out of the box).
+    expect(out[1].enabled).toBe(true);
+    expect(out[2].id).toBe(BUILTIN_SYSDEBUG_SERVER.id);
     // The system-diagnostics server is disabled by default.
-    expect(out[1].enabled).toBe(false);
+    expect(out[2].enabled).toBe(false);
     expect(out.every((s, i) => (i < N_BUILTINS ? s.builtin : true))).toBe(true);
     expect(out).toHaveLength(N_BUILTINS + 1);
   });
@@ -37,14 +41,17 @@ describe("withBuiltins", () => {
       { ...BUILTIN_SYSDEBUG_SERVER, enabled: true },
       custom,
     ]);
-    expect(out.filter((s) => s.id === BUILTIN_WEB_SERVER.id)).toHaveLength(1);
-    expect(out.filter((s) => s.id === BUILTIN_SYSDEBUG_SERVER.id)).toHaveLength(
-      1,
-    );
-    expect(out[0].enabled).toBe(false); // web toggled off, kept
-    expect(out[1].enabled).toBe(true); // sys toggled on, kept
-    expect(out[0].builtin).toBe(true);
-    expect(out[1].builtin).toBe(true);
+    // Order-independent: each built-in appears exactly once with its toggled
+    // (or default) state, regardless of where it sits in the declared order.
+    const find = (id: string) => out.filter((s) => s.id === id);
+    expect(find(BUILTIN_WEB_SERVER.id)).toHaveLength(1);
+    expect(find(BUILTIN_YOUTUBE_SERVER.id)).toHaveLength(1);
+    expect(find(BUILTIN_SYSDEBUG_SERVER.id)).toHaveLength(1);
+    expect(find(BUILTIN_WEB_SERVER.id)[0].enabled).toBe(false); // toggled off, kept
+    expect(find(BUILTIN_SYSDEBUG_SERVER.id)[0].enabled).toBe(true); // toggled on, kept
+    expect(find(BUILTIN_YOUTUBE_SERVER.id)[0].enabled).toBe(true); // default
+    expect(find(BUILTIN_WEB_SERVER.id)[0].builtin).toBe(true);
+    expect(find(BUILTIN_SYSDEBUG_SERVER.id)[0].builtin).toBe(true);
   });
 });
 
@@ -52,6 +59,7 @@ describe("parseServers", () => {
   it("returns just the built-ins for null/empty", () => {
     expect(parseServers(null)).toEqual([
       { ...BUILTIN_WEB_SERVER, enabled: true },
+      { ...BUILTIN_YOUTUBE_SERVER, enabled: true },
       { ...BUILTIN_SYSDEBUG_SERVER, enabled: false },
     ]);
   });
@@ -66,7 +74,8 @@ describe("parseServers", () => {
     const raw = JSON.stringify([custom]);
     const out = parseServers(raw);
     expect(out[0].id).toBe(BUILTIN_WEB_SERVER.id);
-    expect(out[1].id).toBe(BUILTIN_SYSDEBUG_SERVER.id);
+    expect(out[1].id).toBe(BUILTIN_YOUTUBE_SERVER.id);
+    expect(out[2].id).toBe(BUILTIN_SYSDEBUG_SERVER.id);
     expect(out[N_BUILTINS]).toMatchObject({ id: "github", transport: "http" });
   });
 

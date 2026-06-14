@@ -108,7 +108,9 @@ export function Plugins() {
           <p className="text-muted-foreground text-sm">{t("common.loading")}</p>
         )}
         {loaded &&
-          PLUGIN_CATEGORIES.map((cat) => {
+          // Themes are managed elsewhere (the theme toggle / appearance), so
+          // the `theme` category is intentionally hidden from this list.
+          PLUGIN_CATEGORIES.filter((cat) => cat !== "theme").map((cat) => {
             const items = byCategory(cat);
             return (
               <div key={cat} className="flex flex-col gap-1">

@@ -163,6 +163,18 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/017_message_variants.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 18,
+            description: "per-project quick actions: projects.quick_actions",
+            sql: include_str!("../migrations/018_quick_actions.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 19,
+            description: "per-persona conversation starters: bots.starters",
+            sql: include_str!("../migrations/019_bot_starters.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

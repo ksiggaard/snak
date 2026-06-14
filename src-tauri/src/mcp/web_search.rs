@@ -18,8 +18,9 @@ use anyhow::{anyhow, Context};
 use serde_json::{json, Value};
 
 use super::web_browse::html_to_text;
+use super::SourceSink;
 use crate::commands::keys;
-use crate::providers::ToolDef;
+use crate::providers::{ToolDef, ToolSource};
 
 /// Default backend when none is configured.
 pub const DEFAULT_PROVIDER: &str = "duckduckgo";
@@ -70,6 +71,7 @@ pub async fn search(
     client: &reqwest::Client,
     args: &Value,
     provider: Option<&str>,
+    emit_sources: SourceSink<'_>,
 ) -> anyhow::Result<String> {
     let query = args
         .get("query")
@@ -90,6 +92,18 @@ pub async fn search(
         // Default + explicit "duckduckgo" + any unknown value → keyless DDG.
         _ => search_duckduckgo(client, query, count).await?,
     };
+    // Surface the hits to the UI as clickable sources (display-only; the model
+    // still gets the formatted text below).
+    emit_sources(
+        results
+            .iter()
+            .map(|r| ToolSource {
+                url: r.url.clone(),
+                title: (!r.title.is_empty()).then(|| r.title.clone()),
+                snippet: (!r.snippet.is_empty()).then(|| r.snippet.clone()),
+            })
+            .collect(),
+    );
     Ok(format_results(query, &results))
 }
 
@@ -267,8 +281,8 @@ fn clip(s: &str, max: usize) -> String {
 // ---------------------------------------------------------------------------
 
 /// Read the search API key from the keychain (account `search.<provider>`), with
-/// an actionable error when it's missing.
-fn require_key(provider: &str) -> anyhow::Result<String> {
+/// an actionable error when it's missing. Shared with `image_search`.
+pub(crate) fn require_key(provider: &str) -> anyhow::Result<String> {
     let account = format!("search.{provider}");
     match keys::get_api_key(&account).map_err(|e| anyhow!(e))? {
         Some(k) if !k.is_empty() => Ok(k),

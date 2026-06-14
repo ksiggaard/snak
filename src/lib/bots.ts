@@ -93,12 +93,66 @@ export function buildBotSystemText(
   return sections.join("\n\n");
 }
 
+/**
+ * Group-chat framing (T43), injected as a system block right after a persona's
+ * own block when a thread has ≥2 participants. It names the participants and
+ * explains the labeled-transcript format so the persona engages with — and may
+ * disagree with — the human, the base Assistant, and other named personas,
+ * while recognizing its own (unprefixed) earlier turns as itself. Kept separate
+ * from `buildBotSystemText` so the persona's identity block is unchanged in
+ * one-on-one chats. Pure.
+ */
+export function buildGroupChatSystemText(opts: {
+  /** The replying persona's name. */
+  selfName: string;
+  /** Other participants' display names (other personas, plus "Assistant" when
+   * the base assistant has spoken). */
+  others: string[];
+}): string {
+  const self = opts.selfName.trim() || "you";
+  const others = opts.others.filter((o) => o.trim().length > 0);
+  const roster =
+    others.length > 0
+      ? `the human, and ${others.join(", ")}`
+      : "the human and other participants";
+  return [
+    `This is a group chat with multiple participants: ${roster}.`,
+    `Messages from other participants are prefixed with their name in square brackets, e.g. "[Name]: …". Messages with no prefix are from the human. Your own earlier messages also have no prefix — those are you, ${self}.`,
+    `Engage naturally as ${self}: you may agree with, build on, question, or directly disagree with what the human, the Assistant, or another participant said — address them by name when you do. Reply with only what ${self} would say; never speak for anyone else and never add a name prefix to your own reply.`,
+  ].join("\n\n");
+}
+
 /** Data URL for a bot's uploaded avatar, or null for the monogram fallback. */
 export function botAvatarUrl(
   bot: Pick<Bot, "avatar_media_type" | "avatar_data">,
 ): string | null {
   if (!bot.avatar_media_type || !bot.avatar_data) return null;
   return `data:${bot.avatar_media_type};base64,${bot.avatar_data}`;
+}
+
+/**
+ * Parse a persona's stored `starters` JSON into a clean list of opening lines.
+ * Tolerant: returns `[]` for null/empty/malformed input, keeps only non-blank
+ * strings (trimmed), so a stray empty row never renders an empty chip. Pure.
+ */
+export function parseStarters(json: string | null | undefined): string[] {
+  if (!json) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .filter((s): s is string => typeof s === "string")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+/** Serialize a persona's starter lines for storage (blank lines dropped). */
+export function serializeStarters(starters: string[]): string {
+  return JSON.stringify(starters.map((s) => s.trim()).filter((s) => s.length > 0));
 }
 
 /** The monogram shown when a bot has no avatar: the name's first grapheme,

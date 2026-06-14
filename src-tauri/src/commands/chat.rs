@@ -43,7 +43,12 @@ list of results (title, URL, snippet) for a query. When the user shares a URL or
 asks about the contents of a specific web page, you MUST call `web__fetch_url` to \
 read it before answering. When you need current information but don't have a URL, \
 call `web__search_web` first to find relevant pages, then `web__fetch_url` on the \
-most relevant result to read it. Never summarize or describe a page from memory. \
+most relevant result to read it. When the user asks to SEE, show, or find an \
+image / picture / photo of something, call `web__search_images` with a query; to \
+pull the images out of a specific page or article, call `web__fetch_images` with \
+its URL. Both download the pictures and display them to the user automatically — \
+do not try to embed image data yourself; just describe what was found and cite the \
+sources. Never summarize or describe a page from memory. \
 The `sys__*` tools inspect the local machine (read files and directories, check \
 permissions, and run read-only diagnostic commands such as listing processes, \
 disk, memory, and network). Use them when the user asks about the state of their \

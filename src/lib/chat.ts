@@ -51,6 +51,42 @@ export interface ToolDoneEvent {
   ok: boolean;
 }
 
+/** One image a tool fetched (base64 bytes), to render + persist as a message
+ * image attachment. Fields are camelCase (the Rust `ToolImage` serializes so). */
+export interface ToolImageResult {
+  mediaType: string;
+  /** Base64-encoded image bytes (no `data:` prefix). */
+  data: string;
+  /** The page the image came from (linked in the lightbox). */
+  sourceUrl?: string;
+  title?: string;
+}
+
+/** Images produced by a single tool call (`search_images` / `fetch_images`),
+ * keyed to that call's id. */
+export interface ToolImagesEvent {
+  id: string;
+  images: ToolImageResult[];
+}
+
+/** One web source a tool consulted (a `search_web` hit or a `fetch_url` page).
+ * Fields are camelCase (the Rust `ToolSource` serializes so). */
+export interface ToolSource {
+  /** The page URL — rendered as a clickable link. */
+  url: string;
+  /** Result title, when known (search hits have one; a bare fetch does not). */
+  title?: string;
+  /** A short excerpt: the search snippet, or the lead of a fetched page. */
+  snippet?: string;
+}
+
+/** Web sources produced by a single tool call (`search_web` / `fetch_url`),
+ * keyed to that call's id. */
+export interface ToolSourcesEvent {
+  id: string;
+  sources: ToolSource[];
+}
+
 /**
  * A gated tool call awaiting the user's approval before it runs. Sent for the
  * read-only system-diagnostics server; the UI shows an approve/deny card and
@@ -77,6 +113,12 @@ export interface StreamEvent {
   toolOutput?: ToolOutputEvent;
   toolDone?: ToolDoneEvent;
   approvalRequest?: ApprovalRequestEvent;
+  /** Images a tool fetched (`search_images` / `fetch_images`), to render +
+   * persist as message image attachments. */
+  toolImages?: ToolImagesEvent;
+  /** Web sources a tool consulted (`search_web` / `fetch_url`), shown as
+   * clickable citations on the tool-activity chip. */
+  toolSources?: ToolSourcesEvent;
 }
 
 /**

@@ -1,4 +1,4 @@
-import type { StreamEvent } from "@/lib/chat";
+import type { StreamEvent, ToolSource } from "@/lib/chat";
 import { listAttachments, listMessages } from "@/lib/db";
 import { planVariants } from "@/lib/variations";
 import type { Message } from "@/types/db";
@@ -6,6 +6,12 @@ import type { Message } from "@/types/db";
 export interface MessageImage {
   media_type: string;
   data: string; // base64
+  /** For images found via `search_images`/`fetch_images`: the page the image
+   * came from, linked in the lightbox. Persisted in the attachment `filename`
+   * column; absent for user-attached images. */
+  source?: string;
+  /** Optional caption (the search result title); streaming-only — not persisted. */
+  title?: string;
 }
 
 /** A tool the model invoked while producing an assistant message. Persisted as
@@ -24,6 +30,9 @@ export interface MessageToolCall {
   output?: string;
   /** False when the tool errored; undefined/true otherwise. */
   ok?: boolean;
+  /** Web sources the tool consulted (`web__search_web` hits / `web__fetch_url`
+   * page): clickable citations shown in the activity panel. Persisted. */
+  sources?: ToolSource[];
   /** Transient (streaming-only, never persisted): the tool is still executing,
    * so the activity panel renders expanded with a spinner. */
   running?: boolean;
@@ -81,6 +90,10 @@ export function applyToolEvent(
     const tc = toolCalls.find((c) => c.id === event.toolOutput!.id);
     if (tc) tc.output = (tc.output ?? "") + event.toolOutput.chunk + "\n";
   }
+  if (event.toolSources) {
+    const tc = toolCalls.find((c) => c.id === event.toolSources!.id);
+    if (tc) tc.sources = [...(tc.sources ?? []), ...event.toolSources.sources];
+  }
   if (event.toolDone) {
     const tc = toolCalls.find((c) => c.id === event.toolDone!.id);
     if (tc) {
@@ -104,7 +117,26 @@ export function persistableToolCall(tc: MessageToolCall): MessageToolCall {
     command: tc.command,
     output: output || undefined,
     ok: tc.ok,
+    sources: tc.sources && tc.sources.length > 0 ? tc.sources : undefined,
   };
+}
+
+/** Parse the persisted `sources` array of a tool-call payload, keeping only
+ * well-formed entries (each needs a string `url`). */
+function parseToolSources(raw: unknown): ToolSource[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: ToolSource[] = [];
+  for (const s of raw) {
+    if (s && typeof s === "object" && typeof (s as ToolSource).url === "string") {
+      const src = s as ToolSource;
+      out.push({
+        url: src.url,
+        title: typeof src.title === "string" ? src.title : undefined,
+        snippet: typeof src.snippet === "string" ? src.snippet : undefined,
+      });
+    }
+  }
+  return out.length > 0 ? out : undefined;
 }
 
 /** Parse a persisted `tool_call` attachment's JSON payload. Tolerant of
@@ -120,6 +152,7 @@ function parseToolCall(data: string): MessageToolCall | null {
         command: typeof obj.command === "string" ? obj.command : undefined,
         output: typeof obj.output === "string" ? obj.output : undefined,
         ok: typeof obj.ok === "boolean" ? obj.ok : undefined,
+        sources: parseToolSources(obj.sources),
       };
     }
   } catch {
@@ -152,7 +185,12 @@ export async function loadThreadMessages(
       const attachments = await listAttachments(m.id);
       const images = attachments
         .filter((a) => a.kind === "image")
-        .map((a) => ({ media_type: a.media_type, data: a.data }));
+        .map((a) => ({
+          media_type: a.media_type,
+          data: a.data,
+          // Found-image attachments stash their source page URL in `filename`.
+          source: a.filename ?? undefined,
+        }));
       const documents = attachments
         .filter((a) => a.kind === "document")
         .map((a) => ({

@@ -1,9 +1,10 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { estimateContextTokens } from "@/lib/contextSize";
 import type { CompactableMessage } from "@/lib/compaction";
 import { formatTokens } from "@/lib/usage";
 import { cn } from "@/lib/utils";
 import { useContextWindows } from "@/store/contextWindows";
+import { useThreads } from "@/store/threads";
 import { useT } from "@/store/i18n";
 
 interface ContextMeterProps {
@@ -31,16 +32,25 @@ export function ContextMeter({
 }: ContextMeterProps) {
   const t = useT();
   const max = useContextWindows((s) => s.windows[model]);
+  // Tokens of the assembled system context (skills, global/memory, persona,
+  // project) — invisible to a message-only count. Maintained by the store and
+  // recomputed here on mount so edits made in Settings are reflected on return.
+  const systemTokens = useThreads((s) => s.systemTokens);
+  const refreshSystemTokens = useThreads((s) => s.refreshSystemTokens);
+  useEffect(() => {
+    void refreshSystemTokens();
+  }, [refreshSystemTokens]);
 
   const tokens = useMemo(
     () =>
+      systemTokens +
       estimateContextTokens({
         messages,
         draftText,
         draftImageCount,
         draftDocuments,
       }),
-    [messages, draftText, draftImageCount, draftDocuments],
+    [systemTokens, messages, draftText, draftImageCount, draftDocuments],
   );
 
   if (!max) {

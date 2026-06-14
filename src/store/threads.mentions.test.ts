@@ -65,6 +65,7 @@ const bot = (over: Partial<Bot>): Bot => ({
   avatar_data: null,
   default_provider: null,
   default_model: null,
+  starters: "",
   created_at: "2026-06-13 00:00:00",
   updated_at: "2026-06-13 00:00:00",
   ...over,

@@ -19,10 +19,12 @@ import {
   type MessageView,
 } from "@/lib/messages";
 import { cn } from "@/lib/utils";
+import { openExternal } from "@/lib/openExternal";
 import { Markdown } from "@/components/chat/Markdown";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { BotAvatar } from "@/components/bots/BotAvatar";
+import { EmptySuggestions } from "@/components/chat/EmptySuggestions";
 import { useBots } from "@/store/bots";
 import { useThreads } from "@/store/threads";
 import { openLightbox } from "@/store/lightbox";
@@ -35,6 +37,7 @@ import {
   type ChatStyle,
 } from "@/lib/appearance";
 import { formatDuration, parseDbTime, relativeTime } from "@/lib/time";
+import { imageLabel, imageLabelOffsets } from "@/lib/imageLabels";
 import type { Bot } from "@/types/db";
 
 interface MessageListProps {
@@ -57,9 +60,11 @@ function ToolActivity({ call }: { call: MessageToolCall }) {
   const label = isFetch ? (call.url ?? t("chat.webPage")) : call.name;
   const running = call.running === true;
   const failed = call.ok === false;
-  // A command/output panel exists for the system-diagnostic tools; web-fetch and
-  // bare calls keep the simple pill (no disclosure).
-  const hasPanel = Boolean(call.command || call.output);
+  // A disclosure panel exists for tools that carry a command/output (system
+  // diagnostics) or web sources (search hits / fetched page); bare calls keep
+  // the simple pill.
+  const hasSources = Boolean(call.sources && call.sources.length > 0);
+  const hasPanel = Boolean(call.command || call.output || hasSources);
   // Auto-expanded while the tool runs (the live terminal view); collapsed once
   // it finishes, with a click to re-open and review what ran.
   const [open, setOpen] = useState(false);
@@ -143,11 +148,33 @@ function ToolActivity({ call }: { call: MessageToolCall }) {
               {call.output}
             </pre>
           ) : (
-            running && (
+            running &&
+            !hasSources && (
               <div className="text-muted-foreground px-2 py-1">
                 {t("chat.toolWorking")}
               </div>
             )
+          )}
+          {hasSources && (
+            <ul className="divide-border/60 max-h-64 divide-y overflow-auto">
+              {call.sources!.map((s, i) => (
+                <li key={`${s.url}-${i}`} className="px-2 py-1.5">
+                  <button
+                    type="button"
+                    onClick={() => void openExternal(s.url)}
+                    title={s.url}
+                    className="text-primary block max-w-full cursor-pointer truncate text-left hover:underline"
+                  >
+                    {s.title?.trim() || s.url}
+                  </button>
+                  {s.snippet && (
+                    <p className="text-muted-foreground mt-0.5 text-[11px] leading-snug break-words">
+                      {s.snippet}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       )}
@@ -388,6 +415,7 @@ function ChatMessage({
   bot,
   mentionBot,
   latestReply,
+  imageLabelStart,
 }: {
   m: MessageView;
   chatStyle: ChatStyle;
@@ -395,6 +423,9 @@ function ChatMessage({
   now: number;
   innerRef: (el: HTMLDivElement | null) => void;
   bot?: Bot | null;
+  /** Count of images in the thread before this message — its i-th image is
+   *  labeled `imageLabel(imageLabelStart + i)` (T-image-refs). */
+  imageLabelStart?: number;
   /** Persona that authored this reply via an @-mention (T43, m.bot_id) —
    *  renders with a distinct `@Name` treatment. null = normal reply. */
   mentionBot?: Bot | null;
@@ -416,22 +447,31 @@ function ChatMessage({
 
   const images = m.images.length > 0 && (
     <div className="flex flex-wrap gap-2">
-      {m.images.map((img, i) => (
-        <button
-          key={i}
-          type="button"
-          onClick={() => openLightbox(img)}
-          aria-label={t("chat.viewImage")}
-          title={t("chat.viewImage")}
-          className="focus-visible:ring-ring cursor-zoom-in overflow-hidden rounded-md focus-visible:ring-2 focus-visible:outline-none"
-        >
-          <img
-            src={imageDataUrl(img)}
-            alt={t("chat.attachment")}
-            className="max-h-48 rounded-md"
-          />
-        </button>
-      ))}
+      {m.images.map((img, i) => {
+        // Persistent positional label (Image A, B, …) shown so the user can
+        // reference a specific image to the model; the label text is kept in
+        // English to match the manifest the model receives (see imageLabels).
+        const label = `Image ${imageLabel((imageLabelStart ?? 0) + i)}`;
+        return (
+          <button
+            key={i}
+            type="button"
+            onClick={() => openLightbox(img)}
+            aria-label={`${t("chat.viewImage")} — ${label}`}
+            title={`${label} · ${t("chat.viewImage")}`}
+            className="focus-visible:ring-ring relative cursor-zoom-in overflow-hidden rounded-md focus-visible:ring-2 focus-visible:outline-none"
+          >
+            <img
+              src={imageDataUrl(img)}
+              alt={label}
+              className="max-h-48 rounded-md"
+            />
+            <span className="bg-background/80 text-foreground absolute top-1 left-1 rounded px-1.5 py-0.5 text-[10px] font-semibold backdrop-blur-sm">
+              {label}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
   // Document attachments (T39) — rendered alongside images, so they appear in
@@ -722,22 +762,15 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
       lastAssistantIndex = k;
   }
 
+  // Per-message image-label offsets (Image A, B, … by order of appearance),
+  // matching the labels injected into the API history so a user reference like
+  // "Image B" lines up with what the model was told (T-image-refs).
+  const imageOffsets = imageLabelOffsets(messages);
+
   if (messages.length === 0 && !pending) {
-    return (
-      <div className="text-muted-foreground flex flex-1 items-center justify-center text-sm">
-        {bot ? (
-          // Empty bot chat (T38): the persona greets instead of the generic
-          // empty-state text.
-          <div className="flex flex-col items-center gap-2">
-            <BotAvatar bot={bot} className="size-12 text-xl" />
-            <span className="text-foreground font-semibold">{bot.name}</span>
-            <span>{t("chat.botEmptyHint", { name: bot.name })}</span>
-          </div>
-        ) : (
-          t("chat.empty")
-        )}
-      </div>
-    );
+    // Empty chat: a persona greets with its own starters (T38); a plain new
+    // chat shows configurable quick actions + persona starters.
+    return <EmptySuggestions bot={bot} />;
   }
 
   return (
@@ -793,6 +826,7 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
             now={now}
             bot={bot}
             latestReply={idx === lastAssistantIndex}
+            imageLabelStart={imageOffsets[idx]}
             mentionBot={
               m.bot_id ? (bots.find((b) => b.id === m.bot_id) ?? null) : null
             }

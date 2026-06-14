@@ -10,6 +10,7 @@ import {
   setBotInstructions,
   setBotModusOperandi,
   setBotMood,
+  setBotStarters,
   setBotMoodEnabled,
   setBotTagline,
   setBotToneOfVoice,
@@ -34,6 +35,8 @@ interface BotsState {
   setTagline: (id: string, tagline: string) => Promise<void>;
   setModusOperandi: (id: string, modusOperandi: string) => Promise<void>;
   setToneOfVoice: (id: string, toneOfVoice: string) => Promise<void>;
+  /** Persist the persona's conversation starters JSON (migration 019). */
+  setStarters: (id: string, starters: string) => Promise<void>;
   /** Toggle the persona managing its own memory after each exchange (T40). */
   setAutoMemory: (id: string, enabled: boolean) => Promise<void>;
   /** Toggle the persona's persistent mood (T40). */
@@ -99,6 +102,11 @@ export const useBots = create<BotsState>((set, get) => ({
 
   setToneOfVoice: async (id, toneOfVoice) => {
     await setBotToneOfVoice(id, toneOfVoice);
+    await get().refresh();
+  },
+
+  setStarters: async (id, starters) => {
+    await setBotStarters(id, starters);
     await get().refresh();
   },
 

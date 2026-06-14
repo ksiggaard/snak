@@ -429,6 +429,21 @@ export async function setModelContextWindows(
   await setSetting(MODEL_CONTEXT_WINDOWS_KEY, JSON.stringify(windows));
 }
 
+/** Settings key for the global quick actions shown on the empty new-chat
+ * screen. A JSON array of `QuickAction`; absent = use the built-in defaults. */
+export const QUICK_ACTIONS_KEY = "quick_actions";
+
+/** Read the stored global quick-actions JSON, or null when none is saved (the
+ * caller seeds the defaults). Parsing/validation lives in `lib/quickActions`. */
+export async function getQuickActions(): Promise<string | null> {
+  return getSetting(QUICK_ACTIONS_KEY);
+}
+
+/** Persist the global quick-actions JSON. */
+export async function setQuickActions(json: string): Promise<void> {
+  await setSetting(QUICK_ACTIONS_KEY, json);
+}
+
 // ---------------------------------------------------------------------------
 // Projects (T20) — grouped threads with shared instructions + reference files
 // ---------------------------------------------------------------------------
@@ -481,6 +496,20 @@ export async function setProjectInstructions(
     `UPDATE projects SET instructions = $1, updated_at = datetime('now')
      WHERE id = $2`,
     [instructions, id],
+  );
+}
+
+/** Persist a project's quick-actions override JSON (empty string = no override;
+ * the global quick actions then apply). Migration 018. */
+export async function setProjectQuickActions(
+  id: string,
+  quickActions: string,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE projects SET quick_actions = $1, updated_at = datetime('now')
+     WHERE id = $2`,
+    [quickActions, id],
   );
 }
 
@@ -792,6 +821,19 @@ export async function setBotTagline(
     `UPDATE bots SET tagline = $1, updated_at = datetime('now')
      WHERE id = $2`,
     [tagline, id],
+  );
+}
+
+/** Persist a persona's conversation starters JSON (migration 019). */
+export async function setBotStarters(
+  id: string,
+  starters: string,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE bots SET starters = $1, updated_at = datetime('now')
+     WHERE id = $2`,
+    [starters, id],
   );
 }
 

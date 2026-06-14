@@ -179,10 +179,17 @@ export const en = {
   "chat.downloadImage": "Download",
   "chat.imageSaved": "Image saved.",
   "chat.imageSaveFailed": "Couldn't save the image.",
+  "chat.imageSource": "Source",
   "chat.openInTerminal": "Open in terminal",
   "chat.openInTerminalTitle":
     "Open in terminal (staged, not run — review and press Enter)",
   "chat.botEmptyHint": "Say hi — {name} is ready.",
+  // --- Empty new-chat suggestions (quick actions + persona starters) --------
+  "chat.suggestionsTitle": "How can I help?",
+  "chat.suggestionsHint": "Pick a quick action to get started, or just type below.",
+  "chat.quickActionsLabel": "Quick actions",
+  "chat.chatWithLabel": "Chat with a persona",
+  "chat.chatWith": "Chat with {name}",
 
   // --- Chat: right-side panel ------------------------------------------------------------------------------------------
   "panel.open": "Open chat panel",
@@ -333,6 +340,7 @@ export const en = {
   "settings.nav.skills": "Skills",
   "settings.nav.plugins": "Plugins",
   "settings.nav.bots": "Personas",
+  "settings.nav.quickActions": "Quick actions",
 
   // --- Settings: API keys -------------------------------------------------------------------
   "apiKeys.title": "API keys",
@@ -594,6 +602,30 @@ export const en = {
   "project.removeFile": "Remove {name}",
   "project.truncated": '"{name}" was truncated to {n} characters.',
   "project.readError": 'Couldn\'t read "{name}" as text.',
+  "project.quickActions": "Quick actions",
+  "project.quickActionsHint":
+    "Override the global quick actions for chats in this project. Leave empty to use the global ones.",
+  "project.quickActionsUsingGlobal":
+    "This project uses the global quick actions. Add one below to override them here.",
+
+  // --- Quick actions (empty-screen starters) ---------------------------------
+  "quickActions.title": "Quick actions",
+  "quickActions.description":
+    "One-tap starters shown on the empty new-chat screen. A prefill action drops its prompt into the composer; a send action fires it right away.",
+  "quickActions.empty": "No quick actions. Add one, or reset to the defaults.",
+  "quickActions.label": "Button label",
+  "quickActions.labelPlaceholder": "e.g. Proof read text",
+  "quickActions.prompt": "Prompt",
+  "quickActions.promptPlaceholder":
+    "e.g. Proofread the following text and fix any mistakes:",
+  "quickActions.mode": "On click",
+  "quickActions.modePrefill": "Prefill composer",
+  "quickActions.modeSend": "Send immediately",
+  "quickActions.add": "Add action",
+  "quickActions.remove": "Remove action",
+  "quickActions.reset": "Reset to defaults",
+  "quickActions.moveUp": "Move up",
+  "quickActions.moveDown": "Move down",
 
   // --- Bots / personas (T38, T40) ---------------------------------------------------------------------------------------------------------------------
   "bots.title": "Personas",
@@ -618,6 +650,11 @@ export const en = {
   "bots.toneOfVoice": "Tone of voice",
   "bots.toneOfVoiceHint": "How {name} sounds — register, warmth, directness.",
   "bots.toneOfVoicePlaceholder": "e.g. Warm but direct, with dry humor.",
+  "bots.starters": "Conversation starters",
+  "bots.startersHint":
+    "Opening lines shown as one-tap chips on {name}'s empty chat — a great way to surface what this persona is good at. One per line.",
+  "bots.startersPlaceholder":
+    "e.g. Review my system architecture\nExplain a design pattern with an example\nWhat would you change about this API?",
   "bots.avatar": "Avatar",
   "bots.uploadAvatar": "Upload image",
   "bots.removeAvatar": "Remove",

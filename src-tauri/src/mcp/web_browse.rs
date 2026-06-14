@@ -8,8 +8,14 @@
 use anyhow::{anyhow, Context};
 use serde_json::json;
 
+use super::image_search;
 use super::web_search;
-use super::ToolDef;
+use super::{ImageSink, SourceSink, ToolDef};
+use crate::providers::ToolSource;
+
+/// Chars of fetched page text surfaced to the UI as the source excerpt (the
+/// model still receives the full, separately-capped text).
+const SOURCE_EXCERPT_LEN: usize = 600;
 
 /// The id used to namespace this server's tools (`web__fetch_url`).
 pub const SERVER_ID: &str = "web";
@@ -40,19 +46,31 @@ pub fn tools() -> Vec<ToolDef> {
             }),
         },
         web_search::tool_def(),
+        image_search::search_tool_def(),
+        image_search::fetch_tool_def(),
     ]
 }
 
-/// Execute one tool call against the built-in server: `fetch_url` or
-/// `search_web` (T52). `search_provider` selects the search backend.
+/// Execute one tool call against the built-in server: `fetch_url`, `search_web`
+/// (T52), or the image tools `search_images` / `fetch_images`. `search_provider`
+/// selects the search backend; `emit_images` streams fetched image bytes to the
+/// UI (used only by the image tools).
 pub async fn call_tool(
     client: &reqwest::Client,
     tool: &str,
     args: &serde_json::Value,
     search_provider: Option<&str>,
+    emit_images: ImageSink<'_>,
+    emit_sources: SourceSink<'_>,
 ) -> anyhow::Result<String> {
     if tool == "search_web" {
-        return web_search::search(client, args, search_provider).await;
+        return web_search::search(client, args, search_provider, emit_sources).await;
+    }
+    if tool == "search_images" {
+        return image_search::search(client, args, search_provider, emit_images).await;
+    }
+    if tool == "fetch_images" {
+        return image_search::fetch(client, args, emit_images).await;
     }
     if tool != "fetch_url" {
         return Err(anyhow!("unknown built-in tool: {tool}"));
@@ -76,7 +94,15 @@ pub async fn call_tool(
         return Err(anyhow!("web fetch error {status} for {url}"));
     }
     let body = resp.text().await.context("reading web page body")?;
-    Ok(html_to_text(&body, MAX_TEXT_LEN))
+    let text = html_to_text(&body, MAX_TEXT_LEN);
+    // Surface the fetched page as a source (display-only): the URL the user can
+    // open, plus a short lead so they see what was read.
+    emit_sources(vec![ToolSource {
+        url: url.to_string(),
+        title: None,
+        snippet: Some(html_to_text(&body, SOURCE_EXCERPT_LEN)),
+    }]);
+    Ok(text)
 }
 
 /// Strip HTML to readable plain text: drop `<script>`/`<style>` bodies, remove
@@ -207,8 +233,10 @@ mod tests {
     #[test]
     fn advertises_fetch_and_search_tools() {
         let t = tools();
-        assert_eq!(t.len(), 2);
+        assert_eq!(t.len(), 4);
         assert!(t.iter().any(|d| d.name == "fetch_url"));
         assert!(t.iter().any(|d| d.name == "search_web"));
+        assert!(t.iter().any(|d| d.name == "search_images"));
+        assert!(t.iter().any(|d| d.name == "fetch_images"));
     }
 }

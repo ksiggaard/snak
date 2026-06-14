@@ -137,6 +137,17 @@ pub struct StreamDelta {
     /// frontend shows an approve/deny card and replies via `approve_tool_call`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub approval_request: Option<ApprovalRequest>,
+    /// Images a tool fetched (e.g. `web__search_images` / `web__fetch_images`),
+    /// streamed as base64 bytes so the frontend can render + persist them as
+    /// message image attachments. Carried out-of-band (not in the model-facing
+    /// tool result text) so base64 never pollutes the context window.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_images: Option<ToolImagesDelta>,
+    /// Web sources a tool consulted (`web__search_web` hits, `web__fetch_url`
+    /// page), streamed so the UI can show what informed the answer with clickable
+    /// links. Out-of-band from the model-facing result text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_sources: Option<ToolSourcesDelta>,
 }
 
 impl StreamDelta {
@@ -148,6 +159,8 @@ impl StreamDelta {
             tool_output: None,
             tool_done: None,
             approval_request: None,
+            tool_images: None,
+            tool_sources: None,
         }
     }
 
@@ -161,6 +174,8 @@ impl StreamDelta {
             tool_output: None,
             tool_done: None,
             approval_request: None,
+            tool_images: None,
+            tool_sources: None,
         }
     }
 
@@ -175,6 +190,43 @@ impl StreamDelta {
             }),
             tool_done: None,
             approval_request: None,
+            tool_images: None,
+            tool_sources: None,
+        }
+    }
+
+    /// Images a tool fetched, keyed to its call `id`. Streamed once per tool call
+    /// (or in batches); the frontend renders + persists them as image attachments.
+    pub(crate) fn tool_images(id: &str, images: Vec<ToolImage>) -> Self {
+        Self {
+            text: String::new(),
+            tool_call: None,
+            tool_output: None,
+            tool_done: None,
+            approval_request: None,
+            tool_images: Some(ToolImagesDelta {
+                id: id.to_string(),
+                images,
+            }),
+            tool_sources: None,
+        }
+    }
+
+    /// Web sources a tool consulted, keyed to its call `id`. Streamed once per
+    /// tool call; the frontend renders them as clickable links and persists them
+    /// on the tool-call record.
+    pub(crate) fn tool_sources(id: &str, sources: Vec<ToolSource>) -> Self {
+        Self {
+            text: String::new(),
+            tool_call: None,
+            tool_output: None,
+            tool_done: None,
+            approval_request: None,
+            tool_images: None,
+            tool_sources: Some(ToolSourcesDelta {
+                id: id.to_string(),
+                sources,
+            }),
         }
     }
 
@@ -190,6 +242,8 @@ impl StreamDelta {
                 ok,
             }),
             approval_request: None,
+            tool_images: None,
+            tool_sources: None,
         }
     }
 
@@ -206,6 +260,8 @@ impl StreamDelta {
                 summary,
                 detail,
             }),
+            tool_images: None,
+            tool_sources: None,
         }
     }
 }
@@ -271,6 +327,53 @@ pub struct ToolOutputDelta {
 pub struct ToolDoneDelta {
     pub id: String,
     pub ok: bool,
+}
+
+/// One image a tool fetched, streamed to the UI as base64 bytes. Rendered as a
+/// thumbnail and persisted as a message image attachment; `source_url` (the page
+/// the image came from) is kept so the lightbox can link back to it.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolImage {
+    pub media_type: String,
+    /// Base64-encoded image bytes (no `data:` prefix).
+    pub data: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+}
+
+/// A batch of images produced by a single tool call, keyed to its `id`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolImagesDelta {
+    pub id: String,
+    pub images: Vec<ToolImage>,
+}
+
+/// One web source a tool consulted (a search hit or a fetched page), streamed to
+/// the UI so the user can see what informed the answer and open the link. Carried
+/// out-of-band from the model-facing result text, like images.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolSource {
+    /// The page URL — rendered as a clickable link in the tool-activity panel.
+    pub url: String,
+    /// Result title, when known (search hits have one; a bare fetch does not).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// A short excerpt: the search snippet, or the lead of a fetched page.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snippet: Option<String>,
+}
+
+/// The web sources produced by a single tool call, keyed to its `id`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolSourcesDelta {
+    pub id: String,
+    pub sources: Vec<ToolSource>,
 }
 
 /// Everything a provider needs for one completion. `tools` is empty for an

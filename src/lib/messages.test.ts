@@ -67,6 +67,37 @@ describe("applyToolEvent", () => {
     applyToolEvent(ev({ toolDone: { id: "ghost", ok: true } }), calls);
     expect(calls).toHaveLength(0);
   });
+
+  it("folds web sources onto the matching call (and accumulates batches)", () => {
+    const calls: MessageToolCall[] = [];
+    applyToolEvent(ev({ toolCall: { id: "c1", name: "web__search_web" } }), calls);
+    applyToolEvent(
+      ev({
+        toolSources: {
+          id: "c1",
+          sources: [{ url: "https://a.com", title: "A", snippet: "first" }],
+        },
+      }),
+      calls,
+    );
+    applyToolEvent(
+      ev({ toolSources: { id: "c1", sources: [{ url: "https://b.com" }] } }),
+      calls,
+    );
+    expect(calls[0].sources).toEqual([
+      { url: "https://a.com", title: "A", snippet: "first" },
+      { url: "https://b.com" },
+    ]);
+  });
+
+  it("ignores source events for an unknown id", () => {
+    const calls: MessageToolCall[] = [];
+    applyToolEvent(
+      ev({ toolSources: { id: "ghost", sources: [{ url: "https://x" }] } }),
+      calls,
+    );
+    expect(calls).toHaveLength(0);
+  });
 });
 
 describe("persistableToolCall", () => {
@@ -103,5 +134,15 @@ describe("persistableToolCall", () => {
       ok: true,
       output: "ok",
     });
+  });
+
+  it("preserves non-empty web sources and drops an empty list", () => {
+    const sources = [{ url: "https://a.com", title: "A", snippet: "s" }];
+    expect(
+      persistableToolCall({ id: "c1", name: "web__search_web", sources }).sources,
+    ).toEqual(sources);
+    expect(
+      persistableToolCall({ id: "c1", name: "t", sources: [] }).sources,
+    ).toBeUndefined();
   });
 });

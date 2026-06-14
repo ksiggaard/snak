@@ -21,9 +21,11 @@
 //! the persisted server config (Stage-1 rule) and passes the enabled list into
 //! `chat_stream`; an empty/all-disabled list produces an empty tool slice.
 
+pub mod image_search;
 pub mod sysdebug;
 pub mod web_browse;
 pub mod web_search;
+pub mod youtube;
 
 use anyhow::{anyhow, Context};
 use serde::{Deserialize, Serialize};
@@ -31,12 +33,23 @@ use serde_json::{json, Value};
 use tauri::ipc::Channel;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
-use crate::providers::{StreamDelta, ToolCall, ToolDef};
+use crate::providers::{StreamDelta, ToolCall, ToolDef, ToolImage, ToolSource};
 
 /// A sink for a running tool's live output: each call streams one chunk (e.g. a
 /// stdout line) to the UI. `Sync` so it can be held across `.await` in the
 /// `Send` command future. A no-op sink is used by tools that don't stream.
 pub type LineSink<'a> = &'a (dyn Fn(&str) + Sync);
+
+/// A sink for images a tool fetched: called (once or in batches) with the
+/// base64-encoded images, which are streamed to the UI as a `tool_images` delta.
+/// `Sync` so it can be held across `.await`; only the web builtin uses it.
+pub type ImageSink<'a> = &'a (dyn Fn(Vec<ToolImage>) + Sync);
+
+/// A sink for web sources a tool consulted (search hits / fetched page): streamed
+/// to the UI as a `tool_sources` delta so the user sees what informed the answer
+/// and can open the links. `Sync` so it can be held across `.await`; only the web
+/// builtin uses it.
+pub type SourceSink<'a> = &'a (dyn Fn(Vec<ToolSource>) + Sync);
 
 /// Transport kind for a configured server, as persisted by the frontend.
 #[derive(Debug, Clone, Deserialize)]
@@ -136,7 +149,16 @@ pub async fn call_tool(
     let emit = move |chunk: &str| {
         let _ = on_delta.send(StreamDelta::tool_output(&call.id, chunk));
     };
-    match call_tool_inner(client, servers, call, &emit).await {
+    // Images a tool fetched (web image tools) ride a separate `tool_images` delta
+    // so their base64 bytes never enter the model-facing result text.
+    let emit_images = move |images: Vec<ToolImage>| {
+        let _ = on_delta.send(StreamDelta::tool_images(&call.id, images));
+    };
+    // Web sources a tool consulted ride a `tool_sources` delta (display-only).
+    let emit_sources = move |sources: Vec<ToolSource>| {
+        let _ = on_delta.send(StreamDelta::tool_sources(&call.id, sources));
+    };
+    match call_tool_inner(client, servers, call, &emit, &emit_images, &emit_sources).await {
         Ok(text) => text,
         Err(e) => format!("tool error: {e}"),
     }
@@ -147,6 +169,8 @@ async fn call_tool_inner(
     servers: &[ServerConfig],
     call: &ToolCall,
     emit: LineSink<'_>,
+    emit_images: ImageSink<'_>,
+    emit_sources: SourceSink<'_>,
 ) -> anyhow::Result<String> {
     let (server_id, tool) = split_namespaced(&call.name);
     let server = servers
@@ -167,6 +191,8 @@ async fn call_tool_inner(
                 &call.arguments,
                 server.search_provider.as_deref(),
                 emit,
+                emit_images,
+                emit_sources,
             )
             .await
         }
@@ -180,6 +206,7 @@ async fn call_tool_inner(
 fn builtin_tools(server_id: &str) -> Vec<ToolDef> {
     match server_id {
         sysdebug::SERVER_ID => sysdebug::tools(),
+        youtube::SERVER_ID => youtube::tools(),
         _ => web_browse::tools(),
     }
 }
@@ -191,10 +218,16 @@ async fn builtin_call(
     args: &Value,
     search_provider: Option<&str>,
     emit: LineSink<'_>,
+    emit_images: ImageSink<'_>,
+    emit_sources: SourceSink<'_>,
 ) -> anyhow::Result<String> {
     match server_id {
         sysdebug::SERVER_ID => sysdebug::call_tool(tool, args, emit).await,
-        _ => web_browse::call_tool(client, tool, args, search_provider).await,
+        youtube::SERVER_ID => youtube::call_tool(client, tool, args, emit_images).await,
+        _ => {
+            web_browse::call_tool(client, tool, args, search_provider, emit_images, emit_sources)
+                .await
+        }
     }
 }
 

@@ -6,6 +6,7 @@ import { ContextWindows } from "@/components/settings/ContextWindows";
 import { OllamaSettings } from "@/components/settings/OllamaSettings";
 import { Memory } from "@/components/settings/Memory";
 import { Bots } from "@/components/settings/Bots";
+import { QuickActions } from "@/components/settings/QuickActions";
 import { ShortcutSetting } from "@/components/settings/Shortcut";
 import { CloseToTraySetting } from "@/components/settings/CloseToTray";
 import { Appearance } from "@/components/settings/Appearance";
@@ -42,6 +43,11 @@ const SECTIONS: Section[] = [
   { id: "ollama", label: "settings.nav.ollama", Component: OllamaSettings },
   { id: "memory", label: "settings.nav.memory", Component: Memory },
   { id: "bots", label: "settings.nav.bots", Component: Bots },
+  {
+    id: "quick-actions",
+    label: "settings.nav.quickActions",
+    Component: QuickActions,
+  },
   {
     id: "shortcut",
     label: "settings.nav.shortcut",

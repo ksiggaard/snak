@@ -55,6 +55,9 @@ export interface Bot {
   default_provider: Provider | null;
   /** Optional default model new chats with this bot inherit. */
   default_model: string | null;
+  /** Conversation starters (JSON array of strings; migration 019) — opening
+   * lines shown as one-tap chips on this persona's empty chat. "" = none. */
+  starters: string;
   created_at: string;
   updated_at: string;
 }
@@ -74,6 +77,9 @@ export interface Project {
   id: string;
   name: string;
   instructions: string;
+  /** Project-specific quick actions (JSON array; migration 018). Empty string =
+   * no override, so the global quick actions apply. See `lib/quickActions.ts`. */
+  quick_actions: string;
   created_at: string;
   updated_at: string;
 }

@@ -36,20 +36,28 @@ import {
   applyToolEvent,
   loadThreadMessages,
   persistableToolCall,
+  type MessageImage,
   type MessageToolCall,
   type MessageView,
 } from "@/lib/messages";
-import { buildCompactionRequest, compactHistory } from "@/lib/compaction";
+import {
+  buildCompactionRequest,
+  compactHistory,
+  groupLabelingActive,
+  type GroupContext,
+} from "@/lib/compaction";
 import { applyRegenSteer } from "@/lib/variations";
-import { buildBotSystemText } from "@/lib/bots";
+import { estimateTokens } from "@/lib/contextSize";
+import { buildBotSystemText, buildGroupChatSystemText } from "@/lib/bots";
 import { extractMentions } from "@/lib/mentions";
 import { runPersonaMemoryUpdate } from "@/lib/personaMemory";
 import { buildProjectSystemText } from "@/lib/projects";
 import { buildSkillsSystemText } from "@/lib/skills";
 import { selectRegistry, usePlugins } from "@/store/plugins";
+import { useKeys } from "@/store/keys";
 import { buildGlobalSystemText } from "@/lib/systemContext";
 import { t } from "@/store/i18n";
-import { PROVIDERS } from "@/lib/providers";
+import { isKeylessProvider, PROVIDERS } from "@/lib/providers";
 import type { PreparedImage } from "@/lib/image";
 import type { PendingDocument } from "@/lib/documents";
 import type { Bot, Provider, Thread } from "@/types/db";
@@ -134,6 +142,15 @@ interface ThreadsState {
    * after a tool call doesn't look like a hang. Cleared on the next text token
    * and when the stream ends. */
   awaitingModel: boolean;
+  /** Estimated tokens of the assembled system context (skills, global/memory,
+   * persona, project) for the current thread/draft — the part of a request the
+   * ContextMeter can't see from `messages` alone. Recomputed when the thread,
+   * project, or persona changes (T53). */
+  systemTokens: number;
+  /** A request to load text into the Composer (a quick action's `prefill`).
+   * The Composer applies it via render-time sync, keyed by `nonce` so repeated
+   * inserts of the same text still fire. null = nothing pending. */
+  composerInsert: { text: string; nonce: number } | null;
   error: string | null;
   initialized: boolean;
 
@@ -154,8 +171,14 @@ interface ThreadsState {
   ) => Promise<void>;
   /** Set provider+model for the current thread, or the draft if none. */
   setProviderModel: (provider: Provider, model: string) => Promise<void>;
+  /** Load `text` into the Composer and focus it (a quick action's `prefill`
+   * mode). Bumps a nonce so the Composer re-applies even for identical text. */
+  insertIntoComposer: (text: string) => void;
   /** Persist the default provider+model for new interactions. */
   setDefaultModel: (provider: Provider, model: string) => Promise<void>;
+  /** Recompute `systemTokens` for the current thread/draft (skills + global +
+   * persona + project blocks). Cheap DB/store reads; never throws. */
+  refreshSystemTokens: () => Promise<void>;
   send: (
     content: string,
     images: PreparedImage[],
@@ -316,6 +339,62 @@ async function botSystemBlock(bot: Bot): Promise<ApiMessage | null> {
   return botText ? { role: "system", content: botText, images: [] } : null;
 }
 
+/**
+ * The provider+model a reply runs on (T43 "multi-LLM mode"): an @-mentioned
+ * persona answers on its OWN default provider/model when both are set and that
+ * provider has a stored key (keyless providers always qualify) — otherwise it
+ * falls back to the thread's model. The key check (cached `useKeys` presence,
+ * never a keychain read) keeps a persona pointed at a provider with no key from
+ * erroring the send; it just uses the thread model instead.
+ */
+function resolveReplyModel(
+  bot: Bot | null,
+  threadProvider: Provider,
+  threadModel: string,
+  hasKey: (p: Provider) => boolean,
+): { provider: Provider; model: string } {
+  if (
+    bot &&
+    bot.default_provider &&
+    bot.default_model &&
+    hasKey(bot.default_provider)
+  ) {
+    return { provider: bot.default_provider, model: bot.default_model };
+  }
+  return { provider: threadProvider, model: threadModel };
+}
+
+/**
+ * Display names of the OTHER participants in the thread from `selfBotId`'s point
+ * of view — other personas (by `roster` name) plus "Assistant" when the base
+ * assistant has spoken. Feeds `buildGroupChatSystemText`'s roster line.
+ */
+function groupParticipantNames(
+  rows: readonly MessageView[],
+  selfBotId: string | null,
+  roster: Record<string, string>,
+): string[] {
+  const names: string[] = [];
+  const seen = new Set<string>();
+  let sawBase = false;
+  for (const m of rows) {
+    if (m.role !== "assistant") continue;
+    const author = m.bot_id ?? null;
+    if (author === selfBotId) continue;
+    if (author == null) {
+      sawBase = true;
+      continue;
+    }
+    if (!seen.has(author)) {
+      seen.add(author);
+      names.push(roster[author] ?? "Assistant");
+    }
+  }
+  // The reader is a persona and the base assistant has spoken → name it too.
+  if (sawBase && selfBotId != null) names.push("Assistant");
+  return names;
+}
+
 export const useThreads = create<ThreadsState>((set, get) => ({
   threads: [],
   currentThreadId: null,
@@ -333,6 +412,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   pendingApproval: null,
   autoApproveSysTools: false,
   awaitingModel: false,
+  systemTokens: 0,
+  composerInsert: null,
   error: null,
   initialized: false,
 
@@ -385,6 +466,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     // Incognito threads are never remembered as last_thread_id (T29) — the
     // startup purge would have deleted them before restore anyway.
     if (shouldRememberThread(thread)) await setSetting(LAST_THREAD_KEY, id);
+    void get().refreshSystemTokens();
   },
 
   startNewChat: (opts) => {
@@ -398,6 +480,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       draftProvider: get().defaultProvider,
       draftModel: get().defaultModel,
     });
+    void get().refreshSystemTokens();
   },
 
   startNewChatInProject: (projectId) => {
@@ -411,6 +494,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       draftProvider: get().defaultProvider,
       draftModel: get().defaultModel,
     });
+    void get().refreshSystemTokens();
   },
 
   startNewChatWithBot: (bot) => {
@@ -429,11 +513,13 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       draftProvider: hasDefault ? bot.default_provider! : get().defaultProvider,
       draftModel: hasDefault ? bot.default_model! : get().defaultModel,
     });
+    void get().refreshSystemTokens();
   },
 
   assignThreadProject: async (threadId, projectId) => {
     await setThreadProject(threadId, projectId);
     await get().refreshThreads();
+    void get().refreshSystemTokens();
   },
 
   setProviderModel: async (provider, model) => {
@@ -444,6 +530,10 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     }
     await setThreadProviderModel(id, provider, model);
     await get().refreshThreads();
+  },
+
+  insertIntoComposer: (text) => {
+    set({ composerInsert: { text, nonce: (get().composerInsert?.nonce ?? 0) + 1 } });
   },
 
   setDefaultModel: async (provider, model) => {
@@ -457,6 +547,36 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       defaultModel: model,
       ...(onDraft ? { draftProvider: provider, draftModel: model } : {}),
     });
+  },
+
+  refreshSystemTokens: async () => {
+    try {
+      const id = get().currentThreadId;
+      let projectId: string | null;
+      let botId: string | null;
+      if (id) {
+        const thread = get().threads.find((x) => x.id === id);
+        projectId = thread?.project_id ?? null;
+        botId = thread?.bot_id ?? null;
+      } else {
+        projectId = get().draftProjectId;
+        botId = get().draftBotId;
+      }
+      // Reuse the exact builders send() uses, so the estimate tracks the real
+      // request: skills + global/memory (head), persona (bot), project (tail).
+      const shared = await loadSharedSystemBlocks(projectId);
+      const bot = botId ? await getBot(botId) : null;
+      const botBlock = bot ? await botSystemBlock(bot) : null;
+      const blocks = [
+        ...shared.head,
+        ...(botBlock ? [botBlock] : []),
+        ...shared.tail,
+      ];
+      const total = blocks.reduce((n, b) => n + estimateTokens(b.content), 0);
+      set({ systemTokens: total });
+    } catch {
+      // Estimate-only — a failed DB/store read must never disrupt the UI.
+    }
   },
 
   send: async (content, images, documents = []) => {
@@ -544,9 +664,16 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       // their own one-shot, in-character reply. The roster comes from lib/db
       // directly — NOT useBots: store/bots.ts imports this store, so reading
       // it here would create a module cycle.
+      const allBots = await listBots();
       const mentioned = content.includes("@")
-        ? extractMentions(content, await listBots())
+        ? extractMentions(content, allBots)
         : [];
+      // bot_id → name, for labeling other speakers in a group thread (T43).
+      const roster: Record<string, string> = {};
+      for (const b of allBots) roster[b.id] = b.name;
+      // Cached key presence (no keychain read) for per-persona model resolution.
+      const keyed = useKeys.getState().present;
+      const hasKey = (p: Provider) => isKeylessProvider(p) || keyed.has(p);
 
       // System context shared by every reply of this send (skills/global/
       // project); the persona block is per-reply and slots in between.
@@ -571,11 +698,42 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         // history (they can react to each other — by design).
         const rows = await loadThreadMessages(threadId);
         const botBlock = replyBot ? await botSystemBlock(replyBot) : null;
+        // Per-persona model (T43 multi-LLM): a mentioned persona answers on its
+        // own provider/model when set; the thread persona / base reply uses the
+        // thread's model.
+        const { provider: replyProvider, model: replyModel } = resolveReplyModel(
+          replyBot,
+          provider,
+          model,
+          hasKey,
+        );
+        // Group labeling (T43): label the other speakers and, for a persona
+        // reply, prepend a framing block right after its own block explaining
+        // the group format. compactHistory always gets the group so even a base
+        // reply sees labeled persona turns; the framing block needs a persona
+        // identity, so it only attaches when replyBot is set and labeling fires.
+        const group: GroupContext = {
+          selfBotId: attributeBotId,
+          roster,
+          baseLabel: "Assistant",
+        };
+        const groupBlock: ApiMessage | null =
+          replyBot && groupLabelingActive(rows, group)
+            ? {
+                role: "system",
+                content: buildGroupChatSystemText({
+                  selfName: replyBot.name,
+                  others: groupParticipantNames(rows, attributeBotId, roster),
+                }),
+                images: [],
+              }
+            : null;
         const history: ApiMessage[] = [
           ...shared.head,
           ...(botBlock ? [botBlock] : []),
+          ...(groupBlock ? [groupBlock] : []),
           ...shared.tail,
-          ...compactHistory(rows),
+          ...compactHistory(rows, group),
         ];
 
         // Stream the reply, appending a placeholder assistant bubble on the
@@ -585,6 +743,9 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         // attribution renders while it is still streaming.
         let acc = "";
         const toolCalls: MessageToolCall[] = [];
+        // Images fetched by `search_images`/`fetch_images` this reply: rendered
+        // live on the placeholder, then persisted as image attachments below.
+        const foundImages: MessageImage[] = [];
         const onDelta = (event: StreamEvent) => {
           // A gated (system-diagnostics) call needs explicit approval. The Rust
           // loop is blocked awaiting our reply. Auto-approve if the user chose
@@ -601,6 +762,16 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           // Fold tool-lifecycle events (started / live output / finished) into
           // the accumulator so the live activity panel updates as they arrive.
           applyToolEvent(event, toolCalls);
+          if (event.toolImages) {
+            for (const img of event.toolImages.images) {
+              foundImages.push({
+                media_type: img.mediaType,
+                data: img.data,
+                source: img.sourceUrl,
+                title: img.title,
+              });
+            }
+          }
           if (event.text) acc += event.text;
           set((s) => {
             const exists = s.messages.some((m) => m.id === STREAM_ID);
@@ -627,7 +798,12 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             return {
               messages: base.map((m) =>
                 m.id === STREAM_ID
-                  ? { ...m, content: acc, toolCalls: [...toolCalls] }
+                  ? {
+                      ...m,
+                      content: acc,
+                      toolCalls: [...toolCalls],
+                      images: [...foundImages],
+                    }
                   : m,
               ),
               // A tool finished → show "thinking" until the model's next token;
@@ -642,10 +818,20 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         // accumulated so far (the backend early-exits and returns Ok), so the
         // same persistence path preserves whatever was generated.
         const started = Date.now();
-        const result = await chatStream(provider, model, history, onDelta);
-        // Persist the assistant turn when it produced text or invoked a tool.
-        // (Skip a truly empty row, e.g. cancelled before any token/tool call.)
-        if (result.content.length > 0 || toolCalls.length > 0) {
+        const result = await chatStream(
+          replyProvider,
+          replyModel,
+          history,
+          onDelta,
+        );
+        // Persist the assistant turn when it produced text, invoked a tool, or
+        // fetched images. (Skip a truly empty row, e.g. cancelled before any
+        // token/tool call.)
+        if (
+          result.content.length > 0 ||
+          toolCalls.length > 0 ||
+          foundImages.length > 0
+        ) {
           const assistantMsg = await addMessage({
             thread_id: threadId,
             role: "assistant",
@@ -664,6 +850,18 @@ export const useThreads = create<ThreadsState>((set, get) => ({
               data: JSON.stringify(persistableToolCall(tc)),
             });
           }
+          // Persist images the model fetched as `image` attachments, so they
+          // appear in the right-hand media gallery, enlarge in the lightbox, and
+          // survive reload. The source page URL rides in `filename`.
+          for (const img of foundImages) {
+            await addAttachment({
+              message_id: assistantMsg.id,
+              kind: "image",
+              media_type: img.media_type,
+              data: img.data,
+              filename: img.source,
+            });
+          }
           // Record token usage for this response. Attribute it to the model
           // the API actually used (`result.model`), falling back to the
           // requested model — so usage stays correct even if the thread's
@@ -680,8 +878,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             await addUsage({
               message_id: assistantMsg.id,
               thread_id: threadId,
-              provider,
-              model: result.model || model,
+              provider: replyProvider,
+              model: result.model || replyModel,
               input_tokens: u.input_tokens,
               output_tokens: u.output_tokens,
               cache_creation_tokens: u.cache_creation_tokens,
@@ -707,13 +905,14 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           (replyBot.auto_memory || replyBot.mood_enabled) &&
           replyText.length > 0
         ) {
-          void runPersonaMemoryUpdate(
+          // Review on the persona's own model (matches the reply it produced).
+          const { provider: rp, model: rm } = resolveReplyModel(
             replyBot,
-            content,
-            replyText,
             provider,
             model,
+            hasKey,
           );
+          void runPersonaMemoryUpdate(replyBot, content, replyText, rp, rm);
         }
       };
 
@@ -751,6 +950,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         autoApproveSysTools: false,
         awaitingModel: false,
       });
+      // Persona auto-memory may have grown during this send → re-estimate.
+      void get().refreshSystemTokens();
     }
   },
 
@@ -821,11 +1022,42 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           ? await getBot(threadBotId)
           : null;
       const botBlock = replyBot ? await botSystemBlock(replyBot) : null;
+      // Group labeling + per-persona model, assembled exactly as a fresh reply
+      // (runReply) does, over the history BEFORE this reply's slot.
+      const allBots = await listBots();
+      const roster: Record<string, string> = {};
+      for (const b of allBots) roster[b.id] = b.name;
+      const keyed = useKeys.getState().present;
+      const hasKey = (p: Provider) => isKeylessProvider(p) || keyed.has(p);
+      const { provider: replyProvider, model: replyModel } = resolveReplyModel(
+        replyBot,
+        provider,
+        model,
+        hasKey,
+      );
+      const priorRows = msgs.slice(0, i);
+      const group: GroupContext = {
+        selfBotId: attributeBotId,
+        roster,
+        baseLabel: "Assistant",
+      };
+      const groupBlock: ApiMessage | null =
+        replyBot && groupLabelingActive(priorRows, group)
+          ? {
+              role: "system",
+              content: buildGroupChatSystemText({
+                selfName: replyBot.name,
+                others: groupParticipantNames(priorRows, attributeBotId, roster),
+              }),
+              images: [],
+            }
+          : null;
       const baseHistory: ApiMessage[] = [
         ...shared.head,
         ...(botBlock ? [botBlock] : []),
+        ...(groupBlock ? [groupBlock] : []),
         ...shared.tail,
-        ...compactHistory(msgs.slice(0, i)),
+        ...compactHistory(priorRows, group),
       ];
       // Steer for "a different variation" (+ optional direction), folded into
       // the trailing user turn so the call stays valid for every provider.
@@ -837,6 +1069,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
 
       let acc = "";
       const toolCalls: MessageToolCall[] = [];
+      const foundImages: MessageImage[] = [];
       const onDelta = (event: StreamEvent) => {
         if (event.approvalRequest) {
           const req = event.approvalRequest;
@@ -848,6 +1081,16 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           return;
         }
         applyToolEvent(event, toolCalls);
+        if (event.toolImages) {
+          for (const img of event.toolImages.images) {
+            foundImages.push({
+              media_type: img.mediaType,
+              data: img.data,
+              source: img.sourceUrl,
+              title: img.title,
+            });
+          }
+        }
         if (event.text) acc += event.text;
         set((s) => {
           const exists = s.messages.some((m) => m.id === STREAM_ID);
@@ -874,7 +1117,12 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           return {
             messages: base.map((m) =>
               m.id === STREAM_ID
-                ? { ...m, content: acc, toolCalls: [...toolCalls] }
+                ? {
+                    ...m,
+                    content: acc,
+                    toolCalls: [...toolCalls],
+                    images: [...foundImages],
+                  }
                 : m,
             ),
             ...(event.toolDone ? { awaitingModel: true } : {}),
@@ -884,8 +1132,17 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       };
 
       const started = Date.now();
-      const result = await chatStream(provider, model, history, onDelta);
-      if (result.content.length > 0 || toolCalls.length > 0) {
+      const result = await chatStream(
+        replyProvider,
+        replyModel,
+        history,
+        onDelta,
+      );
+      if (
+        result.content.length > 0 ||
+        toolCalls.length > 0 ||
+        foundImages.length > 0
+      ) {
         // New variant joins the existing group, then becomes the selected one.
         const variantMsg = await addMessage({
           thread_id: id,
@@ -903,6 +1160,15 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             data: JSON.stringify(persistableToolCall(tc)),
           });
         }
+        for (const img of foundImages) {
+          await addAttachment({
+            message_id: variantMsg.id,
+            kind: "image",
+            media_type: img.media_type,
+            data: img.data,
+            filename: img.source,
+          });
+        }
         const u = result.usage;
         if (
           u &&
@@ -914,8 +1180,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           await addUsage({
             message_id: variantMsg.id,
             thread_id: id,
-            provider,
-            model: result.model || model,
+            provider: replyProvider,
+            model: result.model || replyModel,
             input_tokens: u.input_tokens,
             output_tokens: u.output_tokens,
             cache_creation_tokens: u.cache_creation_tokens,
@@ -937,6 +1203,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         autoApproveSysTools: false,
         awaitingModel: false,
       });
+      void get().refreshSystemTokens();
     }
   },
 

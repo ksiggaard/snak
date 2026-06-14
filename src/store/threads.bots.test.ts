@@ -21,6 +21,7 @@ vi.mock("@/lib/db", () => ({
   listProjectFiles: vi.fn(async () => []),
   listUserMemory: vi.fn(async () => []),
   getBot: vi.fn(async () => null),
+  listBots: vi.fn(async () => []),
   listBotMemory: vi.fn(async () => []),
   SYSTEM_PROMPT_ADDENDUM_KEY: "system_prompt_addendum",
 }));
@@ -78,6 +79,7 @@ const bot = (over: Partial<Bot>): Bot => ({
   avatar_data: null,
   default_provider: null,
   default_model: null,
+  starters: "",
   created_at: "2026-06-12 00:00:00",
   updated_at: "2026-06-12 00:00:00",
   ...over,
@@ -228,6 +230,7 @@ describe("send() with a bot (T38)", () => {
       id: "p1",
       name: "Acme",
       instructions: "Project rule.",
+      quick_actions: "",
       created_at: "",
       updated_at: "",
     });

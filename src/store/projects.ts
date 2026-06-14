@@ -8,6 +8,7 @@ import {
   listProjects,
   renameProject,
   setProjectInstructions,
+  setProjectQuickActions,
 } from "@/lib/db";
 import { useThreads } from "@/store/threads";
 import type { Project, ProjectFile } from "@/types/db";
@@ -25,6 +26,8 @@ interface ProjectsState {
   create: () => Promise<Project>;
   rename: (id: string, name: string) => Promise<void>;
   setInstructions: (id: string, instructions: string) => Promise<void>;
+  /** Persist a project's quick-actions override JSON (empty = use global). */
+  setQuickActions: (id: string, quickActions: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
   /** Open a project's detail view (loads its files). */
   open: (id: string) => Promise<void>;
@@ -62,6 +65,11 @@ export const useProjects = create<ProjectsState>((set, get) => ({
 
   setInstructions: async (id, instructions) => {
     await setProjectInstructions(id, instructions);
+    await get().refresh();
+  },
+
+  setQuickActions: async (id, quickActions) => {
+    await setProjectQuickActions(id, quickActions);
     await get().refresh();
   },
 

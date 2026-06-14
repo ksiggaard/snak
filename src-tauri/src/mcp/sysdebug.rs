@@ -344,7 +344,11 @@ pub fn describe(tool: &str, args: &Value) -> (String, String) {
 /// Execute one read-only tool call. Errors are returned as `Err` and surfaced to
 /// the model as a failed `tool_result` by the chat loop (a bad call never aborts
 /// the turn).
-pub async fn call_tool(tool: &str, args: &Value, emit: super::LineSink<'_>) -> anyhow::Result<String> {
+pub async fn call_tool(
+    tool: &str,
+    args: &Value,
+    emit: super::LineSink<'_>,
+) -> anyhow::Result<String> {
     match tool {
         "list_directory" => list_directory(require_str(args, "path")?),
         "read_file" => read_file(require_str(args, "path")?),

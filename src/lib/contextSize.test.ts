@@ -25,12 +25,19 @@ describe("estimateTokens", () => {
 });
 
 describe("estimateMessagesTokens", () => {
-  it("sums message content and counts images", () => {
+  it("sums message content and counts images (incl. the label manifest)", () => {
     const msgs: CompactableMessage[] = [
       userMsg("a".repeat(40)), // 10 tokens
       userMsg("b".repeat(40), { images: [{ media_type: "image/png", data: "x" }] }),
     ];
-    expect(estimateMessagesTokens(msgs)).toBe(10 + 10 + IMAGE_TOKENS_EST);
+    // The image message also carries the label manifest text, which is sent to
+    // the model and so counts toward the estimate.
+    const manifestA =
+      "\n\n[Images in this message, referenceable by label throughout the " +
+      "conversation: Image A.]";
+    expect(estimateMessagesTokens(msgs)).toBe(
+      10 + estimateTokens("b".repeat(40) + manifestA) + IMAGE_TOKENS_EST,
+    );
   });
 
   it("counts only the post-compaction history (summary + after)", () => {

@@ -4,10 +4,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { QuickActionsEditor } from "@/components/settings/QuickActionsEditor";
 import { useProjects } from "@/store/projects";
 import { t as tNow, useT, useTp } from "@/store/i18n";
 import { classifyFile, extractDocumentText } from "@/lib/documents";
 import { PROJECT_CONTEXT_CHAR_BUDGET, projectFilesSize } from "@/lib/projects";
+import {
+  parseQuickActions,
+  serializeQuickActions,
+  type QuickAction,
+} from "@/lib/quickActions";
 
 /** Max size (chars) for a single uploaded project file. */
 const MAX_FILE_CHARS = 200_000;
@@ -20,6 +26,7 @@ export function ProjectView() {
   const files = useProjects((s) => s.openProjectFiles);
   const rename = useProjects((s) => s.rename);
   const setInstructions = useProjects((s) => s.setInstructions);
+  const setQuickActions = useProjects((s) => s.setQuickActions);
   const addFile = useProjects((s) => s.addFile);
   const removeFile = useProjects((s) => s.removeFile);
 
@@ -32,11 +39,15 @@ export function ProjectView() {
   // effect — matches ModelPicker).
   const [nameDraft, setNameDraft] = useState(project?.name ?? "");
   const [instrDraft, setInstrDraft] = useState(project?.instructions ?? "");
+  const [qaDraft, setQaDraft] = useState<QuickAction[]>(() =>
+    parseQuickActions(project?.quick_actions),
+  );
   const [syncedId, setSyncedId] = useState(openProjectId);
   if (openProjectId !== syncedId) {
     setSyncedId(openProjectId);
     setNameDraft(project?.name ?? "");
     setInstrDraft(project?.instructions ?? "");
+    setQaDraft(parseQuickActions(project?.quick_actions));
     setError(null);
   }
 
@@ -50,6 +61,11 @@ export function ProjectView() {
 
   const filesSize = projectFilesSize(files);
   const overBudget = filesSize > PROJECT_CONTEXT_CHAR_BUDGET;
+  // Quick-actions override is dirty vs. what's stored (normalized through the
+  // parser so "" and "[]" both compare equal to an empty draft).
+  const qaDirty =
+    serializeQuickActions(qaDraft) !==
+    serializeQuickActions(parseQuickActions(project.quick_actions));
 
   async function onPickFiles(list: FileList | null) {
     if (!list || !project) return;
@@ -198,6 +214,34 @@ export function ProjectView() {
               </li>
             ))}
           </ul>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label>{t("project.quickActions")}</Label>
+        <p className="text-muted-foreground text-xs">
+          {t("project.quickActionsHint")}
+        </p>
+        {qaDraft.length === 0 && (
+          <p className="text-muted-foreground text-xs">
+            {t("project.quickActionsUsingGlobal")}
+          </p>
+        )}
+        <QuickActionsEditor actions={qaDraft} onChange={setQaDraft} />
+        {qaDirty && (
+          <div>
+            <Button
+              size="sm"
+              onClick={() =>
+                void setQuickActions(
+                  project.id,
+                  qaDraft.length ? serializeQuickActions(qaDraft) : "",
+                )
+              }
+            >
+              {t("common.save")}
+            </Button>
+          </div>
         )}
       </div>
 

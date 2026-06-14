@@ -20,6 +20,7 @@ import {
   listBotMemory,
   updateBotMemory,
 } from "@/lib/db";
+import { parseStarters, serializeStarters } from "@/lib/bots";
 import type { Bot, BotMemory } from "@/types/db";
 
 /** Avatar images are downscaled to a small square-ish thumbnail — far below
@@ -38,6 +39,7 @@ export function BotEditor({ bot }: { bot: Bot }) {
   const setInstructions = useBots((s) => s.setInstructions);
   const setModusOperandi = useBots((s) => s.setModusOperandi);
   const setToneOfVoice = useBots((s) => s.setToneOfVoice);
+  const setStarters = useBots((s) => s.setStarters);
   const setAutoMemory = useBots((s) => s.setAutoMemory);
   const setMoodEnabled = useBots((s) => s.setMoodEnabled);
   const setMood = useBots((s) => s.setMood);
@@ -64,6 +66,10 @@ export function BotEditor({ bot }: { bot: Bot }) {
   const [instrDraft, setInstrDraft] = useState(bot.instructions);
   const [modusDraft, setModusDraft] = useState(bot.modus_operandi);
   const [toneDraft, setToneDraft] = useState(bot.tone_of_voice);
+  // Starters are edited as one line per starter; stored as a JSON array.
+  const [startersDraft, setStartersDraft] = useState(() =>
+    parseStarters(bot.starters).join("\n"),
+  );
   const [syncedId, setSyncedId] = useState(bot.id);
   if (bot.id !== syncedId) {
     setSyncedId(bot.id);
@@ -72,9 +78,17 @@ export function BotEditor({ bot }: { bot: Bot }) {
     setInstrDraft(bot.instructions);
     setModusDraft(bot.modus_operandi);
     setToneDraft(bot.tone_of_voice);
+    setStartersDraft(parseStarters(bot.starters).join("\n"));
     setAvatarError(null);
     setNewMemory("");
     setMemories([]);
+  }
+
+  /** Persist the starters textarea (one line per starter) when it changed. */
+  function commitStarters() {
+    const next = serializeStarters(startersDraft.split("\n"));
+    if (next !== serializeStarters(parseStarters(bot.starters)))
+      void setStarters(bot.id, next);
   }
 
   // Memory loads async per bot (async setState in an effect is fine — only the
@@ -302,6 +316,21 @@ export function BotEditor({ bot }: { bot: Bot }) {
           }}
           rows={3}
           placeholder={t("bots.toneOfVoicePlaceholder")}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`bot-starters-${bot.id}`}>{t("bots.starters")}</Label>
+        <p className="text-muted-foreground text-xs">
+          {t("bots.startersHint", { name: bot.name })}
+        </p>
+        <Textarea
+          id={`bot-starters-${bot.id}`}
+          value={startersDraft}
+          onChange={(e) => setStartersDraft(e.target.value)}
+          onBlur={commitStarters}
+          rows={4}
+          placeholder={t("bots.startersPlaceholder")}
         />
       </div>
 

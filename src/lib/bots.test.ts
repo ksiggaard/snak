@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { botAvatarUrl, botMonogram, buildBotSystemText } from "@/lib/bots";
+import {
+  botAvatarUrl,
+  botMonogram,
+  buildBotSystemText,
+  buildGroupChatSystemText,
+  parseStarters,
+  serializeStarters,
+} from "@/lib/bots";
 
 const mem = (...contents: string[]) => contents.map((content) => ({ content }));
 
@@ -215,5 +222,56 @@ describe("botMonogram", () => {
 
   it("keeps an emoji first grapheme intact (code-point safe)", () => {
     expect(botMonogram("🤖 Bot")).toBe("🤖");
+  });
+});
+
+describe("buildGroupChatSystemText", () => {
+  it("names the participant, lists the others, and explains the format", () => {
+    const text = buildGroupChatSystemText({
+      selfName: "Alice",
+      others: ["Bob", "Assistant"],
+    });
+    // Names self and the other voices.
+    expect(text).toContain("the human, and Bob, Assistant");
+    expect(text).toContain("those are you, Alice");
+    // Explains the prefix convention and the no-self-prefix rule.
+    expect(text).toContain('"[Name]: …"');
+    expect(text).toContain("never add a name prefix to your own reply");
+    // Invites agreement/disagreement.
+    expect(text).toContain("disagree");
+  });
+
+  it("ignores blank names in the others list", () => {
+    const text = buildGroupChatSystemText({
+      selfName: "Alice",
+      others: ["Bob", "  ", ""],
+    });
+    expect(text).toContain("the human, and Bob.");
+  });
+
+  it("falls back to a generic roster line when no others are given", () => {
+    const text = buildGroupChatSystemText({ selfName: "Alice", others: [] });
+    expect(text).toContain("the human and other participants");
+  });
+});
+
+describe("parseStarters / serializeStarters", () => {
+  it("returns [] for null/empty/malformed input", () => {
+    expect(parseStarters(null)).toEqual([]);
+    expect(parseStarters("")).toEqual([]);
+    expect(parseStarters("nope")).toEqual([]);
+    expect(parseStarters('{"a":1}')).toEqual([]);
+  });
+
+  it("keeps non-blank trimmed strings and drops the rest", () => {
+    expect(parseStarters('["  Hi  ", "", "  ", "Review my code", 5]')).toEqual([
+      "Hi",
+      "Review my code",
+    ]);
+  });
+
+  it("round-trips through serialize (blank lines dropped)", () => {
+    const json = serializeStarters(["  a  ", "", "b", "   "]);
+    expect(parseStarters(json)).toEqual(["a", "b"]);
   });
 });

@@ -5,6 +5,7 @@ import rehypeHighlight from "rehype-highlight";
 // github (light) + github-dark scoped to `.dark` — see highlight-theme.css.
 import "@/components/chat/highlight-theme.css";
 import { CodeBlock } from "@/components/chat/CodeBlock";
+import { openExternal } from "@/lib/openExternal";
 
 /**
  * Renders assistant Markdown richly: GFM (tables, strikethrough, task lists,
@@ -59,11 +60,40 @@ const components: Components = {
     return (
       <a
         href={href}
-        target="_blank"
+        onClick={(e) => {
+          if (!href) return;
+          // Route through the OS opener; a plain target="_blank" is unreliable
+          // inside the Tauri webview.
+          e.preventDefault();
+          void openExternal(href);
+        }}
         rel="noopener noreferrer"
-        className="text-primary underline underline-offset-2"
+        className="text-primary cursor-pointer underline underline-offset-2"
       >
         {children}
+      </a>
+    );
+  },
+  // Image markdown (`![alt](url)`) is rendered as a LINK, never an inline
+  // <img>. Images the model surfaces come through the downloaded-and-verified
+  // attachment pipeline (search_images / fetch_images → data: URLs); a remote
+  // URL the model writes into its prose is frequently dead or hotlink-blocked
+  // and would otherwise show as a broken image. Linking preserves the reference
+  // without ever fetching a remote resource.
+  img({ src, alt, title }) {
+    if (typeof src !== "string" || src.length === 0) return null;
+    const label = (alt?.trim() || title?.trim() || src).toString();
+    return (
+      <a
+        href={src}
+        onClick={(e) => {
+          e.preventDefault();
+          void openExternal(src);
+        }}
+        rel="noopener noreferrer"
+        className="text-primary cursor-pointer underline underline-offset-2"
+      >
+        {label}
       </a>
     );
   },

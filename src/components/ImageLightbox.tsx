@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, CornerDownLeft, Download, X } from "lucide-react";
+import { Check, CornerDownLeft, Download, ExternalLink, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { downloadImage, downloadSvg, fitSvg } from "@/lib/images";
 import { imageDataUrl } from "@/lib/messages";
+import { openExternal } from "@/lib/openExternal";
 import { useLightbox } from "@/store/lightbox";
 import { useSearch } from "@/store/search";
 import { useT } from "@/store/i18n";
@@ -122,6 +123,16 @@ export function ImageLightbox() {
           >
             <CornerDownLeft className="size-4" />
             {t("panel.goToMessage")}
+          </Button>
+        )}
+        {content.kind === "image" && content.image.source && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void openExternal(content.image.source!)}
+          >
+            <ExternalLink className="size-4" />
+            {t("chat.imageSource")}
           </Button>
         )}
         <Button
