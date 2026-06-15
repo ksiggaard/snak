@@ -269,4 +269,56 @@ mod tests {
         got.sort();
         assert_eq!(got, ["a", "c"]);
     }
+
+    // Fully-qualified paths so the test compiles regardless of what the `use
+    // super::*` glob happens to re-export.
+    fn mock_cfg() -> crate::mcp::ServerConfig {
+        let script = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/mock_mcp_server.py"
+        );
+        crate::mcp::ServerConfig {
+            id: "mock".into(),
+            transport_kind: Some(crate::mcp::Transport::Stdio),
+            transport_alias: None,
+            command: Some(format!("python3 {script}")),
+            url: None,
+            enabled: true,
+            search_provider: None,
+            env: None,
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "spawns python3; run with: cargo test -- --ignored"]
+    async fn session_persists_within_a_thread_and_isolates_across_threads() {
+        let sessions = McpSessions::default();
+        let cfg = mock_cfg();
+        let args = serde_json::json!({});
+
+        // tools/list works over the session.
+        let tools = sessions.list_tools("A", &cfg).await.unwrap();
+        assert!(tools.iter().any(|t| t.name == "increment"));
+
+        // Same thread reuses the process -> counter persists (1, then 2).
+        let r1 = sessions
+            .call_tool("A", &cfg, "increment", &args)
+            .await
+            .unwrap();
+        let r2 = sessions
+            .call_tool("A", &cfg, "increment", &args)
+            .await
+            .unwrap();
+        assert_eq!(r1.trim(), "1");
+        assert_eq!(r2.trim(), "2");
+
+        // A different thread gets its own fresh process -> resets to 1.
+        let r3 = sessions
+            .call_tool("B", &cfg, "increment", &args)
+            .await
+            .unwrap();
+        assert_eq!(r3.trim(), "1");
+
+        sessions.close_all().await;
+    }
 }
