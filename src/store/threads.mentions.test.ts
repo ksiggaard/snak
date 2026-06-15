@@ -87,6 +87,7 @@ const thread = (over: Partial<Thread>): Thread => ({
   favorite: 0,
   ephemeral: 0,
   archived: 0,
+  deep_research: 0,
   bot_id: null,
   created_at: "2026-06-13 00:00:00",
   updated_at: "2026-06-13 00:00:00",
@@ -150,7 +151,7 @@ beforeEach(() => {
               : null,
         variant_selected: 1,
       };
-      rows.push({ ...m, images: [], documents: [], toolCalls: [] });
+      rows.push({ ...m, images: [], documents: [], toolCalls: [], subagents: [] });
       return m;
     },
   );
@@ -242,6 +243,7 @@ describe("send() with @-mentions (T43)", () => {
       expect.anything(),
       expect.anything(),
       expect.anything(),
+      false,
     );
   });
 

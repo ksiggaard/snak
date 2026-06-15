@@ -7,8 +7,8 @@ use anyhow::{anyhow, Context};
 use tauri::ipc::Channel;
 
 use super::{
-    anthropic_tools, for_each_sse_data, is_cancelled, merge_anthropic_usage, ChatResponse,
-    CompletionRequest, Provider, StreamDelta, ToolCall, Usage,
+    anthropic_tools, for_each_sse_data, is_cancelled, merge_anthropic_usage, redact_trace_body,
+    send_with_retry, ChatResponse, CompletionRequest, Provider, StreamDelta, ToolCall, Usage,
 };
 
 const API_URL: &str = "https://api.anthropic.com/v1/messages";
@@ -38,6 +38,10 @@ impl Provider for Anthropic {
             } else if !m.tool_calls.is_empty() {
                 // Rust-synthesized assistant turn carrying tool_use blocks (T13).
                 let mut blocks = Vec::new();
+                // When extended thinking was on, Anthropic requires the original
+                // thinking block(s) — signature included — to lead the assistant
+                // turn, before any text or tool_use block.
+                blocks.extend(m.thinking_blocks.iter().cloned());
                 if !m.content.is_empty() {
                     blocks.push(serde_json::json!({ "type": "text", "text": m.content }));
                 }
@@ -109,15 +113,53 @@ impl Provider for Anthropic {
         if !req.tools.is_empty() {
             body["tools"] = serde_json::Value::Array(anthropic_tools(req.tools));
         }
+        // Reasoning capture: adaptive (extended) thinking with a readable summary
+        // (the default `display` is "omitted" = empty text). Only on recent
+        // models; the retry below drops it if the model rejects the param.
+        if req.reasoning {
+            body["thinking"] = serde_json::json!({
+                "type": "adaptive",
+                "display": "summarized",
+            });
+        }
 
-        let resp = client
-            .post(API_URL)
-            .header("x-api-key", req.api_key)
-            .header("anthropic-version", ANTHROPIC_VERSION)
-            .json(&body)
-            .send()
+        // Developer trace: surface the exact (redacted) request before sending.
+        if req.trace {
+            let _ = channel.send(StreamDelta::api_trace(
+                "request",
+                req.round,
+                redact_trace_body(&body),
+            ));
+        }
+
+        let mut resp = send_with_retry(
+            client
+                .post(API_URL)
+                .header("x-api-key", req.api_key)
+                .header("anthropic-version", ANTHROPIC_VERSION)
+                .json(&body),
+            cancel,
+        )
+        .await
+        .context("anthropic request failed")?;
+
+        // Resilience: extended thinking 400s on older models. Rather than let an
+        // enabled global setting hard-break chat, drop `thinking` and retry once.
+        if !resp.status().is_success() && req.reasoning {
+            if let Some(obj) = body.as_object_mut() {
+                obj.remove("thinking");
+            }
+            resp = send_with_retry(
+                client
+                    .post(API_URL)
+                    .header("x-api-key", req.api_key)
+                    .header("anthropic-version", ANTHROPIC_VERSION)
+                    .json(&body),
+                cancel,
+            )
             .await
             .context("anthropic request failed")?;
+        }
 
         let status = resp.status();
         if !status.is_success() {
@@ -131,6 +173,11 @@ impl Provider for Anthropic {
         // tool_use blocks arrive as content_block_start (id+name) then a run of
         // input_json_delta partial_json fragments, keyed by block index (T13).
         let mut tool_acc: Vec<PartialToolUse> = Vec::new();
+        // thinking blocks arrive as content_block_start (type "thinking") then a
+        // run of thinking_delta (text) + a signature_delta, keyed by block index.
+        // Captured verbatim so they can be echoed back when thinking + tool use
+        // are combined (Anthropic requires it).
+        let mut thinking_acc: Vec<PartialThinking> = Vec::new();
 
         for_each_sse_data(resp, |data| {
             // Stop promptly on user cancellation, keeping the partial text.
@@ -158,26 +205,37 @@ impl Provider for Anthropic {
                 }
                 Some("content_block_start") => {
                     if let Some(block) = v.get("content_block") {
-                        if block.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
-                            let index = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0);
-                            tool_acc.push(PartialToolUse {
-                                index,
-                                id: block
-                                    .get("id")
-                                    .and_then(|i| i.as_str())
-                                    .unwrap_or_default()
-                                    .to_string(),
-                                name: block
-                                    .get("name")
-                                    .and_then(|n| n.as_str())
-                                    .unwrap_or_default()
-                                    .to_string(),
-                                json: String::new(),
-                            });
+                        let index = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0);
+                        match block.get("type").and_then(|t| t.as_str()) {
+                            Some("tool_use") => {
+                                tool_acc.push(PartialToolUse {
+                                    index,
+                                    id: block
+                                        .get("id")
+                                        .and_then(|i| i.as_str())
+                                        .unwrap_or_default()
+                                        .to_string(),
+                                    name: block
+                                        .get("name")
+                                        .and_then(|n| n.as_str())
+                                        .unwrap_or_default()
+                                        .to_string(),
+                                    json: String::new(),
+                                });
+                            }
+                            Some("thinking") => {
+                                thinking_acc.push(PartialThinking {
+                                    index,
+                                    text: String::new(),
+                                    signature: String::new(),
+                                });
+                            }
+                            _ => {}
                         }
                     }
                 }
                 Some("content_block_delta") => {
+                    let index = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0);
                     if let Some(t) = v.pointer("/delta/text").and_then(|t| t.as_str()) {
                         content.push_str(t);
                         channel
@@ -186,9 +244,22 @@ impl Provider for Anthropic {
                     } else if let Some(pj) =
                         v.pointer("/delta/partial_json").and_then(|t| t.as_str())
                     {
-                        let index = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0);
                         if let Some(t) = tool_acc.iter_mut().find(|t| t.index == index) {
                             t.json.push_str(pj);
+                        }
+                    } else if let Some(th) = v.pointer("/delta/thinking").and_then(|t| t.as_str()) {
+                        if let Some(b) = thinking_acc.iter_mut().find(|b| b.index == index) {
+                            b.text.push_str(th);
+                        }
+                        channel
+                            .send(StreamDelta::reasoning(th))
+                            .map_err(|e| anyhow!("channel send failed: {e}"))?;
+                    } else if let Some(sig) = v.pointer("/delta/signature").and_then(|s| s.as_str())
+                    {
+                        // The signature validates the (summarized) thinking block
+                        // on replay; capture it verbatim for the echo-back.
+                        if let Some(b) = thinking_acc.iter_mut().find(|b| b.index == index) {
+                            b.signature.push_str(sig);
                         }
                     }
                 }
@@ -200,12 +271,37 @@ impl Provider for Anthropic {
         .await?;
 
         let tool_calls = tool_acc.into_iter().map(PartialToolUse::finish).collect();
+        let thinking_blocks = thinking_acc
+            .into_iter()
+            .map(PartialThinking::finish)
+            .collect();
 
         Ok(ChatResponse {
             content,
             model,
             usage,
             tool_calls,
+            thinking_blocks,
+        })
+    }
+}
+
+/// Accumulator for one streamed Anthropic `thinking` block. The text arrives as
+/// `thinking_delta` fragments and the (single) `signature_delta` closes it. The
+/// finished JSON block is echoed back verbatim before the `tool_use` block when
+/// thinking is combined with tool use.
+struct PartialThinking {
+    index: u64,
+    text: String,
+    signature: String,
+}
+
+impl PartialThinking {
+    fn finish(self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "thinking",
+            "thinking": self.text,
+            "signature": self.signature,
         })
     }
 }
@@ -252,6 +348,19 @@ mod tests {
         assert_eq!(call.id, "toolu_1");
         assert_eq!(call.name, "web__fetch_url");
         assert_eq!(call.arguments["url"], "https://example.com");
+    }
+
+    #[test]
+    fn partial_thinking_finishes_into_a_signed_thinking_block() {
+        let p = PartialThinking {
+            index: 0,
+            text: "weighing options".into(),
+            signature: "sig123".into(),
+        };
+        let block = p.finish();
+        assert_eq!(block["type"], "thinking");
+        assert_eq!(block["thinking"], "weighing options");
+        assert_eq!(block["signature"], "sig123");
     }
 
     #[test]

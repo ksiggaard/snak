@@ -1,0 +1,13 @@
+{
+  "id": "com.snak.artifacts",
+  "name": "Artifacts",
+  "version": "1.0.0",
+  "category": "renderer",
+  "apiVersion": 1,
+  "description": "Renders ```artifact fenced code blocks as live, editable multi-file web apps (preview + code + export). Disable to show the raw source instead.",
+  "author": "snak",
+  "enabledByDefault": true,
+  "contributes": {
+    "language": "artifact"
+  }
+}

@@ -34,6 +34,7 @@ export const en = {
   "common.delete": "Delete",
   "common.remove": "Remove",
   "common.edit": "Edit",
+  "common.default": "default",
   "common.add": "Add",
   "common.update": "Update",
   "common.reset": "Reset",
@@ -171,6 +172,16 @@ export const en = {
   "chat.webPage": "web page",
   "chat.toolRunning": "running…",
   "chat.toolWorking": "Working…",
+  "chat.subagentsTitle": "Research subagents",
+  "chat.subagent": "Subagent",
+  "chat.subagentResearching": "researching…",
+  "chat.subagentDone": "done",
+  "chat.subagentFailed": "failed",
+  "chat.reasoning": "Reasoning",
+  "chat.toolArguments": "Arguments",
+  "chat.apiTrace": "API trace",
+  "chat.apiTraceRequest": "Request · round {round}",
+  "chat.apiTraceResponse": "Response · round {round}",
   "chat.copy": "Copy",
   "chat.copied": "Copied",
   // --- Response variations (T54) -------------------------------------------
@@ -198,7 +209,8 @@ export const en = {
   "chat.botEmptyHint": "Say hi — {name} is ready.",
   // --- Empty new-chat suggestions (quick actions + persona starters) --------
   "chat.suggestionsTitle": "How can I help?",
-  "chat.suggestionsHint": "Pick a quick action to get started, or just type below.",
+  "chat.suggestionsHint":
+    "Pick a quick action to get started, or just type below.",
   "chat.quickActionsLabel": "Quick actions",
   "chat.chatWithLabel": "Chat with a persona",
   "chat.chatWith": "Chat with {name}",
@@ -232,6 +244,9 @@ export const en = {
   "composer.openCanvas": "Open canvas",
   "composer.openCanvasTitle":
     "Open canvas — a larger editor with live Markdown preview",
+  "composer.deepResearch": "Deep research",
+  "composer.deepResearchTitle":
+    "Deep research — let the model dispatch parallel subagents to investigate, then synthesize their findings",
   "composer.stop": "Stop",
   "composer.stopAria": "Stop generating",
   "composer.providerDisabled":
@@ -291,6 +306,37 @@ export const en = {
   "canvas.placeholder": "Compose a long Markdown message…",
   "canvas.empty": "Nothing to preview yet.",
   "canvas.hint": "Cmd/Ctrl+Enter to send · Esc to close (draft is kept)",
+
+  // --- Artifacts ---------------------------------------------------------------
+  "artifact.building": "Building artifact…",
+  "artifact.previewTitle": "Artifact preview",
+  "artifact.open": "Open",
+  "artifact.code": "Code",
+  "artifact.split": "Split",
+  "artifact.addressBar": "Toggle address bar",
+  "artifact.address": "Enter a URL or #route…",
+  "artifact.back": "Back",
+  "artifact.forward": "Forward",
+  "artifact.run": "Run preview",
+  "artifact.pause": "Pause preview",
+  "artifact.paused": "Preview paused",
+  "artifact.resize": "Drag to resize preview",
+  "artifact.editPlaceholder": "Describe a change to this artifact…",
+  "artifact.editStop": "Stop",
+  "artifact.editing": "Updating artifact…",
+  "artifact.editNoArtifact":
+    "The model didn't return an updated artifact. Try rephrasing.",
+  "artifact.editNoThread": "Couldn't resolve the model for this artifact.",
+  "artifact.preview": "Preview",
+  "artifact.refresh": "Refresh preview",
+  "artifact.fullscreen": "Toggle fullscreen",
+  "artifact.openInBrowser": "Open in browser",
+  "artifact.export": "Export as .zip",
+  "artifact.close": "Close",
+  "artifact.viewerAria": "Artifact viewer",
+  "artifact.loadingEditor": "Loading editor…",
+  "artifact.fileCount.one": "{n} file",
+  "artifact.fileCount.other": "{n} files",
 
   // --- Model chooser -----------------------------------------------------------
   "model.choose": "Choose model",
@@ -358,6 +404,22 @@ export const en = {
   "settings.nav.plugins": "Plugins",
   "settings.nav.bots": "Personas",
   "settings.nav.quickActions": "Quick actions",
+  "settings.nav.advanced": "Advanced",
+
+  // --- Settings: Advanced (T55) -------------------------------------------------------------
+  "advanced.title": "Advanced",
+  "advanced.description":
+    "Tunables for power users. Most people can leave these alone.",
+  "advanced.concurrencyLabel": "Deep research — subagents at once",
+  "advanced.concurrencyHelp":
+    "How many research subagents run in parallel. Lower if your provider rate-limits (HTTP 429) when several run together; higher finishes faster but hits the API harder.",
+  "advanced.transparencyTitle": "Transparency",
+  "advanced.captureReasoningLabel": "Show model reasoning",
+  "advanced.captureReasoningHelp":
+    "Capture the model's reasoning (extended thinking) and show it in a collapsible panel under each reply. Adds tokens and latency, and only some models/providers expose it — Anthropic and Gemini do; OpenAI/Mistral usually don't.",
+  "advanced.captureTraceLabel": "Show API request/response trace",
+  "advanced.captureTraceHelp":
+    "Record the exact request sent to the provider each round (with large image/document data elided) plus a response summary, in a developer panel under each reply. For debugging and transparency.",
 
   // --- Settings: API keys -------------------------------------------------------------------
   "apiKeys.title": "API keys",

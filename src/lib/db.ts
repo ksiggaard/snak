@@ -1,6 +1,8 @@
 import Database from "@tauri-apps/plugin-sql";
 import { buildFtsMatch, searchTerms } from "@/lib/search";
 import type {
+  Artifact,
+  ArtifactFile,
   Attachment,
   AttachmentKind,
   Bot,
@@ -145,6 +147,19 @@ export async function setThreadArchived(
   ]);
 }
 
+/** Turn deep research mode on/off for a thread (T55). Does not bump updated_at —
+ * toggling the mode shouldn't reorder the recents list. */
+export async function setThreadDeepResearch(
+  id: string,
+  deepResearch: boolean,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(`UPDATE threads SET deep_research = $1 WHERE id = $2`, [
+    deepResearch ? 1 : 0,
+    id,
+  ]);
+}
+
 /** Bump a thread's updated_at (e.g. after a new message). */
 export async function touchThread(id: string): Promise<void> {
   const db = await getDb();
@@ -164,6 +179,7 @@ export async function deleteThread(id: string): Promise<void> {
        (SELECT id FROM messages WHERE thread_id = $1)`,
     [id],
   );
+  await db.execute(`DELETE FROM artifacts WHERE thread_id = $1`, [id]);
   await db.execute(`DELETE FROM usage WHERE thread_id = $1`, [id]);
   await db.execute(`DELETE FROM messages WHERE thread_id = $1`, [id]);
   await db.execute(`DELETE FROM threads WHERE id = $1`, [id]);
@@ -191,6 +207,10 @@ export async function purgeEphemeralThreads(): Promise<void> {
        (SELECT id FROM threads WHERE ephemeral = 1)`,
   );
   await db.execute(
+    `DELETE FROM artifacts WHERE thread_id IN
+       (SELECT id FROM threads WHERE ephemeral = 1)`,
+  );
+  await db.execute(
     `DELETE FROM messages WHERE thread_id IN
        (SELECT id FROM threads WHERE ephemeral = 1)`,
   );
@@ -208,6 +228,10 @@ export async function deleteArchivedThreads(): Promise<void> {
   );
   await db.execute(
     `DELETE FROM usage WHERE thread_id IN
+       (SELECT id FROM threads WHERE archived = 1)`,
+  );
+  await db.execute(
+    `DELETE FROM artifacts WHERE thread_id IN
        (SELECT id FROM threads WHERE archived = 1)`,
   );
   await db.execute(
@@ -378,6 +402,94 @@ export async function listAttachments(
 }
 
 // ---------------------------------------------------------------------------
+// Artifacts (migration 021): multi-file web apps from a ```artifact block
+// ---------------------------------------------------------------------------
+
+/** Raw artifacts row — `files` is stored as a JSON string. */
+interface ArtifactRow {
+  id: string;
+  thread_id: string;
+  message_id: string;
+  ordinal: number;
+  title: string;
+  files: string;
+  created_at: string;
+  updated_at: string;
+}
+
+function mapArtifact(row: ArtifactRow): Artifact {
+  let files: ArtifactFile[] = [];
+  try {
+    const parsed = JSON.parse(row.files);
+    if (Array.isArray(parsed)) files = parsed as ArtifactFile[];
+  } catch {
+    // Corrupt JSON → treat as empty; the viewer shows "no files".
+  }
+  return { ...row, files };
+}
+
+/**
+ * Get the artifact for a `(message_id, ordinal)` slot, creating it from the
+ * freshly-parsed block on first encounter. Subsequent calls return the stored
+ * record (which may carry in-app edits), so a rendered artifact persists across
+ * reloads. Called by the inline card once its message has a real (persisted) id.
+ */
+export async function ensureArtifact(input: {
+  thread_id: string;
+  message_id: string;
+  ordinal: number;
+  title: string;
+  files: ArtifactFile[];
+}): Promise<Artifact> {
+  const db = await getDb();
+  const existing = await db.select<ArtifactRow[]>(
+    `SELECT * FROM artifacts WHERE message_id = $1 AND ordinal = $2`,
+    [input.message_id, input.ordinal],
+  );
+  if (existing.length > 0) return mapArtifact(existing[0]);
+
+  const id = newId();
+  await db.execute(
+    `INSERT INTO artifacts (id, thread_id, message_id, ordinal, title, files)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [
+      id,
+      input.thread_id,
+      input.message_id,
+      input.ordinal,
+      input.title,
+      JSON.stringify(input.files),
+    ],
+  );
+  const rows = await db.select<ArtifactRow[]>(
+    `SELECT * FROM artifacts WHERE id = $1`,
+    [id],
+  );
+  return mapArtifact(rows[0]);
+}
+
+export async function getArtifact(id: string): Promise<Artifact | null> {
+  const db = await getDb();
+  const rows = await db.select<ArtifactRow[]>(
+    `SELECT * FROM artifacts WHERE id = $1`,
+    [id],
+  );
+  return rows.length > 0 ? mapArtifact(rows[0]) : null;
+}
+
+/** Persist edited files for an artifact (bumps `updated_at`). */
+export async function updateArtifactFiles(
+  id: string,
+  files: ArtifactFile[],
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE artifacts SET files = $2, updated_at = datetime('now') WHERE id = $1`,
+    [id, JSON.stringify(files)],
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Settings (non-secret key/value)
 // ---------------------------------------------------------------------------
 
@@ -405,7 +517,9 @@ export const MODEL_CONTEXT_WINDOWS_KEY = "model_context_windows";
 
 /** Read the per-model max-context-window map (T53). Tolerant of a missing or
  * malformed value (returns `{}`); only finite positive numbers are kept. */
-export async function getModelContextWindows(): Promise<Record<string, number>> {
+export async function getModelContextWindows(): Promise<
+  Record<string, number>
+> {
   const raw = await getSetting(MODEL_CONTEXT_WINDOWS_KEY);
   if (!raw) return {};
   try {
@@ -427,6 +541,61 @@ export async function setModelContextWindows(
   windows: Record<string, number>,
 ): Promise<void> {
   await setSetting(MODEL_CONTEXT_WINDOWS_KEY, JSON.stringify(windows));
+}
+
+/** Settings key for the deep-research subagent concurrency (T55) — how many
+ * subagents run at once. Absent = the backend default. */
+export const DEEP_RESEARCH_CONCURRENCY_KEY = "deep_research_concurrency";
+
+/** Upper bound the UI offers, mirroring the backend's `MAX_SUBAGENT_CONCURRENCY`. */
+export const MAX_SUBAGENT_CONCURRENCY = 8;
+
+/** Read the configured subagent concurrency, or null when unset (the backend
+ * then applies its own default). Tolerant of a missing/malformed value. */
+export async function getDeepResearchConcurrency(): Promise<number | null> {
+  const raw = await getSetting(DEEP_RESEARCH_CONCURRENCY_KEY);
+  if (!raw) return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 1) return null;
+  return Math.min(Math.round(n), MAX_SUBAGENT_CONCURRENCY);
+}
+
+/** Persist the subagent concurrency (clamped to [1, MAX]). */
+export async function setDeepResearchConcurrency(n: number): Promise<void> {
+  const clamped = Math.min(
+    Math.max(1, Math.round(n)),
+    MAX_SUBAGENT_CONCURRENCY,
+  );
+  await setSetting(DEEP_RESEARCH_CONCURRENCY_KEY, String(clamped));
+}
+
+/** Settings keys for the transparency/inspect toggles (Settings → Advanced):
+ * capture the model's reasoning, and capture a raw per-round API trace. Both
+ * default off (absent = "0") — they add token cost / latency, so opt-in. */
+export const CAPTURE_REASONING_KEY = "capture_reasoning";
+export const CAPTURE_TRACE_KEY = "capture_api_trace";
+
+async function getBoolSetting(key: string): Promise<boolean> {
+  return (await getSetting(key)) === "1";
+}
+async function setBoolSetting(key: string, on: boolean): Promise<void> {
+  await setSetting(key, on ? "1" : "0");
+}
+
+/** Whether to capture the model's reasoning/thinking (global, default off). */
+export async function getCaptureReasoning(): Promise<boolean> {
+  return getBoolSetting(CAPTURE_REASONING_KEY);
+}
+export async function setCaptureReasoning(on: boolean): Promise<void> {
+  await setBoolSetting(CAPTURE_REASONING_KEY, on);
+}
+
+/** Whether to capture a raw per-round API request/response trace (default off). */
+export async function getCaptureTrace(): Promise<boolean> {
+  return getBoolSetting(CAPTURE_TRACE_KEY);
+}
+export async function setCaptureTrace(on: boolean): Promise<void> {
+  await setBoolSetting(CAPTURE_TRACE_KEY, on);
 }
 
 /** Settings key for the global quick actions shown on the empty new-chat

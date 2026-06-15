@@ -124,6 +124,7 @@ fn builtin_manifests() -> Vec<PluginManifest> {
         include_str!("builtin/mermaid.json"),
         include_str!("builtin/charts.json"),
         include_str!("builtin/youtube.json"),
+        include_str!("builtin/artifacts.json"),
     ];
     BUILTINS
         .iter()
@@ -321,8 +322,9 @@ mod tests {
     fn all_builtins_are_valid_and_enabled_by_default() {
         let builtins = builtin_manifests();
         // Five provider plugins (T18/T37) + the /terminal slash-command plugin
-        // (T14) + three renderer plugins: mermaid (T42), charts, and youtube.
-        assert_eq!(builtins.len(), 9, "expected 9 built-in plugins");
+        // (T14) + four renderer plugins: mermaid (T42), charts, youtube, and
+        // artifacts.
+        assert_eq!(builtins.len(), 10, "expected 10 built-in plugins");
         let providers = builtins.iter().filter(|m| m.category == "provider").count();
         assert_eq!(providers, 5, "expected 5 built-in providers");
         for m in &builtins {

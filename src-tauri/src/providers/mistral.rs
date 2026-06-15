@@ -18,16 +18,6 @@ impl Provider for Mistral {
         channel: &Channel<StreamDelta>,
         cancel: &AtomicBool,
     ) -> anyhow::Result<ChatResponse> {
-        openai::chat_completions_stream(
-            client,
-            BASE_URL,
-            req.api_key,
-            req.model,
-            req.messages,
-            req.tools,
-            channel,
-            cancel,
-        )
-        .await
+        openai::chat_completions_stream(client, BASE_URL, req, channel, cancel).await
     }
 }

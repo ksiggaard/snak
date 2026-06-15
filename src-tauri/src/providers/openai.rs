@@ -7,8 +7,9 @@ use anyhow::{anyhow, Context};
 use tauri::ipc::Channel;
 
 use super::{
-    for_each_sse_data, is_cancelled, openai_tools, parse_openai_usage, ChatMessage, ChatResponse,
-    CompletionRequest, Provider, StreamDelta, ToolCall, ToolDef, Usage,
+    for_each_sse_data, is_cancelled, openai_tools, parse_openai_usage, redact_trace_body,
+    send_with_retry, ChatMessage, ChatResponse, CompletionRequest, Provider, StreamDelta, ToolCall,
+    Usage,
 };
 
 const BASE_URL: &str = "https://api.openai.com/v1";
@@ -23,17 +24,7 @@ impl Provider for OpenAi {
         channel: &Channel<StreamDelta>,
         cancel: &AtomicBool,
     ) -> anyhow::Result<ChatResponse> {
-        chat_completions_stream(
-            client,
-            BASE_URL,
-            req.api_key,
-            req.model,
-            req.messages,
-            req.tools,
-            channel,
-            cancel,
-        )
-        .await
+        chat_completions_stream(client, BASE_URL, req, channel, cancel).await
     }
 }
 
@@ -126,38 +117,45 @@ fn build_messages_flat(messages: &[ChatMessage]) -> Vec<serde_json::Value> {
 
 /// Shared OpenAI-style streaming `POST {base}/chat/completions` with bearer
 /// auth. Roles (user/assistant/system/tool) map through; tool calls round-trip.
-#[allow(clippy::too_many_arguments)]
 pub(super) async fn chat_completions_stream(
     client: &reqwest::Client,
     base_url: &str,
-    api_key: &str,
-    model: &str,
-    messages: &[ChatMessage],
-    tools: &[ToolDef],
+    req: &CompletionRequest<'_>,
     channel: &Channel<StreamDelta>,
     cancel: &AtomicBool,
 ) -> anyhow::Result<ChatResponse> {
-    let msgs = build_messages_flat(messages);
+    let msgs = build_messages_flat(req.messages);
 
     let mut body = serde_json::json!({
-        "model": model,
+        "model": req.model,
         "stream": true,
         // Ask for a final usage-only chunk after the content (OpenAI + Mistral).
         "stream_options": { "include_usage": true },
         "messages": msgs,
     });
     // Attach tools only when present — tool-less request stays byte-identical.
-    if !tools.is_empty() {
-        body["tools"] = serde_json::Value::Array(openai_tools(tools));
+    if !req.tools.is_empty() {
+        body["tools"] = serde_json::Value::Array(openai_tools(req.tools));
     }
 
-    let resp = client
-        .post(format!("{base_url}/chat/completions"))
-        .bearer_auth(api_key)
-        .json(&body)
-        .send()
-        .await
-        .context("chat completions request failed")?;
+    // Developer trace: surface the exact (redacted) request before sending.
+    if req.trace {
+        let _ = channel.send(StreamDelta::api_trace(
+            "request",
+            req.round,
+            redact_trace_body(&body),
+        ));
+    }
+
+    let resp = send_with_retry(
+        client
+            .post(format!("{base_url}/chat/completions"))
+            .bearer_auth(req.api_key)
+            .json(&body),
+        cancel,
+    )
+    .await
+    .context("chat completions request failed")?;
 
     let status = resp.status();
     if !status.is_success() {
@@ -166,11 +164,14 @@ pub(super) async fn chat_completions_stream(
     }
 
     let mut content = String::new();
-    let mut model_out = model.to_string();
+    let mut model_out = req.model.to_string();
     let mut usage = Usage::default();
     // tool_calls stream as deltas keyed by `index`, each carrying an id/name
     // (first delta) then `function.arguments` string fragments (T13).
     let mut tool_acc: Vec<PartialToolCall> = Vec::new();
+    // Splits inline `<think>…</think>` reasoning out of the content stream when
+    // reasoning capture is on (Magistral / DeepSeek-R1 style). Inert otherwise.
+    let mut splitter = ThinkSplitter::default();
 
     for_each_sse_data(resp, |data| {
         // Stop promptly on user cancellation, keeping the partial text.
@@ -191,14 +192,50 @@ pub(super) async fn chat_completions_stream(
         if let Some(u) = v.get("usage").filter(|u| u.is_object()) {
             usage = parse_openai_usage(u);
         }
+        // Reasoning (best-effort): OpenAI-compatible reasoning backends
+        // (DeepSeek, vLLM, OpenRouter, …) emit `reasoning_content` or
+        // `reasoning` deltas; stock OpenAI/Mistral chat-completions don't, so
+        // this is simply absent there. Gated on the capture setting.
+        if req.reasoning {
+            for key in ["reasoning_content", "reasoning"] {
+                if let Some(r) = v
+                    .pointer(&format!("/choices/0/delta/{key}"))
+                    .and_then(|r| r.as_str())
+                {
+                    if !r.is_empty() {
+                        channel
+                            .send(StreamDelta::reasoning(r))
+                            .map_err(|e| anyhow!("channel send failed: {e}"))?;
+                    }
+                }
+            }
+        }
         if let Some(t) = v
             .pointer("/choices/0/delta/content")
             .and_then(|t| t.as_str())
         {
-            content.push_str(t);
-            channel
-                .send(StreamDelta::text(t))
-                .map_err(|e| anyhow!("channel send failed: {e}"))?;
+            // With reasoning on, split out any inline `<think>…</think>` block
+            // (Magistral / DeepSeek-R1 inline their reasoning this way) so it
+            // streams to the reasoning panel, not the answer. Off → pass through.
+            if req.reasoning {
+                let (answer, reason) = splitter.push(t);
+                if !reason.is_empty() {
+                    channel
+                        .send(StreamDelta::reasoning(&reason))
+                        .map_err(|e| anyhow!("channel send failed: {e}"))?;
+                }
+                if !answer.is_empty() {
+                    content.push_str(&answer);
+                    channel
+                        .send(StreamDelta::text(&answer))
+                        .map_err(|e| anyhow!("channel send failed: {e}"))?;
+                }
+            } else {
+                content.push_str(t);
+                channel
+                    .send(StreamDelta::text(t))
+                    .map_err(|e| anyhow!("channel send failed: {e}"))?;
+            }
         }
         if let Some(calls) = v
             .pointer("/choices/0/delta/tool_calls")
@@ -212,6 +249,18 @@ pub(super) async fn chat_completions_stream(
     })
     .await?;
 
+    // Flush any tail the splitter held back (a partial tag that never completed).
+    if req.reasoning {
+        let (answer, reason) = splitter.finish();
+        if !reason.is_empty() {
+            let _ = channel.send(StreamDelta::reasoning(&reason));
+        }
+        if !answer.is_empty() {
+            content.push_str(&answer);
+            let _ = channel.send(StreamDelta::text(&answer));
+        }
+    }
+
     let tool_calls = tool_acc.into_iter().map(PartialToolCall::finish).collect();
 
     Ok(ChatResponse {
@@ -219,6 +268,7 @@ pub(super) async fn chat_completions_stream(
         model: model_out,
         usage,
         tool_calls,
+        thinking_blocks: Vec::new(),
     })
 }
 
@@ -277,6 +327,88 @@ fn accumulate_tool_call(acc: &mut Vec<PartialToolCall>, call: &serde_json::Value
     }
 }
 
+const THINK_OPEN: &str = "<think>";
+const THINK_CLOSE: &str = "</think>";
+
+/// Streaming splitter that separates an assistant message into answer text and
+/// reasoning by detecting `<think>…</think>` blocks — Magistral and
+/// DeepSeek-R1-style models inline their reasoning that way. Stateful across
+/// deltas and resilient to a tag split across chunk boundaries: it holds back
+/// only the longest tail that could be the start of the tag it's looking for.
+#[derive(Default)]
+struct ThinkSplitter {
+    in_think: bool,
+    buf: String,
+}
+
+impl ThinkSplitter {
+    /// Feed one content delta; returns `(answer_chunk, reasoning_chunk)` ready to
+    /// emit now (either may be empty). Buffers a possible partial tag at the tail.
+    fn push(&mut self, text: &str) -> (String, String) {
+        self.buf.push_str(text);
+        let mut answer = String::new();
+        let mut reasoning = String::new();
+        loop {
+            let needle = if self.in_think {
+                THINK_CLOSE
+            } else {
+                THINK_OPEN
+            };
+            if let Some(pos) = self.buf.find(needle) {
+                // Tag boundaries are ASCII, so `pos` is a valid char boundary.
+                let sink = if self.in_think {
+                    &mut reasoning
+                } else {
+                    &mut answer
+                };
+                sink.push_str(&self.buf[..pos]);
+                self.buf.drain(..pos + needle.len());
+                self.in_think = !self.in_think;
+            } else {
+                let keep = partial_tag_tail(&self.buf, needle);
+                let emit_to = self.buf.len() - keep;
+                let sink = if self.in_think {
+                    &mut reasoning
+                } else {
+                    &mut answer
+                };
+                sink.push_str(&self.buf[..emit_to]);
+                self.buf.drain(..emit_to);
+                break;
+            }
+        }
+        (answer, reasoning)
+    }
+
+    /// Flush any buffered tail at stream end (it was a partial tag that never
+    /// completed, so it's literal text in whichever section we were in).
+    fn finish(self) -> (String, String) {
+        if self.buf.is_empty() {
+            (String::new(), String::new())
+        } else if self.in_think {
+            (String::new(), self.buf)
+        } else {
+            (self.buf, String::new())
+        }
+    }
+}
+
+/// Length (in bytes) of the longest suffix of `buf` that is a prefix of
+/// `needle`, so it might be the start of a tag split across chunks. `needle` is
+/// ASCII, so the returned boundary is always a valid char boundary. Pure / tested.
+fn partial_tag_tail(buf: &str, needle: &str) -> usize {
+    let max = needle.len().min(buf.len());
+    for len in (1..=max).rev() {
+        if needle
+            .as_bytes()
+            .starts_with(&buf.as_bytes()[buf.len() - len..])
+        {
+            return len;
+        }
+    }
+    0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -289,6 +421,7 @@ mod tests {
             images: vec![],
             tool_calls: vec![],
             tool_results: vec![],
+            thinking_blocks: vec![],
         }
     }
 
@@ -328,6 +461,7 @@ mod tests {
                 arguments: serde_json::json!({ "url": "https://x.com" }),
             }],
             tool_results: vec![],
+            thinking_blocks: vec![],
         };
         let out = build_messages_flat(&[msg]);
         assert_eq!(out.len(), 1);
@@ -360,6 +494,7 @@ mod tests {
                     content: "r2".into(),
                 },
             ],
+            thinking_blocks: vec![],
         };
         let out = build_messages_flat(&[msg]);
         assert_eq!(out.len(), 2);
@@ -375,5 +510,71 @@ mod tests {
         assert_eq!(out[0]["role"], "user");
         assert_eq!(out[0]["content"], "hi");
         assert!(out[0].get("tool_calls").is_none());
+    }
+
+    /// Drive a splitter with a sequence of deltas; return the concatenated
+    /// (answer, reasoning) including the final flush.
+    fn run_splitter(chunks: &[&str]) -> (String, String) {
+        let mut s = ThinkSplitter::default();
+        let mut answer = String::new();
+        let mut reasoning = String::new();
+        for c in chunks {
+            let (a, r) = s.push(c);
+            answer.push_str(&a);
+            reasoning.push_str(&r);
+        }
+        let (a, r) = s.finish();
+        answer.push_str(&a);
+        reasoning.push_str(&r);
+        (answer, reasoning)
+    }
+
+    #[test]
+    fn think_splitter_separates_reasoning_from_answer() {
+        let (answer, reasoning) =
+            run_splitter(&["<think>weighing options</think>The answer is 42."]);
+        assert_eq!(reasoning, "weighing options");
+        assert_eq!(answer, "The answer is 42.");
+    }
+
+    #[test]
+    fn think_splitter_handles_tags_split_across_chunks() {
+        // Tags arrive byte-fragmented across deltas.
+        let (answer, reasoning) = run_splitter(&["<thi", "nk>rea", "soning</thi", "nk>fin", "al"]);
+        assert_eq!(reasoning, "reasoning");
+        assert_eq!(answer, "final");
+    }
+
+    #[test]
+    fn think_splitter_passes_through_plain_content() {
+        // No tags: everything is the answer, even with a stray '<'.
+        let (answer, reasoning) = run_splitter(&["a < b and ", "c > d"]);
+        assert_eq!(answer, "a < b and c > d");
+        assert_eq!(reasoning, "");
+    }
+
+    #[test]
+    fn think_splitter_flushes_unterminated_think() {
+        // A think block with no closing tag flushes as reasoning at stream end.
+        let (answer, reasoning) = run_splitter(&["<think>still thinking"]);
+        assert_eq!(answer, "");
+        assert_eq!(reasoning, "still thinking");
+    }
+
+    #[test]
+    fn think_splitter_is_utf8_safe_at_tag_boundary() {
+        // Multibyte chars adjacent to a partial-tag tail must not panic.
+        let (answer, reasoning) = run_splitter(&["café <", "think>π</think> δ"]);
+        assert_eq!(answer, "café  δ");
+        assert_eq!(reasoning, "π");
+    }
+
+    #[test]
+    fn partial_tag_tail_finds_prefixes() {
+        assert_eq!(partial_tag_tail("foo<", THINK_OPEN), 1);
+        assert_eq!(partial_tag_tail("foo<thi", THINK_OPEN), 4);
+        assert_eq!(partial_tag_tail("foobar", THINK_OPEN), 0);
+        // A multibyte tail can't match the ASCII needle → 0 (no panic).
+        assert_eq!(partial_tag_tail("café", THINK_OPEN), 0);
     }
 }

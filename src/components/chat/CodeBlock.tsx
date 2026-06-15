@@ -6,6 +6,8 @@ import { hasRenderer } from "@/lib/plugins";
 import { isShellLanguage, openInTerminal } from "@/lib/terminal";
 import { Mermaid } from "@/components/chat/Mermaid";
 import { VegaChart } from "@/components/chat/VegaChart";
+import { ArtifactCard } from "@/components/chat/ArtifactCard";
+import { ARTIFACT_LANGUAGE } from "@/lib/artifacts";
 import { selectRegistry, usePlugins } from "@/store/plugins";
 import { useT } from "@/store/i18n";
 
@@ -37,6 +39,15 @@ export function CodeBlock({ className, children }: CodeBlockProps) {
   // manifest claiming any other language has no effect here. Disabling the
   // plugin falls through to the normal code block (shows the raw source).
   const registry = usePlugins(selectRegistry);
+  // Artifacts (com.snak.artifacts): a ```artifact block becomes a live, editable
+  // multi-file web app card instead of a highlighted block.
+  if (
+    language &&
+    language.toLowerCase() === ARTIFACT_LANGUAGE &&
+    hasRenderer(registry, ARTIFACT_LANGUAGE)
+  ) {
+    return <ArtifactCard code={text} />;
+  }
   if (
     language &&
     language.toLowerCase() === "mermaid" &&

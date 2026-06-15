@@ -7,6 +7,7 @@ import {
   Maximize2,
   Paperclip,
   Square,
+  Telescope,
   TerminalSquare,
   X,
 } from "lucide-react";
@@ -248,6 +249,18 @@ export function Composer({
     providerEnabled &&
     keyReady !== false &&
     canCompact(threadMessages);
+
+  // --- Deep research (T55) ----------------------------------------------------
+  // A per-thread (or draft) toggle: when on, the model may dispatch parallel
+  // research subagents. The effective value lives on the saved thread row, or on
+  // the draft for an unsaved chat.
+  const setDeepResearch = useThreads((s) => s.setDeepResearch);
+  const deepResearchOn = useThreads((s) =>
+    s.currentThreadId
+      ? (s.threads.find((x) => x.id === s.currentThreadId)?.deep_research ?? 0) !==
+        0
+      : s.draftDeepResearch,
+  );
 
   // Previously-sent user prompts in this thread, most-recent first — the source
   // for arrow-key history recall. Summary rows aren't real prompts.
@@ -918,6 +931,17 @@ export function Composer({
           onClick={() => setCanvasOpen(true)}
         >
           <Maximize2 className="size-4" />
+        </Button>
+        <Button
+          variant={deepResearchOn ? "default" : "ghost"}
+          size="icon"
+          aria-label={t("composer.deepResearch")}
+          aria-pressed={deepResearchOn}
+          title={t("composer.deepResearchTitle")}
+          disabled={busy}
+          onClick={() => void setDeepResearch(!deepResearchOn)}
+        >
+          <Telescope className="size-4" />
         </Button>
         <div className="flex-1" />
         <ModelPicker />

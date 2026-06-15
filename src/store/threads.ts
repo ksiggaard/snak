@@ -19,6 +19,7 @@ import {
   selectVariant as dbSelectVariant,
   setSetting,
   setThreadArchived,
+  setThreadDeepResearch,
   setThreadFavorite,
   setThreadProject,
   setThreadProviderModel,
@@ -33,10 +34,15 @@ import {
   type StreamEvent,
 } from "@/lib/chat";
 import {
+  applySubagentEvent,
   applyToolEvent,
+  applyTraceEvent,
   loadThreadMessages,
+  persistableSubagent,
   persistableToolCall,
+  type ApiTraceEntry,
   type MessageImage,
+  type MessageSubagent,
   type MessageToolCall,
   type MessageView,
 } from "@/lib/messages";
@@ -53,6 +59,7 @@ import { extractMentions } from "@/lib/mentions";
 import { runPersonaMemoryUpdate } from "@/lib/personaMemory";
 import { buildProjectSystemText } from "@/lib/projects";
 import { buildSkillsSystemText } from "@/lib/skills";
+import { buildArtifactsSystemText } from "@/lib/artifacts";
 import { buildChartsSystemText } from "@/lib/charts";
 import { buildYouTubeSystemText } from "@/lib/youtube";
 import { hasRenderer } from "@/lib/plugins";
@@ -71,8 +78,44 @@ const LAST_THREAD_KEY = "last_thread_id";
 export const DEFAULT_PROVIDER_KEY = "default_provider";
 export const DEFAULT_MODEL_KEY = "default_model";
 // Sentinel id for the in-progress assistant message shown while streaming;
-// replaced by the persisted DB row once the stream completes.
-const STREAM_ID = "__streaming__";
+// replaced by the persisted DB row once the stream completes. Exported so the
+// renderer can tell a not-yet-persisted placeholder from a real message (e.g.
+// artifacts only persist once their message has a real id).
+export const STREAM_ID = "__streaming__";
+
+/** Cap on the persisted API trace (serialized), so a long multi-round trace
+ * can't bloat the message row. The base64/document bodies are already elided
+ * server-side; this guards against a pathological many-round trace. */
+const API_TRACE_PERSIST_BUDGET = 200_000;
+
+/** Persist the transparency captures (reasoning text + raw API trace) as
+ * attachments on an assistant message, so the panels survive reload. No-ops for
+ * whichever capture is empty (i.e. when the setting was off). */
+async function persistTransparency(
+  messageId: string,
+  reasoning: string,
+  apiTrace: ApiTraceEntry[],
+): Promise<void> {
+  if (reasoning.trim()) {
+    await addAttachment({
+      message_id: messageId,
+      kind: "reasoning",
+      media_type: "text/plain",
+      data: reasoning,
+    });
+  }
+  if (apiTrace.length) {
+    const json = JSON.stringify(apiTrace);
+    if (json.length <= API_TRACE_PERSIST_BUDGET) {
+      await addAttachment({
+        message_id: messageId,
+        kind: "api_trace",
+        media_type: "application/json",
+        data: json,
+      });
+    }
+  }
+}
 
 /** Derive a thread title from the first user message. `fallback` is used for
  * an empty message (callers pass the localized "New chat"; English default
@@ -129,6 +172,9 @@ interface ThreadsState {
   draftProjectId: string | null;
   /** Incognito draft (T29): the first send creates the thread `ephemeral`. */
   draftIncognito: boolean;
+  /** Deep research draft (T55): the first send creates the thread with deep
+   * research on. For a saved thread the mode lives on `thread.deep_research`. */
+  draftDeepResearch: boolean;
   /** Bot (T38) a new (draft) chat will belong to, or null for none. */
   draftBotId: string | null;
   busy: boolean;
@@ -176,6 +222,9 @@ interface ThreadsState {
   ) => Promise<void>;
   /** Set provider+model for the current thread, or the draft if none. */
   setProviderModel: (provider: Provider, model: string) => Promise<void>;
+  /** Turn deep research mode on/off (T55) for the current thread, or the draft
+   * if none. Persisted per thread. */
+  setDeepResearch: (on: boolean) => Promise<void>;
   /** Load `text` into the Composer and focus it (a quick action's `prefill`
    * mode). Bumps a nonce so the Composer re-applies even for identical text. */
   insertIntoComposer: (text: string) => void;
@@ -323,6 +372,12 @@ async function loadSharedSystemBlocks(
   if (youTubeSystemText)
     head.push({ role: "system", content: youTubeSystemText, images: [] });
 
+  // Artifacts auto-instruct (com.snak.artifacts): teach the model the
+  // ```artifact multi-file format when the artifacts renderer is enabled.
+  const artifactsSystemText = buildArtifactsSystemText(registry);
+  if (artifactsSystemText)
+    head.push({ role: "system", content: artifactsSystemText, images: [] });
+
   // Global system context (T10): the custom system-prompt addendum + the
   // user's memory entries (applies to every thread/provider).
   const [addendum, memory] = await Promise.all([
@@ -421,6 +476,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   defaultModel: PROVIDERS[0].defaultModel,
   draftProjectId: null,
   draftIncognito: false,
+  draftDeepResearch: false,
   draftBotId: null,
   busy: false,
   compacting: false,
@@ -492,6 +548,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       error: null,
       draftProjectId: null,
       draftIncognito: opts?.incognito ?? false,
+      draftDeepResearch: false,
       draftBotId: null,
       draftProvider: get().defaultProvider,
       draftModel: get().defaultModel,
@@ -506,6 +563,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       error: null,
       draftProjectId: projectId,
       draftIncognito: false,
+      draftDeepResearch: false,
       draftBotId: null,
       draftProvider: get().defaultProvider,
       draftModel: get().defaultModel,
@@ -525,6 +583,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       error: null,
       draftProjectId: null,
       draftIncognito: false,
+      draftDeepResearch: false,
       draftBotId: bot.id,
       draftProvider: hasDefault ? bot.default_provider! : get().defaultProvider,
       draftModel: hasDefault ? bot.default_model! : get().defaultModel,
@@ -548,8 +607,20 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     await get().refreshThreads();
   },
 
+  setDeepResearch: async (on) => {
+    const id = get().currentThreadId;
+    if (!id) {
+      set({ draftDeepResearch: on });
+      return;
+    }
+    await setThreadDeepResearch(id, on);
+    await get().refreshThreads();
+  },
+
   insertIntoComposer: (text) => {
-    set({ composerInsert: { text, nonce: (get().composerInsert?.nonce ?? 0) + 1 } });
+    set({
+      composerInsert: { text, nonce: (get().composerInsert?.nonce ?? 0) + 1 },
+    });
   },
 
   setDefaultModel: async (provider, model) => {
@@ -613,7 +684,10 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           get().draftProvider)
         : get().draftProvider;
       const { status, forceOffline } = useConnectivity.getState();
-      if (!isKeylessProvider(effProvider) && deriveOffline(status, forceOffline)) {
+      if (
+        !isKeylessProvider(effProvider) &&
+        deriveOffline(status, forceOffline)
+      ) {
         const label =
           PROVIDERS.find((p) => p.id === effProvider)?.label ?? effProvider;
         set({ error: t("composer.offline", { provider: label }) });
@@ -636,6 +710,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       let projectId: string | null;
       let botId: string | null;
       let ephemeral: boolean;
+      let deepResearch: boolean;
 
       if (!id) {
         provider = get().draftProvider;
@@ -643,6 +718,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         projectId = get().draftProjectId;
         botId = get().draftBotId;
         ephemeral = get().draftIncognito;
+        deepResearch = get().draftDeepResearch;
         const thread = await createThread({
           provider,
           model,
@@ -658,6 +734,9 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         });
         id = thread.id;
         set({ currentThreadId: id });
+        // Carry the draft's deep-research mode onto the new thread row (T55) so
+        // it persists like incognito/project do.
+        if (deepResearch) await setThreadDeepResearch(id, true);
         // Incognito threads never become last_thread_id (T29).
         if (!ephemeral) await setSetting(LAST_THREAD_KEY, id);
         await get().refreshThreads();
@@ -668,6 +747,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         projectId = t.project_id;
         botId = t.bot_id;
         ephemeral = t.ephemeral !== 0;
+        deepResearch = t.deep_research !== 0;
       }
 
       const userMsg = await addMessage({
@@ -738,12 +818,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         // Per-persona model (T43 multi-LLM): a mentioned persona answers on its
         // own provider/model when set; the thread persona / base reply uses the
         // thread's model.
-        const { provider: replyProvider, model: replyModel } = resolveReplyModel(
-          replyBot,
-          provider,
-          model,
-          hasKey,
-        );
+        const { provider: replyProvider, model: replyModel } =
+          resolveReplyModel(replyBot, provider, model, hasKey);
         // Group labeling (T43): label the other speakers and, for a persona
         // reply, prepend a framing block right after its own block explaining
         // the group format. compactHistory always gets the group so even a base
@@ -784,9 +860,16 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         // attribution renders while it is still streaming.
         let acc = "";
         const toolCalls: MessageToolCall[] = [];
+        // Research subagents dispatched this reply (deep research, T55): rendered
+        // live as cards, then persisted as `subagent` attachments below.
+        const subagents: MessageSubagent[] = [];
         // Images fetched by `search_images`/`fetch_images` this reply: rendered
         // live on the placeholder, then persisted as image attachments below.
         const foundImages: MessageImage[] = [];
+        // Transparency capture (global settings): the model's reasoning text and
+        // the raw per-round API trace. Empty unless the user opted in.
+        let reasoning = "";
+        const apiTrace: ApiTraceEntry[] = [];
         const onDelta = (event: StreamEvent) => {
           // A gated (system-diagnostics) call needs explicit approval. The Rust
           // loop is blocked awaiting our reply. Auto-approve if the user chose
@@ -803,6 +886,11 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           // Fold tool-lifecycle events (started / live output / finished) into
           // the accumulator so the live activity panel updates as they arrive.
           applyToolEvent(event, toolCalls);
+          // Fold subagent lifecycle (dispatched/running/done) into its cards.
+          applySubagentEvent(event, subagents);
+          // Fold API-trace events into the developer/inspect panel.
+          applyTraceEvent(event, apiTrace);
+          if (event.reasoning) reasoning += event.reasoning.text;
           if (event.toolImages) {
             for (const img of event.toolImages.images) {
               foundImages.push({
@@ -834,6 +922,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                     images: [],
                     documents: [],
                     toolCalls: [],
+                    subagents: [],
                   },
                 ];
             return {
@@ -843,13 +932,19 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                       ...m,
                       content: acc,
                       toolCalls: [...toolCalls],
+                      subagents: [...subagents],
                       images: [...foundImages],
+                      reasoning: reasoning || undefined,
+                      apiTrace: apiTrace.length ? [...apiTrace] : undefined,
                     }
                   : m,
               ),
-              // A tool finished → show "thinking" until the model's next token;
-              // a token arrived → clear it. Other events leave it unchanged.
-              ...(event.toolDone ? { awaitingModel: true } : {}),
+              // A tool finished or a subagent is in flight → show "thinking"
+              // until the model's next token; a token arrived → clear it. Other
+              // events leave it unchanged.
+              ...(event.toolDone || event.subagent
+                ? { awaitingModel: true }
+                : {}),
               ...(event.text ? { awaitingModel: false } : {}),
             };
           });
@@ -865,13 +960,15 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           history,
           onDelta,
           threadId,
+          deepResearch,
         );
-        // Persist the assistant turn when it produced text, invoked a tool, or
-        // fetched images. (Skip a truly empty row, e.g. cancelled before any
-        // token/tool call.)
+        // Persist the assistant turn when it produced text, invoked a tool,
+        // dispatched a subagent, or fetched images. (Skip a truly empty row,
+        // e.g. cancelled before any token/tool call.)
         if (
           result.content.length > 0 ||
           toolCalls.length > 0 ||
+          subagents.length > 0 ||
           foundImages.length > 0
         ) {
           const assistantMsg = await addMessage({
@@ -892,6 +989,16 @@ export const useThreads = create<ThreadsState>((set, get) => ({
               data: JSON.stringify(persistableToolCall(tc)),
             });
           }
+          // Persist each research subagent as a structured attachment (T55) so
+          // the cards survive reload — structured data, never model text.
+          for (const s of subagents) {
+            await addAttachment({
+              message_id: assistantMsg.id,
+              kind: "subagent",
+              media_type: "application/json",
+              data: JSON.stringify(persistableSubagent(s)),
+            });
+          }
           // Persist images the model fetched as `image` attachments, so they
           // appear in the right-hand media gallery, enlarge in the lightbox, and
           // survive reload. The source page URL rides in `filename`.
@@ -904,6 +1011,9 @@ export const useThreads = create<ThreadsState>((set, get) => ({
               filename: img.source,
             });
           }
+          // Persist the captured reasoning + API trace (transparency settings) as
+          // their own attachments, so the panels survive reload.
+          await persistTransparency(assistantMsg.id, reasoning, apiTrace);
           // Record token usage for this response. Attribute it to the model
           // the API actually used (`result.model`), falling back to the
           // requested model — so usage stays correct even if the thread's
@@ -1040,8 +1150,12 @@ export const useThreads = create<ThreadsState>((set, get) => ({
 
     const thread = get().threads.find((x) => x.id === id);
     if (!thread) return;
-    const { provider, model, project_id: projectId, bot_id: threadBotId } =
-      thread;
+    const {
+      provider,
+      model,
+      project_id: projectId,
+      bot_id: threadBotId,
+    } = thread;
 
     set({
       busy: true,
@@ -1089,7 +1203,11 @@ export const useThreads = create<ThreadsState>((set, get) => ({
               role: "system",
               content: buildGroupChatSystemText({
                 selfName: replyBot.name,
-                others: groupParticipantNames(priorRows, attributeBotId, roster),
+                others: groupParticipantNames(
+                  priorRows,
+                  attributeBotId,
+                  roster,
+                ),
               }),
               images: [],
             }
@@ -1115,7 +1233,10 @@ export const useThreads = create<ThreadsState>((set, get) => ({
 
       let acc = "";
       const toolCalls: MessageToolCall[] = [];
+      const subagents: MessageSubagent[] = [];
       const foundImages: MessageImage[] = [];
+      let reasoning = "";
+      const apiTrace: ApiTraceEntry[] = [];
       const onDelta = (event: StreamEvent) => {
         if (event.approvalRequest) {
           const req = event.approvalRequest;
@@ -1127,6 +1248,9 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           return;
         }
         applyToolEvent(event, toolCalls);
+        applySubagentEvent(event, subagents);
+        applyTraceEvent(event, apiTrace);
+        if (event.reasoning) reasoning += event.reasoning.text;
         if (event.toolImages) {
           for (const img of event.toolImages.images) {
             foundImages.push({
@@ -1158,6 +1282,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                   images: [],
                   documents: [],
                   toolCalls: [],
+                  subagents: [],
                 },
               ];
           return {
@@ -1167,11 +1292,16 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                     ...m,
                     content: acc,
                     toolCalls: [...toolCalls],
+                    subagents: [...subagents],
                     images: [...foundImages],
+                    reasoning: reasoning || undefined,
+                    apiTrace: apiTrace.length ? [...apiTrace] : undefined,
                   }
                 : m,
             ),
-            ...(event.toolDone ? { awaitingModel: true } : {}),
+            ...(event.toolDone || event.subagent
+              ? { awaitingModel: true }
+              : {}),
             ...(event.text ? { awaitingModel: false } : {}),
           };
         });
@@ -1184,10 +1314,12 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         history,
         onDelta,
         id,
+        thread.deep_research !== 0,
       );
       if (
         result.content.length > 0 ||
         toolCalls.length > 0 ||
+        subagents.length > 0 ||
         foundImages.length > 0
       ) {
         // New variant joins the existing group, then becomes the selected one.
@@ -1207,6 +1339,14 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             data: JSON.stringify(persistableToolCall(tc)),
           });
         }
+        for (const s of subagents) {
+          await addAttachment({
+            message_id: variantMsg.id,
+            kind: "subagent",
+            media_type: "application/json",
+            data: JSON.stringify(persistableSubagent(s)),
+          });
+        }
         for (const img of foundImages) {
           await addAttachment({
             message_id: variantMsg.id,
@@ -1216,6 +1356,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             filename: img.source,
           });
         }
+        await persistTransparency(variantMsg.id, reasoning, apiTrace);
         const u = result.usage;
         if (
           u &&

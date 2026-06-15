@@ -5,6 +5,14 @@
 //! Text deltas stream to the frontend over `on_delta`; the fully-accumulated
 //! response is also returned so the frontend can persist the authoritative text.
 //!
+//! ## The agent loop
+//!
+//! The tool-call round-trip (T13) lives in [`run_agent_loop`]: stream a provider
+//! response, run any tools it asked for, append the synthesized turns, and loop.
+//! `chat_stream` is a thin wrapper that resolves the key + tool list and calls it
+//! once. Deep research mode (T55) reuses the *same* loop for each dispatched
+//! subagent, so orchestrator and subagent share one battle-tested code path.
+//!
 //! ## Cancellation
 //!
 //! A single `CancelFlag` (`AtomicBool`) lives in Tauri managed state. `chat_stream`
@@ -12,21 +20,26 @@
 //! Each provider polls the flag inside its SSE loop and early-exits (returning the
 //! text accumulated so far) the same way it stops on `message_stop` / `[DONE]`, so
 //! a cancelled request still resolves `Ok(ChatResponse { .. })` with the partial
-//! text — no error, nothing lost.
+//! text — no error, nothing lost. Subagents share the same flag, so one cancel
+//! halts the orchestrator and every subagent at once.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
+use futures_util::StreamExt;
 use tauri::ipc::Channel;
 use tauri::State;
 use tokio::sync::oneshot;
 
 use crate::commands::keys;
+use crate::mcp::session::McpSessions;
 use crate::mcp::{self, ServerConfig};
 use crate::providers::{
-    self, ChatMessage, ChatResponse, CompletionRequest, StreamDelta, ToolResult,
+    self, ChatMessage, ChatResponse, CompletionRequest, StreamDelta, ToolCall, ToolDef, ToolResult,
+    Usage,
 };
+use crate::research;
 
 /// Safety cap on tool-call rounds within one `chat_stream` call, so a model that
 /// keeps requesting tools can't loop forever. After the cap we return the last
@@ -78,7 +91,8 @@ pub struct PendingApprovals(pub Mutex<HashMap<String, oneshot::Sender<bool>>>);
 
 #[tauri::command]
 // Tauri command surface: provider/model/messages, the delta channel, the MCP
-// server list + per-thread session registry, and the cancel/approval state.
+// server list + per-thread session registry, the deep-research toggle, and the
+// cancel/approval state.
 #[allow(clippy::too_many_arguments)]
 pub async fn chat_stream(
     provider: String,
@@ -87,7 +101,11 @@ pub async fn chat_stream(
     on_delta: Channel<StreamDelta>,
     #[allow(non_snake_case)] mcpServers: Option<Vec<ServerConfig>>,
     #[allow(non_snake_case)] threadId: String,
-    sessions: State<'_, crate::mcp::session::McpSessions>,
+    #[allow(non_snake_case)] deepResearch: Option<bool>,
+    #[allow(non_snake_case)] subagentConcurrency: Option<usize>,
+    #[allow(non_snake_case)] captureReasoning: Option<bool>,
+    #[allow(non_snake_case)] captureTrace: Option<bool>,
+    sessions: State<'_, McpSessions>,
     cancel: State<'_, CancelFlag>,
     approvals: State<'_, PendingApprovals>,
     key_cache: State<'_, keys::KeyCache>,
@@ -118,41 +136,114 @@ pub async fn chat_stream(
     // byte-identical to a plain completion — exactly one provider round, no
     // `tools` field on the wire (T13 no-tools invariant).
     let servers = mcpServers.unwrap_or_default();
-    let tools = if servers.is_empty() {
+    let mut tools = if servers.is_empty() {
         Vec::new()
     } else {
         mcp::list_tools(&client, sessions.inner(), &threadId, &servers).await
     };
 
-    // Working history grows as the loop appends assistant tool-call turns and
-    // tool-result turns between provider rounds. When tools are exposed, a
-    // leading system prompt nudges the model to actually call them (some models
-    // otherwise answer from memory and hallucinate); the no-tools path is left
-    // untouched, so it stays byte-identical to before.
-    let mut history = with_tool_system_prompt(messages, !tools.is_empty());
+    // Deep research (T55) only engages when web tools exist for subagents to use;
+    // it adds the dispatch tool + a decomposition system prompt. With it off (or
+    // no tools), the path below is unchanged.
+    let deep_research = deepResearch.unwrap_or(false) && !tools.is_empty();
+    if deep_research {
+        tools.push(research::dispatch_tool_def());
+    }
+    // How many subagents run at once (Settings → Advanced), clamped to a sane
+    // range; defaulted when the setting is absent.
+    let subagent_concurrency = research::clamp_concurrency(
+        subagentConcurrency.unwrap_or(research::DEFAULT_SUBAGENT_CONCURRENCY),
+    );
 
-    // The full streamed transcript: text deltas across every round plus the
-    // tool-activity lines injected below. Returned as the authoritative content
-    // so the persisted message matches exactly what the user saw stream in.
-    // (Intermediate tool-call rounds usually carry no text of their own.)
+    let history = with_system_prompt(messages, !tools.is_empty(), deep_research);
+
+    run_agent_loop(
+        &client,
+        &provider,
+        &model,
+        &api_key,
+        history,
+        &tools,
+        &servers,
+        sessions.inner(),
+        &threadId,
+        &on_delta,
+        &flag,
+        Some(approvals.inner()),
+        MAX_TOOL_ROUNDS,
+        deep_research,
+        subagent_concurrency,
+        captureReasoning.unwrap_or(false),
+        captureTrace.unwrap_or(false),
+    )
+    .await
+}
+
+/// One agent's tool-call loop (T13). Streams provider responses, runs the tools
+/// the model asks for, appends the synthesized assistant/tool turns, and repeats
+/// until the model answers without tools or `max_rounds` is hit. Reused verbatim
+/// by the orchestrator and by each deep-research subagent.
+///
+/// - `approvals`: `Some` for the orchestrator (gated `sys__*` calls prompt the
+///   user); `None` for subagents, which expose no gated tools.
+/// - `allow_dispatch`: when true, a `research__dispatch` call is intercepted and
+///   handled in-process by [`run_subagents`] instead of going to MCP. Always
+///   false for subagents, so recursion is structurally bounded to depth 1.
+#[allow(clippy::too_many_arguments)]
+async fn run_agent_loop(
+    client: &reqwest::Client,
+    provider: &str,
+    model: &str,
+    api_key: &str,
+    mut history: Vec<ChatMessage>,
+    tools: &[ToolDef],
+    servers: &[ServerConfig],
+    sessions: &McpSessions,
+    thread_id: &str,
+    on_delta: &Channel<StreamDelta>,
+    cancel: &AtomicBool,
+    approvals: Option<&PendingApprovals>,
+    max_rounds: usize,
+    allow_dispatch: bool,
+    subagent_concurrency: usize,
+    reasoning: bool,
+    trace: bool,
+) -> Result<ChatResponse, String> {
+    // The full streamed transcript: text deltas across every round. Returned as
+    // the authoritative content so the persisted message matches what streamed
+    // in. (Intermediate tool-call rounds usually carry no text of their own.)
     let mut transcript = String::new();
+    // Token spend by dispatched subagents (deep research), folded into the
+    // returned usage so the orchestrator's message reflects the true cost.
+    let mut extra_usage = Usage::default();
 
-    for _round in 0..MAX_TOOL_ROUNDS {
+    for _round in 0..max_rounds {
         let req = CompletionRequest {
-            model: &model,
-            api_key: &api_key,
+            model,
+            api_key,
             messages: &history,
-            tools: &tools,
+            tools,
+            reasoning,
+            trace,
+            round: _round as u32,
         };
 
-        let resp = providers::stream(&client, &provider, &req, &on_delta, &flag)
+        let mut resp = providers::stream(client, provider, &req, on_delta, cancel)
             .await
             .map_err(|e| e.to_string())?;
         transcript.push_str(&resp.content);
+        if trace {
+            let _ = on_delta.send(StreamDelta::api_trace(
+                "response",
+                _round as u32,
+                response_trace(&resp),
+            ));
+        }
 
         // No tool calls → normal completion; return the authoritative response.
         // (Also the only path taken when `tools` is empty.)
-        if resp.tool_calls.is_empty() || flag.load(Ordering::Relaxed) {
+        if resp.tool_calls.is_empty() || cancel.load(Ordering::Relaxed) {
+            resp.usage.add(&extra_usage);
             return Ok(ChatResponse {
                 content: transcript,
                 ..resp
@@ -167,7 +258,47 @@ pub async fn chat_stream(
         let mut results = Vec::with_capacity(resp.tool_calls.len());
         let mut cancelled = false;
         for call in &resp.tool_calls {
+            // Deep-research dispatch is handled in-process (spawns subagents and
+            // emits its own lifecycle events) rather than routed through MCP.
+            if allow_dispatch && call.name == research::DISPATCH_TOOL_NAME {
+                let (content, usage) = run_subagents(
+                    client,
+                    provider,
+                    model,
+                    api_key,
+                    tools,
+                    servers,
+                    sessions,
+                    thread_id,
+                    on_delta,
+                    cancel,
+                    call,
+                    subagent_concurrency,
+                )
+                .await;
+                extra_usage.add(&usage);
+                results.push(ToolResult {
+                    tool_call_id: call.id.clone(),
+                    name: call.name.clone(),
+                    content,
+                });
+                if cancel.load(Ordering::Relaxed) {
+                    cancelled = true;
+                    break;
+                }
+                continue;
+            }
+
             if mcp::requires_approval(&call.name) {
+                // Gated tools are orchestrator-only; subagents never reach here.
+                let Some(approvals) = approvals else {
+                    results.push(ToolResult {
+                        tool_call_id: call.id.clone(),
+                        name: call.name.clone(),
+                        content: "Tool not available in this context.".into(),
+                    });
+                    continue;
+                };
                 let (summary, detail) = mcp::describe_call(call);
                 let (tx, rx) = oneshot::channel();
                 approvals.0.lock().unwrap().insert(call.id.clone(), tx);
@@ -179,7 +310,7 @@ pub async fn chat_stream(
                 // dropped sender or `false` both mean "do not run".
                 let approved = rx.await.unwrap_or(false);
                 approvals.0.lock().unwrap().remove(&call.id);
-                cancelled = flag.load(Ordering::Relaxed);
+                cancelled = cancel.load(Ordering::Relaxed);
 
                 if !approved {
                     results.push(ToolResult {
@@ -206,15 +337,8 @@ pub async fn chat_stream(
                 .map_err(|e| format!("channel send failed: {e}"))?;
 
             // Runs the tool, streaming any live output to the UI as it arrives.
-            let content = mcp::call_tool(
-                &client,
-                sessions.inner(),
-                &threadId,
-                &servers,
-                call,
-                &on_delta,
-            )
-            .await;
+            let content =
+                mcp::call_tool(client, sessions, thread_id, servers, call, on_delta).await;
             let ok = !content.starts_with("tool error:");
             on_delta
                 .send(StreamDelta::tool_done(&call.id, ok))
@@ -226,9 +350,10 @@ pub async fn chat_stream(
             });
         }
 
-        // User cancelled while an approval was pending: stop here with the text
-        // streamed so far (mirrors the provider-loop cancellation behavior).
+        // User cancelled while an approval was pending (or mid-dispatch): stop
+        // here with the text streamed so far (mirrors provider-loop cancellation).
         if cancelled {
+            resp.usage.add(&extra_usage);
             return Ok(ChatResponse {
                 content: transcript,
                 ..resp
@@ -243,6 +368,9 @@ pub async fn chat_stream(
             images: Vec::new(),
             tool_calls: resp.tool_calls,
             tool_results: Vec::new(),
+            // Echoed back before the tool_use block on the next round — Anthropic
+            // requires this when extended thinking + tool use are combined.
+            thinking_blocks: resp.thinking_blocks,
         });
         history.push(ChatMessage {
             role: "tool".into(),
@@ -250,6 +378,7 @@ pub async fn chat_stream(
             images: Vec::new(),
             tool_calls: Vec::new(),
             tool_results: results,
+            thinking_blocks: Vec::new(),
         });
         // Re-anchor the task right next to the generation point. Weaker (small,
         // local) models often lose the thread after a tool turn and fall back to
@@ -262,42 +391,250 @@ pub async fn chat_stream(
             images: Vec::new(),
             tool_calls: Vec::new(),
             tool_results: Vec::new(),
+            thinking_blocks: Vec::new(),
         });
     }
 
     // Round cap hit: do one final tool-less round so the model produces a text
     // answer instead of requesting yet more tools.
     let req = CompletionRequest {
-        model: &model,
-        api_key: &api_key,
+        model,
+        api_key,
         messages: &history,
         tools: &[],
+        reasoning,
+        trace,
+        round: max_rounds as u32,
     };
-    let resp = providers::stream(&client, &provider, &req, &on_delta, &flag)
+    let mut resp = providers::stream(client, provider, &req, on_delta, cancel)
         .await
         .map_err(|e| e.to_string())?;
     transcript.push_str(&resp.content);
+    if trace {
+        let _ = on_delta.send(StreamDelta::api_trace(
+            "response",
+            max_rounds as u32,
+            response_trace(&resp),
+        ));
+    }
+    resp.usage.add(&extra_usage);
     Ok(ChatResponse {
         content: transcript,
         ..resp
     })
 }
 
-/// Prepend the tool-use system prompt when any tools are exposed; otherwise
-/// return the history unchanged (so the no-tools request stays byte-identical).
-/// Pure — unit-tested.
-fn with_tool_system_prompt(messages: Vec<ChatMessage>, has_tools: bool) -> Vec<ChatMessage> {
-    if !has_tools {
-        return messages;
+/// Execute a `research__dispatch` call (deep research, T55): parse its subtasks,
+/// run one subagent per subtask concurrently (capped), and aggregate their
+/// summaries into the tool-result string fed back to the orchestrator. Returns
+/// that string plus the subagents' combined token usage.
+///
+/// Each subagent runs the *same* [`run_agent_loop`] over a fresh, focused
+/// history with the web tools available but **without** the dispatch tool
+/// (`allow_dispatch = false`), so it cannot recurse. Its own provider/tool deltas
+/// go to a throwaway sink channel — only the lifecycle events (dispatched →
+/// running → done/failed) reach the UI, keeping the chat readable and the
+/// orchestrator's context clean.
+#[allow(clippy::too_many_arguments)]
+async fn run_subagents(
+    client: &reqwest::Client,
+    provider: &str,
+    model: &str,
+    api_key: &str,
+    orchestrator_tools: &[ToolDef],
+    servers: &[ServerConfig],
+    sessions: &McpSessions,
+    thread_id: &str,
+    on_delta: &Channel<StreamDelta>,
+    cancel: &AtomicBool,
+    call: &ToolCall,
+    concurrency: usize,
+) -> (String, Usage) {
+    let tasks = match research::parse_subtasks(&call.arguments) {
+        Ok(t) => t,
+        // A malformed request becomes the tool result so the model self-corrects.
+        Err(e) => return (e, Usage::default()),
+    };
+
+    // Subagents get the web/MCP tools but not the dispatch tool (depth bound 1).
+    let sub_tools: Vec<ToolDef> = orchestrator_tools
+        .iter()
+        .filter(|t| t.name != research::DISPATCH_TOOL_NAME)
+        .cloned()
+        .collect();
+    let sub_tools = &sub_tools;
+
+    // The subagent's system turn carries the FULL tool-use prompt (the same
+    // strong "after a tool returns, you MUST write a reply — never answer from
+    // memory" guidance the orchestrator gets) plus the subagent addendum (be
+    // terse, one task). Without the tool prompt, weaker models (e.g. Mistral)
+    // tend to search and then fall silent, yielding empty summaries.
+    let subagent_prompt = format!(
+        "{TOOL_SYSTEM_PROMPT}\n\n{}",
+        research::SUBAGENT_SYSTEM_PROMPT
+    );
+    let subagent_prompt = subagent_prompt.as_str();
+
+    // A subagent's own text/tool deltas are swallowed here: the UI shows only the
+    // subagent cards (lifecycle), not each subagent's streaming internals.
+    let sink: Channel<StreamDelta> = Channel::new(|_| Ok::<(), tauri::Error>(()));
+    let sink = &sink;
+
+    // Stable ids (deterministic; no RNG) so the UI can update one card per task.
+    let dispatched: Vec<(String, String)> = tasks
+        .iter()
+        .enumerate()
+        .map(|(i, task)| (format!("{}-{i}", call.id), task.clone()))
+        .collect();
+    for (id, task) in &dispatched {
+        let _ = on_delta.send(StreamDelta::subagent(
+            id,
+            "dispatched",
+            Some(task.clone()),
+            None,
+        ));
     }
-    let mut out = Vec::with_capacity(messages.len() + 1);
-    out.push(ChatMessage {
-        role: "system".into(),
-        content: TOOL_SYSTEM_PROMPT.into(),
+
+    // Build the per-subagent futures with `Iterator::map` (owned `id`/`task`
+    // captures + shared `&` refs), then drive them concurrently. Building futures
+    // this way — rather than `Stream::map` — sidesteps the higher-ranked-lifetime
+    // "not general enough" error that an async closure over a borrowed stream item
+    // triggers.
+    let subagents = dispatched
+        .into_iter()
+        .enumerate()
+        .map(|(i, (id, task))| async move {
+            let _ = on_delta.send(StreamDelta::subagent(&id, "running", None, None));
+            if cancel.load(Ordering::Relaxed) {
+                let _ = on_delta.send(StreamDelta::subagent(
+                    &id,
+                    "failed",
+                    None,
+                    Some("cancelled".into()),
+                ));
+                return (i, task, Err("cancelled".to_string()), Usage::default());
+            }
+            let history = vec![msg("system", subagent_prompt), msg("user", &task)];
+            // Box::pin breaks the run_agent_loop ↔ run_subagents type cycle.
+            let res = Box::pin(run_agent_loop(
+                client,
+                provider,
+                model,
+                api_key,
+                history,
+                sub_tools,
+                servers,
+                sessions,
+                thread_id,
+                sink,
+                cancel,
+                None,
+                research::SUBAGENT_MAX_ROUNDS,
+                false,
+                concurrency,
+                // Subagent internals go to the sink (swallowed); capturing
+                // reasoning/trace there would be wasted work — and disabling
+                // thinking sidesteps the Anthropic thinking+tools echo-back.
+                false,
+                false,
+            ))
+            .await;
+            match res {
+                Ok(r) => {
+                    let summary = r.content.trim().to_string();
+                    let summary = if summary.is_empty() {
+                        "(no findings)".to_string()
+                    } else {
+                        summary
+                    };
+                    let _ = on_delta.send(StreamDelta::subagent(
+                        &id,
+                        "done",
+                        None,
+                        Some(summary.clone()),
+                    ));
+                    (i, task, Ok(summary), r.usage)
+                }
+                Err(e) => {
+                    let _ =
+                        on_delta.send(StreamDelta::subagent(&id, "failed", None, Some(e.clone())));
+                    (i, task, Err(e), Usage::default())
+                }
+            }
+        });
+
+    let mut results: Vec<(usize, String, Result<String, String>, Usage)> =
+        futures_util::stream::iter(subagents)
+            .buffer_unordered(concurrency)
+            .collect()
+            .await;
+
+    // Restore subtask order (buffer_unordered completes out of order) and sum the
+    // subagents' usage for cost attribution.
+    results.sort_by_key(|(i, ..)| *i);
+    let mut total = Usage::default();
+    let mut pairs = Vec::with_capacity(results.len());
+    for (_, task, result, usage) in results {
+        total.add(&usage);
+        pairs.push((task, result));
+    }
+    (research::aggregate_summaries(&pairs), total)
+}
+
+/// Compact response summary for the developer API trace. A full response body
+/// isn't captured (the streamed text already is); this names the model, token
+/// usage, the finish reason, and any tool calls the model emitted this round.
+fn response_trace(resp: &ChatResponse) -> serde_json::Value {
+    serde_json::json!({
+        "model": resp.model,
+        "usage": {
+            "input_tokens": resp.usage.input_tokens,
+            "output_tokens": resp.usage.output_tokens,
+            "cache_creation_tokens": resp.usage.cache_creation_tokens,
+            "cache_read_tokens": resp.usage.cache_read_tokens,
+        },
+        "finish": if resp.tool_calls.is_empty() { "end" } else { "tool_use" },
+        "toolCalls": resp
+            .tool_calls
+            .iter()
+            .map(|c| c.name.clone())
+            .collect::<Vec<_>>(),
+        "textChars": resp.content.chars().count(),
+    })
+}
+
+/// Build a synthetic conversation turn with no images/tools (used for the
+/// subagent system + task turns).
+fn msg(role: &str, content: &str) -> ChatMessage {
+    ChatMessage {
+        role: role.into(),
+        content: content.into(),
         images: Vec::new(),
         tool_calls: Vec::new(),
         tool_results: Vec::new(),
-    });
+        thinking_blocks: Vec::new(),
+    }
+}
+
+/// Prepend the system prompt(s) when tools are exposed: always the tool-use
+/// nudge, plus the deep-research decomposition prompt when that mode is on.
+/// Returns the history unchanged when no tools are exposed (so the no-tools
+/// request stays byte-identical). Pure — unit-tested.
+fn with_system_prompt(
+    messages: Vec<ChatMessage>,
+    has_tools: bool,
+    deep_research: bool,
+) -> Vec<ChatMessage> {
+    if !has_tools {
+        return messages;
+    }
+    let mut content = TOOL_SYSTEM_PROMPT.to_string();
+    if deep_research {
+        content.push_str("\n\n");
+        content.push_str(research::RESEARCH_SYSTEM_PROMPT);
+    }
+    let mut out = Vec::with_capacity(messages.len() + 1);
+    out.push(msg("system", &content));
     out.extend(messages);
     out
 }
@@ -331,18 +668,12 @@ mod tests {
     use super::*;
 
     fn user(content: &str) -> ChatMessage {
-        ChatMessage {
-            role: "user".into(),
-            content: content.into(),
-            images: Vec::new(),
-            tool_calls: Vec::new(),
-            tool_results: Vec::new(),
-        }
+        msg("user", content)
     }
 
     #[test]
     fn no_tools_leaves_history_unchanged() {
-        let out = with_tool_system_prompt(vec![user("hi"), user("there")], false);
+        let out = with_system_prompt(vec![user("hi"), user("there")], false, false);
         assert_eq!(out.len(), 2);
         assert_eq!(out[0].role, "user");
         assert_eq!(out[0].content, "hi");
@@ -351,12 +682,23 @@ mod tests {
 
     #[test]
     fn tools_prepend_system_prompt() {
-        let out = with_tool_system_prompt(vec![user("hi")], true);
+        let out = with_system_prompt(vec![user("hi")], true, false);
         assert_eq!(out.len(), 2);
         assert_eq!(out[0].role, "system");
         assert!(!out[0].content.is_empty());
+        // No research prompt when deep research is off.
+        assert!(!out[0].content.contains("Deep research mode is ON"));
         // Original turns follow, in order.
         assert_eq!(out[1].role, "user");
         assert_eq!(out[1].content, "hi");
+    }
+
+    #[test]
+    fn deep_research_appends_research_prompt() {
+        let out = with_system_prompt(vec![user("hi")], true, true);
+        assert_eq!(out[0].role, "system");
+        // Carries both the tool prompt and the deep-research prompt.
+        assert!(out[0].content.contains("web__fetch_url"));
+        assert!(out[0].content.contains("Deep research mode is ON"));
     }
 }

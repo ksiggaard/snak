@@ -25,6 +25,9 @@ export interface MessageToolCall {
   id?: string;
   /** Resolved command line / target, for tools that run one (sys diagnostics). */
   command?: string;
+  /** The parsed tool input the model supplied — shown in the expanded panel so
+   * it's evident exactly what arguments the model passed. Persisted (capped). */
+  arguments?: unknown;
   /** Captured output (the tool's result text / streamed stdout), shown in the
    * collapsible activity panel. Persisted, capped. */
   output?: string;
@@ -38,10 +41,38 @@ export interface MessageToolCall {
   running?: boolean;
 }
 
+/** A research subagent the orchestrator dispatched while producing an assistant
+ * message (deep research mode, T55). Persisted as a `subagent` attachment so the
+ * card survives reload — structured data the model can't fabricate, like a
+ * tool-call record. */
+export interface MessageSubagent {
+  /** Stable id, correlating the subagent's lifecycle events to one card. */
+  id: string;
+  /** The subtask the orchestrator handed this subagent. */
+  task: string;
+  /** "dispatched" → "running" → "done" | "failed". */
+  status: "dispatched" | "running" | "done" | "failed";
+  /** The subagent's concise findings (set on "done"). */
+  summary?: string;
+}
+
 /** Cap on persisted tool output, so a huge command result can't bloat the DB
  * row. The model already received the full (separately-capped) result; this is
  * only the reviewable UI copy. */
 export const TOOL_OUTPUT_PERSIST_BUDGET = 20_000;
+
+/** Cap on persisted tool arguments (serialized). Inputs are usually tiny; an
+ * oversized one is dropped rather than bloating the row. */
+export const TOOL_ARGS_PERSIST_BUDGET = 8_000;
+
+/** One API-trace entry (developer/inspect panel): the redacted request body
+ * before a round, or a compact response summary after it. Persisted as an
+ * `api_trace` attachment (a JSON array of these), so the trace survives reload. */
+export interface ApiTraceEntry {
+  phase: "request" | "response";
+  round: number;
+  data: unknown;
+}
 
 /** A document attached to a user message (T39): the original file name plus
  * the *extracted text* (stored in the attachment row's `data`). */
@@ -58,6 +89,15 @@ export interface MessageView extends Message {
   images: MessageImage[];
   documents: MessageDocument[];
   toolCalls: MessageToolCall[];
+  /** Research subagents dispatched while producing this reply (deep research,
+   * T55). Empty for ordinary replies. */
+  subagents: MessageSubagent[];
+  /** The model's captured reasoning/thinking for this reply (when reasoning
+   * capture was on). Persisted as a `reasoning` attachment; absent otherwise. */
+  reasoning?: string;
+  /** Raw per-round API trace for this reply (when trace capture was on).
+   * Persisted as an `api_trace` attachment; absent otherwise. */
+  apiTrace?: ApiTraceEntry[];
   /** Sibling variant ids (oldest→newest) when this reply belongs to a variant
    * group (T54), incl. this row's own id; undefined for ungrouped rows. The
    * UI shows the carousel + regenerate controls only when this is present. */
@@ -82,6 +122,7 @@ export function applyToolEvent(
       name: event.toolCall.name,
       url: event.toolCall.url,
       command: event.toolCall.command,
+      arguments: event.toolCall.arguments,
       output: "",
       running: true,
     });
@@ -103,6 +144,78 @@ export function applyToolEvent(
   }
 }
 
+/**
+ * Fold a subagent lifecycle event into the running `subagents` accumulator
+ * (mutated in place): the first event for an id creates the card; later events
+ * update its status, task, and (on done) summary. Mirrors `applyToolEvent` so
+ * the streaming path stays uniform. (Deep research, T55.)
+ */
+export function applySubagentEvent(
+  event: StreamEvent,
+  subagents: MessageSubagent[],
+): void {
+  const s = event.subagent;
+  if (!s) return;
+  let rec = subagents.find((x) => x.id === s.id);
+  if (!rec) {
+    rec = { id: s.id, task: s.task ?? "", status: s.phase };
+    subagents.push(rec);
+  }
+  rec.status = s.phase;
+  if (s.task) rec.task = s.task;
+  if (s.summary !== undefined) rec.summary = s.summary;
+}
+
+/**
+ * Fold an API-trace event into the running `apiTrace` accumulator (mutated in
+ * place): each request/response event is appended in arrival order. Mirrors
+ * `applyToolEvent` so the send + regenerate streaming paths stay uniform.
+ */
+export function applyTraceEvent(
+  event: StreamEvent,
+  apiTrace: ApiTraceEntry[],
+): void {
+  const tr = event.apiTrace;
+  if (!tr) return;
+  apiTrace.push({ phase: tr.phase, round: tr.round, data: tr.data });
+}
+
+/** The JSON payload of a persisted `subagent` attachment (T55). */
+export function persistableSubagent(s: MessageSubagent): MessageSubagent {
+  return {
+    id: s.id,
+    task: s.task,
+    status: s.status,
+    summary: s.summary || undefined,
+  };
+}
+
+/** Parse a persisted `subagent` attachment's JSON payload. Tolerant of
+ * malformed rows (returns null, which the caller filters out). */
+function parseSubagent(data: string): MessageSubagent | null {
+  try {
+    const obj = JSON.parse(data) as Partial<MessageSubagent>;
+    if (obj && typeof obj.task === "string") {
+      const status =
+        obj.status === "dispatched" ||
+        obj.status === "running" ||
+        obj.status === "done" ||
+        obj.status === "failed"
+          ? obj.status
+          : "done";
+      return {
+        id: typeof obj.id === "string" ? obj.id : "",
+        task: obj.task,
+        status,
+        summary: typeof obj.summary === "string" ? obj.summary : undefined,
+      };
+    }
+  } catch {
+    // ignore malformed payloads
+  }
+  return null;
+}
+
 /** Strip the transient `running` flag and cap the captured output for storage,
  * yielding the JSON payload of a persisted `tool_call` attachment. */
 export function persistableToolCall(tc: MessageToolCall): MessageToolCall {
@@ -110,11 +223,19 @@ export function persistableToolCall(tc: MessageToolCall): MessageToolCall {
     tc.output && tc.output.length > TOOL_OUTPUT_PERSIST_BUDGET
       ? tc.output.slice(0, TOOL_OUTPUT_PERSIST_BUDGET) + "\n[… truncated]"
       : tc.output;
+  // Tool inputs are normally tiny; drop an oversized one rather than bloat the
+  // row (it's reviewable detail, not essential — the model still got it).
+  const args =
+    tc.arguments !== undefined &&
+    JSON.stringify(tc.arguments).length <= TOOL_ARGS_PERSIST_BUDGET
+      ? tc.arguments
+      : undefined;
   return {
     name: tc.name,
     url: tc.url,
     id: tc.id,
     command: tc.command,
+    arguments: args,
     output: output || undefined,
     ok: tc.ok,
     sources: tc.sources && tc.sources.length > 0 ? tc.sources : undefined,
@@ -127,7 +248,11 @@ function parseToolSources(raw: unknown): ToolSource[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const out: ToolSource[] = [];
   for (const s of raw) {
-    if (s && typeof s === "object" && typeof (s as ToolSource).url === "string") {
+    if (
+      s &&
+      typeof s === "object" &&
+      typeof (s as ToolSource).url === "string"
+    ) {
       const src = s as ToolSource;
       out.push({
         url: src.url,
@@ -150,6 +275,7 @@ function parseToolCall(data: string): MessageToolCall | null {
         url: typeof obj.url === "string" ? obj.url : undefined,
         id: typeof obj.id === "string" ? obj.id : undefined,
         command: typeof obj.command === "string" ? obj.command : undefined,
+        arguments: obj.arguments,
         output: typeof obj.output === "string" ? obj.output : undefined,
         ok: typeof obj.ok === "boolean" ? obj.ok : undefined,
         sources: parseToolSources(obj.sources),
@@ -159,6 +285,34 @@ function parseToolCall(data: string): MessageToolCall | null {
     // ignore malformed payloads
   }
   return null;
+}
+
+/** Parse a persisted `api_trace` attachment (a JSON array of entries). Tolerant
+ * of malformed rows (returns undefined). */
+function parseApiTrace(data: string): ApiTraceEntry[] | undefined {
+  try {
+    const arr = JSON.parse(data) as unknown;
+    if (!Array.isArray(arr)) return undefined;
+    const out: ApiTraceEntry[] = [];
+    for (const e of arr) {
+      if (
+        e &&
+        typeof e === "object" &&
+        ((e as ApiTraceEntry).phase === "request" ||
+          (e as ApiTraceEntry).phase === "response")
+      ) {
+        const entry = e as ApiTraceEntry;
+        out.push({
+          phase: entry.phase,
+          round: typeof entry.round === "number" ? entry.round : 0,
+          data: entry.data,
+        });
+      }
+    }
+    return out.length > 0 ? out : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -181,7 +335,14 @@ export async function loadThreadMessages(
       // System rows and synthetic compaction summaries (T28) carry no
       // attachments, so skip the query for them.
       if (m.role === "system" || m.kind === "summary")
-        return { ...m, images: [], documents: [], toolCalls: [], ...variants };
+        return {
+          ...m,
+          images: [],
+          documents: [],
+          toolCalls: [],
+          subagents: [],
+          ...variants,
+        };
       const attachments = await listAttachments(m.id);
       const images = attachments
         .filter((a) => a.kind === "image")
@@ -202,7 +363,25 @@ export async function loadThreadMessages(
         .filter((a) => a.kind === "tool_call")
         .map((a) => parseToolCall(a.data))
         .filter((tc): tc is MessageToolCall => tc !== null);
-      return { ...m, images, documents, toolCalls, ...variants };
+      const subagents = attachments
+        .filter((a) => a.kind === "subagent")
+        .map((a) => parseSubagent(a.data))
+        .filter((s): s is MessageSubagent => s !== null);
+      // Transparency attachments: the model's reasoning (plain text) and the
+      // raw API trace (JSON). At most one of each per reply.
+      const reasoning = attachments.find((a) => a.kind === "reasoning")?.data;
+      const apiTraceRaw = attachments.find((a) => a.kind === "api_trace")?.data;
+      const apiTrace = apiTraceRaw ? parseApiTrace(apiTraceRaw) : undefined;
+      return {
+        ...m,
+        images,
+        documents,
+        toolCalls,
+        subagents,
+        reasoning: reasoning || undefined,
+        apiTrace,
+        ...variants,
+      };
     }),
   );
 }

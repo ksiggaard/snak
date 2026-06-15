@@ -1,0 +1,416 @@
+import { useCallback, useEffect, useState } from "react";
+import {
+  Code2,
+  Columns2,
+  Download,
+  Eye,
+  ExternalLink,
+  FileCode,
+  Globe,
+  Loader2,
+  Maximize2,
+  Minimize2,
+  RotateCw,
+  Send,
+  Sparkles,
+  Square,
+  X,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import {
+  ARTIFACT_EDITOR_SYSTEM_PROMPT,
+  assembleArtifact,
+  extractArtifactBlock,
+  parseArtifact,
+  serializeArtifact,
+} from "@/lib/artifacts";
+import { exportArtifactZip, openArtifactInBrowser } from "@/lib/artifactExport";
+import { cancelStream, chatStream, type ApiMessage } from "@/lib/chat";
+import { getArtifact, getThread } from "@/lib/db";
+import { ArtifactCodeEditor } from "@/components/chat/ArtifactCodeEditor";
+import { ArtifactFrame } from "@/components/chat/ArtifactFrame";
+import { useArtifacts } from "@/store/artifacts";
+import { useT } from "@/store/i18n";
+import type { ArtifactFile } from "@/types/db";
+
+type ViewMode = "preview" | "split" | "code";
+
+// The live preview trails edits by this debounce so typing in split mode doesn't
+// reload the iframe on every keystroke.
+const PREVIEW_DEBOUNCE_MS = 400;
+
+function slug(title: string): string {
+  const s = title
+    .toLowerCase()
+    .replace(/[^\w.-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return s || "artifact";
+}
+
+/**
+ * Fullscreen overlay to browse, edit, preview, and export an artifact (reuses
+ * the `Canvas` overlay pattern: `fixed inset-0 z-50`, Escape to close). When
+ * `artifactId` is set, edits persist through the `useArtifacts` store (so the
+ * inline card preview tracks them); otherwise the session is in-memory only
+ * (a still-streaming, not-yet-saved artifact).
+ */
+export function ArtifactViewer({
+  artifactId,
+  title,
+  files: initialFiles,
+  initialTab,
+  onClose,
+}: {
+  artifactId: string | null;
+  title: string;
+  files: ArtifactFile[];
+  initialTab: ViewMode;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const update = useArtifacts((s) => s.update);
+
+  const [files, setFiles] = useState<ArtifactFile[]>(initialFiles);
+  // The preview renders from `previewFiles` (a debounced copy of `files`) so
+  // live editing doesn't reload the iframe on every keystroke.
+  const [previewFiles, setPreviewFiles] =
+    useState<ArtifactFile[]>(initialFiles);
+  const [mode, setMode] = useState<ViewMode>(initialTab);
+  const [selected, setSelected] = useState(0);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [showAddress, setShowAddress] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [busy, setBusy] = useState(false);
+
+  const showsPreview = mode === "preview" || mode === "split";
+  const showsEditor = mode === "code" || mode === "split";
+
+  // Debounce file changes (manual edits and AI streaming) into the preview.
+  useEffect(() => {
+    const id = window.setTimeout(
+      () => setPreviewFiles(files),
+      PREVIEW_DEBOUNCE_MS,
+    );
+    return () => window.clearTimeout(id);
+  }, [files]);
+
+  const refreshPreview = () => {
+    setPreviewFiles(files);
+    setRefreshKey((k) => k + 1);
+  };
+  // AI editor: a one-shot request that hands the model the current artifact and
+  // its instruction, then streams the rewritten artifact back into the preview.
+  const [prompt, setPrompt] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
+
+  // Close on Escape (exit fullscreen first; ignored mid-generation so a stream
+  // isn't orphaned by an accidental close).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape" || generating) return;
+      e.preventDefault();
+      if (fullscreen) setFullscreen(false);
+      else onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullscreen, onClose, generating]);
+
+  const runEdit = useCallback(async () => {
+    const instruction = prompt.trim();
+    if (!instruction || generating || !artifactId) return;
+    setGenError(null);
+    setGenerating(true);
+    if (mode === "code") setMode("split");
+    try {
+      const art = await getArtifact(artifactId);
+      const thread = art ? await getThread(art.thread_id) : null;
+      if (!thread) throw new Error(t("artifact.editNoThread"));
+      const messages: ApiMessage[] = [
+        { role: "system", content: ARTIFACT_EDITOR_SYSTEM_PROMPT },
+        {
+          role: "user",
+          content:
+            "Current artifact:\n\n```artifact\n" +
+            serializeArtifact(title, files) +
+            "\n```\n\nRequested change: " +
+            instruction,
+        },
+      ];
+      let acc = "";
+      const result = await chatStream(
+        thread.provider,
+        thread.model,
+        messages,
+        (e) => {
+          if (!e.text) return;
+          acc += e.text;
+          const block = extractArtifactBlock(acc);
+          const live = block ? parseArtifact(block) : null;
+          if (live && live.files.length) setFiles(live.files); // live preview
+        },
+        thread.id,
+      );
+      const block = extractArtifactBlock(result.content);
+      const parsedFinal = block ? parseArtifact(block) : null;
+      if (!parsedFinal || !parsedFinal.files.length)
+        throw new Error(t("artifact.editNoArtifact"));
+      setFiles(parsedFinal.files);
+      await update(artifactId, parsedFinal.files);
+      setPrompt("");
+    } catch (err) {
+      setGenError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setGenerating(false);
+    }
+  }, [prompt, generating, artifactId, title, files, update, t, mode]);
+
+  const editFile = useCallback(
+    (content: string) => {
+      setFiles((prev) => {
+        const next = prev.map((f, i) =>
+          i === selected ? { ...f, content } : f,
+        );
+        if (artifactId) void update(artifactId, next);
+        return next;
+      });
+    },
+    [selected, artifactId, update],
+  );
+
+  const onExport = useCallback(async () => {
+    setBusy(true);
+    try {
+      await exportArtifactZip(files, `${slug(title)}.zip`);
+    } catch {
+      // Export failure (e.g. dialog/IO) is non-fatal; ignore silently.
+    } finally {
+      setBusy(false);
+    }
+  }, [files, title]);
+
+  const onOpenBrowser = useCallback(async () => {
+    try {
+      await openArtifactInBrowser(assembleArtifact(files));
+    } catch {
+      // Opening failed (no browser / IO); ignore silently.
+    }
+  }, [files]);
+
+  const active = files[selected] ?? files[0];
+
+  return (
+    <div
+      className="bg-background/80 fixed inset-0 z-50 flex flex-col p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label={t("artifact.viewerAria")}
+    >
+      <div className="bg-card flex flex-1 flex-col overflow-hidden rounded-lg border shadow-lg">
+        {/* Toolbar */}
+        <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <FileCode className="text-muted-foreground size-4 shrink-0" />
+            <span className="truncate text-sm font-medium">{title}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="bg-muted mr-1 flex items-center rounded-md p-0.5">
+              {(
+                [
+                  { id: "preview", Icon: Eye, label: t("artifact.preview") },
+                  { id: "split", Icon: Columns2, label: t("artifact.split") },
+                  { id: "code", Icon: Code2, label: t("artifact.code") },
+                ] as const
+              ).map(({ id, Icon, label }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setMode(id)}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded px-2 py-1 text-xs",
+                    mode === id && "bg-background shadow-sm",
+                  )}
+                >
+                  <Icon className="size-3" /> {label}
+                </button>
+              ))}
+            </div>
+            {showsPreview && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t("artifact.addressBar")}
+                  title={t("artifact.addressBar")}
+                  className={cn(showAddress && "text-foreground bg-accent")}
+                  onClick={() => setShowAddress((v) => !v)}
+                >
+                  <Globe className="size-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t("artifact.refresh")}
+                  title={t("artifact.refresh")}
+                  onClick={refreshPreview}
+                >
+                  <RotateCw className="size-4" />
+                </Button>
+              </>
+            )}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("artifact.fullscreen")}
+              title={t("artifact.fullscreen")}
+              onClick={() => setFullscreen((v) => !v)}
+            >
+              {fullscreen ? (
+                <Minimize2 className="size-4" />
+              ) : (
+                <Maximize2 className="size-4" />
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("artifact.openInBrowser")}
+              title={t("artifact.openInBrowser")}
+              onClick={() => void onOpenBrowser()}
+            >
+              <ExternalLink className="size-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("artifact.export")}
+              title={t("artifact.export")}
+              disabled={busy}
+              onClick={() => void onExport()}
+            >
+              <Download className="size-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("artifact.close")}
+              onClick={onClose}
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Body: file tree + main pane */}
+        <div className="flex min-h-0 flex-1">
+          {!fullscreen && (
+            <div className="bg-muted/30 w-48 shrink-0 overflow-y-auto border-r py-1">
+              {files.map((f, i) => (
+                <button
+                  key={f.path}
+                  type="button"
+                  onClick={() => {
+                    setSelected(i);
+                    if (mode === "preview") setMode("split");
+                  }}
+                  className={cn(
+                    "block w-full truncate px-3 py-1 text-left font-mono text-xs",
+                    i === selected
+                      ? "bg-accent text-accent-foreground"
+                      : "hover:bg-accent/50",
+                  )}
+                  title={f.path}
+                >
+                  {f.path}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="flex min-h-0 flex-1">
+            {showsEditor && (
+              <div
+                className={cn("min-h-0", mode === "split" ? "w-1/2" : "flex-1")}
+              >
+                {active ? (
+                  <ArtifactCodeEditor
+                    path={active.path}
+                    value={active.content}
+                    onChange={editFile}
+                  />
+                ) : null}
+              </div>
+            )}
+            {showsPreview && (
+              <div
+                className={cn(
+                  "min-h-0",
+                  mode === "split" ? "w-1/2 border-l" : "flex-1",
+                )}
+              >
+                <ArtifactFrame
+                  key={refreshKey}
+                  files={previewFiles}
+                  title={title}
+                  showAddressBar={showAddress}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* AI editor: edit/expand/update the artifact by prompting the model.
+            The current artifact is sent each turn, so changes build up. */}
+        {artifactId && (
+          <div className="border-t px-3 py-2">
+            {genError && (
+              <p className="text-destructive mb-1.5 text-xs">{genError}</p>
+            )}
+            <div className="flex items-center gap-2">
+              <Sparkles className="text-muted-foreground size-4 shrink-0" />
+              <input
+                type="text"
+                value={prompt}
+                disabled={generating}
+                onChange={(e) => setPrompt(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void runEdit();
+                  }
+                }}
+                placeholder={t("artifact.editPlaceholder")}
+                className="bg-background min-w-0 flex-1 rounded-md border px-3 py-1.5 text-sm outline-none disabled:opacity-60"
+              />
+              {generating ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => void cancelStream()}
+                >
+                  <Square className="size-3.5" /> {t("artifact.editStop")}
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  disabled={!prompt.trim()}
+                  onClick={() => void runEdit()}
+                >
+                  <Send className="size-3.5" /> {t("common.send")}
+                </Button>
+              )}
+            </div>
+            {generating && (
+              <p className="text-muted-foreground mt-1.5 flex items-center gap-1.5 text-xs">
+                <Loader2 className="size-3 animate-spin" />{" "}
+                {t("artifact.editing")}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

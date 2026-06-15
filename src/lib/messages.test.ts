@@ -1,11 +1,17 @@
 import { describe, it, expect } from "vitest";
 import type { StreamEvent } from "@/lib/chat";
 import {
+  applySubagentEvent,
   applyToolEvent,
+  applyTraceEvent,
   imageDataUrl,
+  persistableSubagent,
   persistableToolCall,
+  TOOL_ARGS_PERSIST_BUDGET,
   TOOL_OUTPUT_PERSIST_BUDGET,
+  type ApiTraceEntry,
   type MessageImage,
+  type MessageSubagent,
   type MessageToolCall,
 } from "@/lib/messages";
 
@@ -32,7 +38,9 @@ describe("applyToolEvent", () => {
   it("starts a running tool call from a toolCall event", () => {
     const calls: MessageToolCall[] = [];
     applyToolEvent(
-      ev({ toolCall: { id: "c1", name: "sys__run_diagnostic", command: "ps aux" } }),
+      ev({
+        toolCall: { id: "c1", name: "sys__run_diagnostic", command: "ps aux" },
+      }),
       calls,
     );
     expect(calls).toHaveLength(1);
@@ -70,7 +78,10 @@ describe("applyToolEvent", () => {
 
   it("folds web sources onto the matching call (and accumulates batches)", () => {
     const calls: MessageToolCall[] = [];
-    applyToolEvent(ev({ toolCall: { id: "c1", name: "web__search_web" } }), calls);
+    applyToolEvent(
+      ev({ toolCall: { id: "c1", name: "web__search_web" } }),
+      calls,
+    );
     applyToolEvent(
       ev({
         toolSources: {
@@ -139,10 +150,138 @@ describe("persistableToolCall", () => {
   it("preserves non-empty web sources and drops an empty list", () => {
     const sources = [{ url: "https://a.com", title: "A", snippet: "s" }];
     expect(
-      persistableToolCall({ id: "c1", name: "web__search_web", sources }).sources,
+      persistableToolCall({ id: "c1", name: "web__search_web", sources })
+        .sources,
     ).toEqual(sources);
     expect(
       persistableToolCall({ id: "c1", name: "t", sources: [] }).sources,
     ).toBeUndefined();
+  });
+});
+
+describe("applySubagentEvent", () => {
+  const ev = (e: Partial<StreamEvent>): StreamEvent => e;
+
+  it("creates a card on the first event and updates it by id", () => {
+    const subs: MessageSubagent[] = [];
+    applySubagentEvent(
+      ev({ subagent: { id: "s-0", phase: "dispatched", task: "find X" } }),
+      subs,
+    );
+    expect(subs).toEqual([{ id: "s-0", task: "find X", status: "dispatched" }]);
+
+    applySubagentEvent(ev({ subagent: { id: "s-0", phase: "running" } }), subs);
+    expect(subs[0].status).toBe("running");
+    // Task is preserved across events that don't resend it.
+    expect(subs[0].task).toBe("find X");
+
+    applySubagentEvent(
+      ev({ subagent: { id: "s-0", phase: "done", summary: "X is 42." } }),
+      subs,
+    );
+    expect(subs).toHaveLength(1);
+    expect(subs[0]).toEqual({
+      id: "s-0",
+      task: "find X",
+      status: "done",
+      summary: "X is 42.",
+    });
+  });
+
+  it("tracks multiple subagents independently and ignores non-subagent events", () => {
+    const subs: MessageSubagent[] = [];
+    applySubagentEvent(
+      ev({ subagent: { id: "s-0", phase: "dispatched", task: "A" } }),
+      subs,
+    );
+    applySubagentEvent(
+      ev({ subagent: { id: "s-1", phase: "dispatched", task: "B" } }),
+      subs,
+    );
+    applySubagentEvent(ev({ text: "hello" }), subs);
+    expect(subs.map((s) => s.id)).toEqual(["s-0", "s-1"]);
+    applySubagentEvent(
+      ev({ subagent: { id: "s-1", phase: "failed", summary: "timed out" } }),
+      subs,
+    );
+    expect(subs[1].status).toBe("failed");
+    expect(subs[0].status).toBe("dispatched");
+  });
+});
+
+describe("persistableSubagent", () => {
+  it("keeps id/task/status/summary and drops an empty summary", () => {
+    const done: MessageSubagent = {
+      id: "s-0",
+      task: "t",
+      status: "done",
+      summary: "found it",
+    };
+    expect(persistableSubagent(done)).toEqual(done);
+    expect(
+      persistableSubagent({ id: "s-1", task: "t", status: "running" }).summary,
+    ).toBeUndefined();
+  });
+});
+
+describe("applyToolEvent — arguments", () => {
+  const ev = (e: Partial<StreamEvent>): StreamEvent => e;
+
+  it("copies the model's tool arguments onto the call", () => {
+    const calls: MessageToolCall[] = [];
+    applyToolEvent(
+      ev({ toolCall: { id: "c1", name: "t", arguments: { q: "hi", n: 3 } } }),
+      calls,
+    );
+    expect(calls[0].arguments).toEqual({ q: "hi", n: 3 });
+  });
+});
+
+describe("persistableToolCall — arguments", () => {
+  it("keeps small arguments", () => {
+    const persisted = persistableToolCall({
+      id: "c1",
+      name: "t",
+      arguments: { url: "https://x.com" },
+    });
+    expect(persisted.arguments).toEqual({ url: "https://x.com" });
+  });
+
+  it("drops oversized arguments rather than bloating the row", () => {
+    const big = { blob: "A".repeat(TOOL_ARGS_PERSIST_BUDGET + 1) };
+    const persisted = persistableToolCall({
+      id: "c1",
+      name: "t",
+      arguments: big,
+    });
+    expect(persisted.arguments).toBeUndefined();
+  });
+});
+
+describe("applyTraceEvent", () => {
+  const ev = (e: Partial<StreamEvent>): StreamEvent => e;
+
+  it("appends request and response entries in arrival order", () => {
+    const trace: ApiTraceEntry[] = [];
+    applyTraceEvent(
+      ev({ apiTrace: { phase: "request", round: 0, data: { model: "x" } } }),
+      trace,
+    );
+    applyTraceEvent(
+      ev({
+        apiTrace: { phase: "response", round: 0, data: { finish: "end" } },
+      }),
+      trace,
+    );
+    expect(trace).toHaveLength(2);
+    expect(trace[0].phase).toBe("request");
+    expect(trace[1].phase).toBe("response");
+    expect(trace[1].round).toBe(0);
+  });
+
+  it("ignores events without an apiTrace field", () => {
+    const trace: ApiTraceEntry[] = [];
+    applyTraceEvent(ev({ text: "hi" }), trace);
+    expect(trace).toHaveLength(0);
   });
 });

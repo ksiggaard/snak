@@ -18,8 +18,8 @@ use serde_json::{json, Value};
 use tauri::ipc::Channel;
 
 use super::{
-    for_each_line, is_cancelled, openai_tools, u64_field, ChatMessage, ChatResponse,
-    CompletionRequest, Provider, StreamDelta, ToolCall, Usage,
+    for_each_line, is_cancelled, openai_tools, redact_trace_body, u64_field, ChatMessage,
+    ChatResponse, CompletionRequest, Provider, StreamDelta, ToolCall, Usage,
 };
 
 /// Where the local Ollama daemon listens by default.
@@ -76,13 +76,42 @@ async fn native_chat(
     if !req.tools.is_empty() {
         body["tools"] = Value::Array(openai_tools(req.tools));
     }
+    // Reasoning capture: ask the native API to stream the model's thinking in a
+    // separate `message.thinking` field (thinking-capable local models only).
+    if req.reasoning {
+        body["think"] = Value::Bool(true);
+    }
 
-    let resp = client
+    // Developer trace: surface the exact (redacted) request before sending.
+    if req.trace {
+        let _ = channel.send(StreamDelta::api_trace(
+            "request",
+            req.round,
+            redact_trace_body(&body),
+        ));
+    }
+
+    let mut resp = client
         .post(format!("{BASE_URL}/api/chat"))
         .json(&body)
         .send()
         .await
         .context("ollama chat request failed")?;
+
+    // Resilience: `think: true` errors on models that don't support thinking
+    // (e.g. gemma3, qwen2.5). Rather than let an enabled global setting break
+    // chat for non-thinking local models, drop `think` and retry once.
+    if !resp.status().is_success() && req.reasoning {
+        if let Some(obj) = body.as_object_mut() {
+            obj.remove("think");
+        }
+        resp = client
+            .post(format!("{BASE_URL}/api/chat"))
+            .json(&body)
+            .send()
+            .await
+            .context("ollama chat request failed")?;
+    }
 
     let status = resp.status();
     if !status.is_success() {
@@ -102,6 +131,16 @@ async fn native_chat(
         let v: Value = serde_json::from_str(line).context("parsing ollama chat stream")?;
         if let Some(m) = v.get("model").and_then(|m| m.as_str()) {
             model_out = m.to_string();
+        }
+        // Native `think: true` streams reasoning in a separate `thinking` field.
+        if req.reasoning {
+            if let Some(r) = v.pointer("/message/thinking").and_then(|t| t.as_str()) {
+                if !r.is_empty() {
+                    channel
+                        .send(StreamDelta::reasoning(r))
+                        .map_err(|e| anyhow!("channel send failed: {e}"))?;
+                }
+            }
         }
         if let Some(t) = v.pointer("/message/content").and_then(|t| t.as_str()) {
             if !t.is_empty() {
@@ -145,6 +184,7 @@ async fn native_chat(
         model: model_out,
         usage,
         tool_calls,
+        thinking_blocks: Vec::new(),
     })
 }
 
@@ -350,6 +390,7 @@ mod tests {
             images: vec![],
             tool_calls: vec![],
             tool_results: vec![],
+            thinking_blocks: vec![],
         }
     }
 

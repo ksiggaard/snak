@@ -10,6 +10,7 @@ pub mod ollama;
 pub mod openai;
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use anyhow::Context;
 use futures_util::StreamExt;
@@ -45,6 +46,12 @@ pub struct ChatMessage {
     /// Tool results on a tool turn (Rust-synthesized; never from frontend).
     #[serde(default, skip_deserializing)]
     pub tool_results: Vec<ToolResult>,
+    /// Raw Anthropic "thinking" blocks captured on the assistant turn that asked
+    /// for the tools (Rust-synthesized; never from frontend). Echoed back to
+    /// Anthropic verbatim before the `tool_use` block — required when extended
+    /// thinking is combined with tool use. Empty for every other provider.
+    #[serde(default, skip_deserializing)]
+    pub thinking_blocks: Vec<serde_json::Value>,
 }
 
 /// The result of executing one tool call, fed back to the model next round.
@@ -75,6 +82,17 @@ pub struct Usage {
     pub cache_read_tokens: u64,
 }
 
+impl Usage {
+    /// Fold another `Usage` into this one (sum each field). Used by deep research
+    /// (T55) to attribute subagents' token spend to the orchestrator's response.
+    pub(crate) fn add(&mut self, other: &Usage) {
+        self.input_tokens += other.input_tokens;
+        self.output_tokens += other.output_tokens;
+        self.cache_creation_tokens += other.cache_creation_tokens;
+        self.cache_read_tokens += other.cache_read_tokens;
+    }
+}
+
 /// A tool the model may call, as exposed to a provider's tool-use API. `name` is
 /// already namespaced (`<server-id>__<tool>`) by the MCP layer; `input_schema` is
 /// a JSON Schema object. (T13)
@@ -101,7 +119,7 @@ pub struct ToolCall {
 /// chat loop executes them and calls the provider again (T13). An empty
 /// `tool_calls` (the default for a tool-less request) means normal completion —
 /// the no-tools path is byte-identical to before.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 pub struct ChatResponse {
     pub content: String,
     pub model: String,
@@ -111,18 +129,35 @@ pub struct ChatResponse {
     /// frontend never sees them; the loop resolves them server-side).
     #[serde(skip)]
     pub tool_calls: Vec<ToolCall>,
+    /// Raw provider "thinking" content blocks captured this round (Anthropic
+    /// only, when reasoning is on). Echoed back verbatim — signature included —
+    /// in the next round's assistant turn, which Anthropic *requires* when
+    /// extended thinking is combined with tool use. Skipped in serialization
+    /// (loop-internal); empty for every other provider and for tool-less rounds.
+    #[serde(skip)]
+    pub thinking_blocks: Vec<serde_json::Value>,
 }
 
 /// One streamed event pushed to the frontend over a Tauri channel: either a
 /// text chunk or a notice that the model invoked a tool this round. Tool calls
 /// are sent as their own structured event (not text) so the UI can render a
 /// distinct, non-spoofable indicator the model itself can't produce.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StreamDelta {
     /// Text chunk; empty (and omitted on the wire) for a tool-call event.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub text: String,
+    /// A chunk of the model's reasoning / extended-thinking (when reasoning
+    /// capture is on). Carried as its own event so the UI renders it in a
+    /// distinct, collapsible panel rather than as answer text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<ReasoningDelta>,
+    /// A raw API-trace event: the exact request body (redacted) before a round,
+    /// or a compact response summary after it. Emitted only when trace capture
+    /// is on, for the developer/inspect panel.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_trace: Option<ApiTraceDelta>,
     /// Set when the model called a tool this round (the "tool started" event).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call: Option<ToolCallDelta>,
@@ -148,6 +183,11 @@ pub struct StreamDelta {
     /// links. Out-of-band from the model-facing result text.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_sources: Option<ToolSourcesDelta>,
+    /// Lifecycle of a research subagent (deep research mode, T55): dispatched →
+    /// running → done/failed, carrying the subtask and (on completion) the
+    /// concise summary. Absent for ordinary streams, so the wire is unchanged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subagent: Option<SubagentDelta>,
 }
 
 impl StreamDelta {
@@ -155,12 +195,28 @@ impl StreamDelta {
     pub(crate) fn text(text: impl Into<String>) -> Self {
         Self {
             text: text.into(),
-            tool_call: None,
-            tool_output: None,
-            tool_done: None,
-            approval_request: None,
-            tool_images: None,
-            tool_sources: None,
+            ..Default::default()
+        }
+    }
+
+    /// A chunk of the model's reasoning / extended thinking.
+    pub(crate) fn reasoning(text: impl Into<String>) -> Self {
+        Self {
+            reasoning: Some(ReasoningDelta { text: text.into() }),
+            ..Default::default()
+        }
+    }
+
+    /// An API-trace event: `phase` is "request" (the redacted request body) or
+    /// "response" (a compact summary), `round` is the 0-based agent-loop round.
+    pub(crate) fn api_trace(phase: &str, round: u32, data: serde_json::Value) -> Self {
+        Self {
+            api_trace: Some(ApiTraceDelta {
+                phase: phase.to_string(),
+                round,
+                data,
+            }),
+            ..Default::default()
         }
     }
 
@@ -169,29 +225,19 @@ impl StreamDelta {
     /// in the live activity panel; `None` for tools without one.
     pub(crate) fn tool(call: &ToolCall, command: Option<String>) -> Self {
         Self {
-            text: String::new(),
             tool_call: Some(ToolCallDelta::new(call, command)),
-            tool_output: None,
-            tool_done: None,
-            approval_request: None,
-            tool_images: None,
-            tool_sources: None,
+            ..Default::default()
         }
     }
 
     /// A chunk of a running tool's live output, keyed to its call `id`.
     pub(crate) fn tool_output(id: &str, chunk: impl Into<String>) -> Self {
         Self {
-            text: String::new(),
-            tool_call: None,
             tool_output: Some(ToolOutputDelta {
                 id: id.to_string(),
                 chunk: chunk.into(),
             }),
-            tool_done: None,
-            approval_request: None,
-            tool_images: None,
-            tool_sources: None,
+            ..Default::default()
         }
     }
 
@@ -199,16 +245,11 @@ impl StreamDelta {
     /// (or in batches); the frontend renders + persists them as image attachments.
     pub(crate) fn tool_images(id: &str, images: Vec<ToolImage>) -> Self {
         Self {
-            text: String::new(),
-            tool_call: None,
-            tool_output: None,
-            tool_done: None,
-            approval_request: None,
             tool_images: Some(ToolImagesDelta {
                 id: id.to_string(),
                 images,
             }),
-            tool_sources: None,
+            ..Default::default()
         }
     }
 
@@ -217,16 +258,31 @@ impl StreamDelta {
     /// on the tool-call record.
     pub(crate) fn tool_sources(id: &str, sources: Vec<ToolSource>) -> Self {
         Self {
-            text: String::new(),
-            tool_call: None,
-            tool_output: None,
-            tool_done: None,
-            approval_request: None,
-            tool_images: None,
             tool_sources: Some(ToolSourcesDelta {
                 id: id.to_string(),
                 sources,
             }),
+            ..Default::default()
+        }
+    }
+
+    /// A research-subagent lifecycle event (deep research, T55): `phase` is one of
+    /// "dispatched" | "running" | "done" | "failed". `task` rides the dispatched
+    /// event; `summary` rides the done event.
+    pub(crate) fn subagent(
+        id: &str,
+        phase: &str,
+        task: Option<String>,
+        summary: Option<String>,
+    ) -> Self {
+        Self {
+            subagent: Some(SubagentDelta {
+                id: id.to_string(),
+                phase: phase.to_string(),
+                task,
+                summary,
+            }),
+            ..Default::default()
         }
     }
 
@@ -234,34 +290,24 @@ impl StreamDelta {
     /// tool errored (the UI tints the collapsed panel accordingly).
     pub(crate) fn tool_done(id: &str, ok: bool) -> Self {
         Self {
-            text: String::new(),
-            tool_call: None,
-            tool_output: None,
             tool_done: Some(ToolDoneDelta {
                 id: id.to_string(),
                 ok,
             }),
-            approval_request: None,
-            tool_images: None,
-            tool_sources: None,
+            ..Default::default()
         }
     }
 
     /// A request for the user to approve a gated tool call before it runs.
     pub(crate) fn approval(call: &ToolCall, summary: String, detail: String) -> Self {
         Self {
-            text: String::new(),
-            tool_call: None,
-            tool_output: None,
-            tool_done: None,
             approval_request: Some(ApprovalRequest {
                 id: call.id.clone(),
                 tool_name: call.name.clone(),
                 summary,
                 detail,
             }),
-            tool_images: None,
-            tool_sources: None,
+            ..Default::default()
         }
     }
 }
@@ -294,6 +340,17 @@ pub struct ToolCallDelta {
     /// diagnostics). Shown as the `$ …` line of the live activity panel.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
+    /// The parsed tool input the model supplied — surfaced (and persisted) so
+    /// the UI's expanded tool panel can show *exactly* what arguments the model
+    /// passed. Omitted on the wire when empty (`{}` / null).
+    #[serde(skip_serializing_if = "is_empty_args")]
+    pub arguments: serde_json::Value,
+}
+
+/// True for a tool-input value with nothing worth showing (null, or an empty
+/// object) — lets `arguments` stay off the wire for argument-less calls.
+fn is_empty_args(v: &serde_json::Value) -> bool {
+    v.is_null() || v.as_object().is_some_and(|o| o.is_empty())
 }
 
 impl ToolCallDelta {
@@ -308,8 +365,30 @@ impl ToolCallDelta {
             name: call.name.clone(),
             url,
             command,
+            arguments: call.arguments.clone(),
         }
     }
+}
+
+/// A chunk of the model's reasoning / extended-thinking output, streamed to the
+/// UI's collapsible reasoning panel.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReasoningDelta {
+    pub text: String,
+}
+
+/// A raw API-trace event for the developer/inspect panel: the redacted request
+/// body before a round, or a compact response summary after it.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiTraceDelta {
+    /// "request" | "response"
+    pub phase: String,
+    /// 0-based agent-loop round this trace belongs to.
+    pub round: u32,
+    /// The request body (redacted) or the response summary object.
+    pub data: serde_json::Value,
 }
 
 /// A chunk of a running tool's live output, streamed to the UI as it is
@@ -376,6 +455,22 @@ pub struct ToolSourcesDelta {
     pub sources: Vec<ToolSource>,
 }
 
+/// A research subagent's lifecycle event (deep research mode, T55). `id` is
+/// stable across the subagent's dispatched → running → done/failed events so the
+/// UI can update one card. `task` is the subtask string (sent on dispatch);
+/// `summary` is the subagent's concise result (sent on done).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubagentDelta {
+    pub id: String,
+    /// "dispatched" | "running" | "done" | "failed"
+    pub phase: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+}
+
 /// Everything a provider needs for one completion. `tools` is empty for an
 /// ordinary chat request — a provider sends *no* `tools` field when the slice is
 /// empty, so the wire request is identical to before (T13 no-tools invariant).
@@ -384,6 +479,41 @@ pub struct CompletionRequest<'a> {
     pub api_key: &'a str,
     pub messages: &'a [ChatMessage],
     pub tools: &'a [ToolDef],
+    /// Capture the model's reasoning/thinking this request (global setting): the
+    /// provider adds the relevant request param and emits `reasoning` deltas.
+    /// `false` keeps the request byte-identical to before.
+    pub reasoning: bool,
+    /// Emit an API-trace event (redacted request body) before sending, for the
+    /// developer/inspect panel. `false` emits nothing.
+    pub trace: bool,
+    /// 0-based agent-loop round, stamped on any trace event so the UI groups
+    /// request/response pairs by round.
+    pub round: u32,
+}
+
+/// Maximum length of a string left intact in an API trace; anything longer is
+/// replaced with a short marker. Keeps giant base64 image data and 100k-char
+/// document text out of the trace while preserving normal prompts/params.
+const TRACE_MAX_STRING: usize = 2_000;
+
+/// Deep-clone a request body for the API trace, truncating over-long strings
+/// (base64 image data, extracted document text) to a marker so the trace stays
+/// small and readable. Pure / unit-tested.
+pub(crate) fn redact_trace_body(v: &serde_json::Value) -> serde_json::Value {
+    match v {
+        serde_json::Value::String(s) if s.len() > TRACE_MAX_STRING => {
+            serde_json::Value::String(format!("[… {} chars elided …]", s.len()))
+        }
+        serde_json::Value::Array(items) => {
+            serde_json::Value::Array(items.iter().map(redact_trace_body).collect())
+        }
+        serde_json::Value::Object(map) => serde_json::Value::Object(
+            map.iter()
+                .map(|(k, val)| (k.clone(), redact_trace_body(val)))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
 }
 
 /// Returns true if the user requested cancellation of the in-flight stream.
@@ -391,6 +521,97 @@ pub struct CompletionRequest<'a> {
 /// partially-accumulated text) the same way `message_stop` / `[DONE]` does.
 pub(crate) fn is_cancelled(cancel: &AtomicBool) -> bool {
     cancel.load(Ordering::Relaxed)
+}
+
+/// Max attempts (1 initial + retries) for a request that fails transiently.
+const MAX_REQUEST_ATTEMPTS: u32 = 4;
+
+/// HTTP statuses worth retrying: rate limiting (429) and transient upstream
+/// errors (502/503/504). 500 is left alone — it's usually a real server fault,
+/// not something a retry fixes. Pure / unit-tested.
+pub(crate) fn is_retryable_status(status: reqwest::StatusCode) -> bool {
+    matches!(status.as_u16(), 429 | 502 | 503 | 504)
+}
+
+/// Exponential backoff for attempt `n` (1-based): 0.5s, 1s, 2s, 4s… capped at
+/// 8s. Pure / unit-tested.
+pub(crate) fn backoff_delay(attempt: u32) -> Duration {
+    let shift = (attempt.saturating_sub(1)).min(6);
+    Duration::from_millis((500u64 << shift).min(8_000))
+}
+
+/// Parse a `Retry-After` header in delta-seconds form (the form the LLM APIs
+/// send) into a duration, capped so a hostile/huge value can't stall us. Pure.
+fn retry_after(headers: &reqwest::header::HeaderMap) -> Option<Duration> {
+    headers
+        .get(reqwest::header::RETRY_AFTER)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .map(|secs| Duration::from_secs(secs.min(30)))
+}
+
+/// Sleep for `delay`, polling `cancel` so a Stop mid-backoff aborts promptly.
+/// Returns false if cancellation was observed (the caller should stop retrying).
+async fn sleep_cancellable(delay: Duration, cancel: &AtomicBool) -> bool {
+    let step = Duration::from_millis(100);
+    let mut elapsed = Duration::ZERO;
+    while elapsed < delay {
+        if is_cancelled(cancel) {
+            return false;
+        }
+        let chunk = step.min(delay - elapsed);
+        tokio::time::sleep(chunk).await;
+        elapsed += chunk;
+    }
+    !is_cancelled(cancel)
+}
+
+/// Send a request, retrying on transient failures — rate limits (429) and
+/// transient 5xx, plus connect/timeout errors — with exponential backoff that
+/// honors a `Retry-After` header. The body must be cloneable (JSON bodies are)
+/// so the request can be re-issued; a non-cloneable (streamed) body is sent once.
+/// Returns the final response *as-is* — including a non-success one once retries
+/// are exhausted — so each provider's existing status/body error handling is
+/// unchanged. Honors `cancel` during the backoff wait.
+///
+/// This matters for deep research (T55): an orchestrator firing several
+/// concurrent subagents at one provider routinely trips a thin tier's per-minute
+/// 429, which previously failed the subagent outright.
+pub(crate) async fn send_with_retry(
+    builder: reqwest::RequestBuilder,
+    cancel: &AtomicBool,
+) -> reqwest::Result<reqwest::Response> {
+    let mut attempt: u32 = 0;
+    loop {
+        attempt += 1;
+        // Clone for this attempt so the builder survives a retry; a body that
+        // can't be cloned (e.g. a stream) is sent once and returned.
+        let Some(req) = builder.try_clone() else {
+            return builder.send().await;
+        };
+        match req.send().await {
+            Ok(resp) => {
+                if attempt >= MAX_REQUEST_ATTEMPTS || !is_retryable_status(resp.status()) {
+                    return Ok(resp);
+                }
+                let delay = retry_after(resp.headers()).unwrap_or_else(|| backoff_delay(attempt));
+                // Cancelled mid-wait: hand back this response so the caller
+                // surfaces the (retryable) status rather than spinning.
+                if !sleep_cancellable(delay, cancel).await {
+                    return Ok(resp);
+                }
+            }
+            Err(e) => {
+                let transient = e.is_connect() || e.is_timeout();
+                if attempt >= MAX_REQUEST_ATTEMPTS || !transient {
+                    return Err(e);
+                }
+                if !sleep_cancellable(backoff_delay(attempt), cancel).await {
+                    return Err(e);
+                }
+            }
+        }
+    }
 }
 
 #[allow(async_fn_in_trait)]
@@ -752,5 +973,104 @@ mod tests {
         assert!(v.get("text").is_none());
         assert_eq!(v["toolCall"]["name"], "web__fetch_url");
         assert_eq!(v["toolCall"]["url"], "https://example.com");
+    }
+
+    #[test]
+    fn retryable_statuses() {
+        use reqwest::StatusCode;
+        assert!(is_retryable_status(StatusCode::TOO_MANY_REQUESTS));
+        assert!(is_retryable_status(StatusCode::BAD_GATEWAY));
+        assert!(is_retryable_status(StatusCode::SERVICE_UNAVAILABLE));
+        assert!(is_retryable_status(StatusCode::GATEWAY_TIMEOUT));
+        // Not retried: success, auth, generic 500.
+        assert!(!is_retryable_status(StatusCode::OK));
+        assert!(!is_retryable_status(StatusCode::UNAUTHORIZED));
+        assert!(!is_retryable_status(StatusCode::INTERNAL_SERVER_ERROR));
+    }
+
+    #[test]
+    fn backoff_grows_and_caps() {
+        assert_eq!(backoff_delay(1), Duration::from_millis(500));
+        assert_eq!(backoff_delay(2), Duration::from_millis(1000));
+        assert_eq!(backoff_delay(3), Duration::from_millis(2000));
+        // Capped at 8s no matter how high the attempt.
+        assert_eq!(backoff_delay(50), Duration::from_millis(8000));
+    }
+
+    #[test]
+    fn stream_delta_subagent_serializes_only_present_fields() {
+        // A dispatched event carries `task` but omits `summary`.
+        let v = serde_json::to_value(StreamDelta::subagent(
+            "s-0",
+            "dispatched",
+            Some("find X".into()),
+            None,
+        ))
+        .unwrap();
+        assert!(v.get("text").is_none());
+        assert_eq!(v["subagent"]["id"], "s-0");
+        assert_eq!(v["subagent"]["phase"], "dispatched");
+        assert_eq!(v["subagent"]["task"], "find X");
+        assert!(v["subagent"].get("summary").is_none());
+        // A non-subagent delta omits the `subagent` key entirely (wire unchanged).
+        let plain = serde_json::to_value(StreamDelta::text("hi")).unwrap();
+        assert!(plain.get("subagent").is_none());
+    }
+
+    #[test]
+    fn reasoning_delta_serializes_camelcase_and_omits_others() {
+        let v = serde_json::to_value(StreamDelta::reasoning("step 1")).unwrap();
+        assert_eq!(v["reasoning"]["text"], "step 1");
+        assert!(v.get("text").is_none());
+        assert!(v.get("apiTrace").is_none());
+    }
+
+    #[test]
+    fn api_trace_delta_carries_phase_round_and_data() {
+        let v = serde_json::to_value(StreamDelta::api_trace(
+            "request",
+            2,
+            serde_json::json!({ "model": "x" }),
+        ))
+        .unwrap();
+        assert_eq!(v["apiTrace"]["phase"], "request");
+        assert_eq!(v["apiTrace"]["round"], 2);
+        assert_eq!(v["apiTrace"]["data"]["model"], "x");
+    }
+
+    #[test]
+    fn redact_trace_body_elides_long_strings_only() {
+        let big = "A".repeat(TRACE_MAX_STRING + 1);
+        let body = serde_json::json!({
+            "model": "claude",
+            "messages": [{ "role": "user", "content": big }],
+            "short": "kept",
+        });
+        let red = redact_trace_body(&body);
+        assert_eq!(red["model"], "claude");
+        assert_eq!(red["short"], "kept");
+        let elided = red["messages"][0]["content"].as_str().unwrap();
+        assert!(elided.starts_with("[… "), "got: {elided}");
+        assert!(elided.contains("chars elided"));
+    }
+
+    #[test]
+    fn tool_call_delta_includes_arguments_but_omits_empty() {
+        let call = ToolCall {
+            id: "c1".into(),
+            name: "web__fetch_url".into(),
+            arguments: serde_json::json!({ "url": "https://x.com" }),
+        };
+        let v = serde_json::to_value(StreamDelta::tool(&call, None)).unwrap();
+        assert_eq!(v["toolCall"]["arguments"]["url"], "https://x.com");
+
+        // An argument-less call keeps `arguments` off the wire.
+        let bare = ToolCall {
+            id: "c2".into(),
+            name: "noop".into(),
+            arguments: serde_json::json!({}),
+        };
+        let v = serde_json::to_value(StreamDelta::tool(&bare, None)).unwrap();
+        assert!(v["toolCall"].get("arguments").is_none());
     }
 }

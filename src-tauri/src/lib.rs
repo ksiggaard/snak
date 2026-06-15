@@ -3,6 +3,7 @@ mod mcp;
 mod menu;
 mod plugins;
 mod providers;
+mod research;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -175,6 +176,18 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/019_bot_starters.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 20,
+            description: "deep research mode toggle: threads.deep_research",
+            sql: include_str!("../migrations/020_deep_research.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 21,
+            description: "artifacts: LLM-generated multi-file web apps",
+            sql: include_str!("../migrations/021_artifacts.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -306,6 +319,8 @@ pub fn run() {
             commands::terminal::open_in_terminal,
             commands::documents::extract_document_text,
             commands::files::save_image,
+            commands::artifacts::export_artifact_zip,
+            commands::artifacts::open_artifact_in_browser,
             commands::languages::list_languages,
             commands::languages::languages_directory,
             commands::media::media_playback_available,

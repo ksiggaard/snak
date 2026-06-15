@@ -3,7 +3,10 @@ import {
   createContext,
   isValidElement,
   memo,
+  useCallback,
   useContext,
+  useMemo,
+  useRef,
   type ReactNode,
 } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
@@ -12,6 +15,7 @@ import rehypeHighlight from "rehype-highlight";
 // github (light) + github-dark scoped to `.dark` — see highlight-theme.css.
 import "@/components/chat/highlight-theme.css";
 import { CodeBlock } from "@/components/chat/CodeBlock";
+import { ArtifactContext } from "@/components/chat/artifactContext";
 import { YouTubeEmbed } from "@/components/chat/YouTubeEmbed";
 import { openExternal } from "@/lib/openExternal";
 import { hasRenderer } from "@/lib/plugins";
@@ -199,24 +203,55 @@ const components: Components = {
 function MarkdownImpl({
   content,
   suppressedVideoIds,
+  messageId,
+  threadId,
 }: {
   content: string;
   /** Video ids handled by the gallery above (see SuppressedVideosContext). */
   suppressedVideoIds?: Set<string>;
+  /** Owning message/thread of this content — lets `ArtifactCard` persist its
+   * artifact. Null/absent while a reply is still streaming (no real id yet). */
+  messageId?: string | null;
+  threadId?: string | null;
 }) {
+  // Idempotent ordinal assignment per artifact block (keyed by the card's
+  // useId), so multiple artifacts in one message get stable, reproducible
+  // indices across re-renders and strict-mode double-renders.
+  const ordinals = useRef<{ map: Map<string, number>; next: number }>({
+    map: new Map(),
+    next: 0,
+  });
+  const ordinalFor = useCallback((slotKey: string) => {
+    const o = ordinals.current;
+    if (!o.map.has(slotKey)) o.map.set(slotKey, o.next++);
+    return o.map.get(slotKey)!;
+  }, []);
+  const artifactCtx = useMemo(
+    () => ({
+      messageId: messageId ?? null,
+      threadId: threadId ?? null,
+      ordinalFor,
+    }),
+    [messageId, threadId, ordinalFor],
+  );
+
   return (
     <div className="text-sm break-words">
-      <SuppressedVideosContext.Provider value={suppressedVideoIds ?? EMPTY_SET}>
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          rehypePlugins={[
-            [rehypeHighlight, { detect: true, ignoreMissing: true }],
-          ]}
-          components={components}
+      <ArtifactContext.Provider value={artifactCtx}>
+        <SuppressedVideosContext.Provider
+          value={suppressedVideoIds ?? EMPTY_SET}
         >
-          {content}
-        </ReactMarkdown>
-      </SuppressedVideosContext.Provider>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            rehypePlugins={[
+              [rehypeHighlight, { detect: true, ignoreMissing: true }],
+            ]}
+            components={components}
+          >
+            {content}
+          </ReactMarkdown>
+        </SuppressedVideosContext.Provider>
+      </ArtifactContext.Provider>
     </div>
   );
 }

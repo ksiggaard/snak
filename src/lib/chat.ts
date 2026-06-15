@@ -1,5 +1,10 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type { Provider, Role } from "@/types/db";
+import {
+  getCaptureReasoning,
+  getCaptureTrace,
+  getDeepResearchConcurrency,
+} from "@/lib/db";
 import { enabledServersForChat } from "@/lib/mcp";
 import { useConnectivity, deriveOffline } from "@/store/connectivity";
 
@@ -38,6 +43,9 @@ export interface ToolCallEvent {
   url?: string;
   /** Resolved command line / target, for tools that run one (sys diagnostics). */
   command?: string;
+  /** The parsed tool input the model supplied — shown in the expanded tool
+   * panel. Omitted by the backend for argument-less calls. */
+  arguments?: unknown;
 }
 
 /** A chunk of a running tool's live output (a stdout line), keyed by call id. */
@@ -103,6 +111,33 @@ export interface ApprovalRequestEvent {
 }
 
 /**
+ * A research subagent's lifecycle event (deep research mode, T55). The `id` is
+ * stable across a subagent's dispatched → running → done/failed events so the UI
+ * updates one card. `task` rides the dispatched event; `summary` the done event.
+ */
+export interface SubagentEvent {
+  id: string;
+  phase: "dispatched" | "running" | "done" | "failed";
+  task?: string;
+  summary?: string;
+}
+
+/** A chunk of the model's reasoning / extended thinking (when reasoning capture
+ * is on). Accumulated into the reply's collapsible reasoning panel. */
+export interface ReasoningEvent {
+  text: string;
+}
+
+/** One API-trace event (when trace capture is on): the redacted request body
+ * before a round (`phase: "request"`), or a compact response summary after it
+ * (`phase: "response"`). `round` groups the pair. */
+export interface ApiTraceEvent {
+  phase: "request" | "response";
+  round: number;
+  data: unknown;
+}
+
+/**
  * One streamed event from the backend: a text chunk (`text`), a notice that the
  * model called a tool (`toolCall`), or a request to approve a gated tool call
  * (`approvalRequest`). They are mutually exclusive on the wire (the Rust
@@ -120,6 +155,12 @@ export interface StreamEvent {
   /** Web sources a tool consulted (`search_web` / `fetch_url`), shown as
    * clickable citations on the tool-activity chip. */
   toolSources?: ToolSourcesEvent;
+  /** Lifecycle of a research subagent (deep research mode). */
+  subagent?: SubagentEvent;
+  /** A chunk of the model's reasoning/thinking (when reasoning capture is on). */
+  reasoning?: ReasoningEvent;
+  /** A raw API request/response trace event (when trace capture is on). */
+  apiTrace?: ApiTraceEvent;
 }
 
 /**
@@ -142,6 +183,7 @@ export async function chatStream(
   messages: ApiMessage[],
   onDelta: (event: StreamEvent) => void,
   threadId: string,
+  deepResearch = false,
 ): Promise<ChatResult> {
   const channel = new Channel<StreamEvent>();
   channel.onmessage = (msg) => onDelta(msg);
@@ -153,6 +195,17 @@ export async function chatStream(
   const { status, forceOffline } = useConnectivity.getState();
   const offline = deriveOffline(status, forceOffline);
   const mcpServers = await enabledServersForChat(provider, offline);
+  // Only read the subagent-concurrency setting when deep research is engaged;
+  // null lets the backend apply its own default.
+  const subagentConcurrency = deepResearch
+    ? await getDeepResearchConcurrency()
+    : null;
+  // Transparency toggles (global, default off) — read here so caller sites stay
+  // unchanged. When both are off the request is byte-identical to before.
+  const [captureReasoning, captureTrace] = await Promise.all([
+    getCaptureReasoning(),
+    getCaptureTrace(),
+  ]);
   return invoke("chat_stream", {
     provider,
     model,
@@ -160,6 +213,10 @@ export async function chatStream(
     onDelta: channel,
     mcpServers,
     threadId,
+    deepResearch,
+    subagentConcurrency,
+    captureReasoning,
+    captureTrace,
   });
 }
 

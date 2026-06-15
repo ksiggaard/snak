@@ -20,6 +20,9 @@ export interface Thread {
   /** 1 for an archived (closed-tab) thread: out of the open list until it's
    * opened from the Archive group, which promotes it back to 0. */
   archived: number;
+  /** 1 = deep research mode is on for this thread (T55): the model may dispatch
+   * parallel research subagents. Persisted so reopening the thread keeps it. */
+  deep_research: number;
   /** Bot (persona) this thread belongs to, or null (T38). Deleting a bot
    * orphans its threads back to null — chat history is preserved. */
   bot_id: string | null;
@@ -185,7 +188,15 @@ export interface ThreadSearchGroup {
   hits: SearchHit[];
 }
 
-export type AttachmentKind = "image" | "tool_call" | "document";
+export type AttachmentKind =
+  | "image"
+  | "tool_call"
+  | "document"
+  | "subagent"
+  // Transparency captures on an assistant reply: the model's reasoning (plain
+  // text) and the raw per-round API trace (JSON). At most one of each.
+  | "reasoning"
+  | "api_trace";
 
 export interface Attachment {
   id: string;
@@ -199,4 +210,28 @@ export interface Attachment {
    * non-document rows. */
   filename: string | null;
   created_at: string;
+}
+
+/** One file inside an artifact: a relative path and its full text contents. */
+export interface ArtifactFile {
+  path: string;
+  content: string;
+}
+
+/**
+ * An artifact (migration 021): an LLM-generated multi-file web app emitted in a
+ * ```artifact fenced block. Keyed by `(message_id, ordinal)` — the ordinal is
+ * the artifact's position among the message's artifact blocks. `files` is the
+ * editable, persisted file set (the block body is the initial source; in-app
+ * edits are written back here).
+ */
+export interface Artifact {
+  id: string;
+  thread_id: string;
+  message_id: string;
+  ordinal: number;
+  title: string;
+  files: ArtifactFile[];
+  created_at: string;
+  updated_at: string;
 }

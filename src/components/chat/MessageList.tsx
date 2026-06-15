@@ -1,20 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  Brain,
   Check,
   ChevronLeft,
   ChevronRight,
   Copy,
+  FileJson,
   FileText,
   FoldVertical,
   Globe,
   Loader2,
   RefreshCw,
+  Telescope,
   TriangleAlert,
   Wrench,
 } from "lucide-react";
 import {
   imageDataUrl,
+  type ApiTraceEntry,
+  type MessageSubagent,
   type MessageToolCall,
   type MessageView,
 } from "@/lib/messages";
@@ -26,7 +31,7 @@ import { Input } from "@/components/ui/input";
 import { BotAvatar } from "@/components/bots/BotAvatar";
 import { EmptySuggestions } from "@/components/chat/EmptySuggestions";
 import { useBots } from "@/store/bots";
-import { useThreads } from "@/store/threads";
+import { STREAM_ID, useThreads } from "@/store/threads";
 import { openLightbox } from "@/store/lightbox";
 import { useSearch } from "@/store/search";
 import { useAppearance } from "@/store/appearance";
@@ -64,17 +69,33 @@ interface MessageListProps {
  * pill with an icon and the fetched URL — so it reads as system chrome the model
  * itself can't produce, and makes it evident how the model found its answer.
  */
+/** Pretty-print a tool's input arguments for the expanded panel, or null when
+ * there's nothing worth showing (no input, or an empty object). */
+function formatToolArgs(args: unknown): string | null {
+  if (args === undefined || args === null) return null;
+  if (typeof args === "object" && Object.keys(args as object).length === 0)
+    return null;
+  try {
+    return JSON.stringify(args, null, 2);
+  } catch {
+    return null;
+  }
+}
+
 function ToolActivity({ call }: { call: MessageToolCall }) {
   const t = useT();
   const isFetch = call.name === "web__fetch_url";
   const label = isFetch ? (call.url ?? t("chat.webPage")) : call.name;
   const running = call.running === true;
   const failed = call.ok === false;
-  // A disclosure panel exists for tools that carry a command/output (system
-  // diagnostics) or web sources (search hits / fetched page); bare calls keep
-  // the simple pill.
+  // A disclosure panel exists for tools that carry input arguments, a
+  // command/output (system diagnostics), or web sources (search hits / fetched
+  // page); bare calls keep the simple pill.
   const hasSources = Boolean(call.sources && call.sources.length > 0);
-  const hasPanel = Boolean(call.command || call.output || hasSources);
+  const argsText = formatToolArgs(call.arguments);
+  const hasPanel = Boolean(
+    call.command || call.output || hasSources || argsText,
+  );
   // Auto-expanded while the tool runs (the live terminal view); collapsed once
   // it finishes, with a click to re-open and review what ran.
   const [open, setOpen] = useState(false);
@@ -87,7 +108,13 @@ function ToolActivity({ call }: { call: MessageToolCall }) {
       outRef.current.scrollTop = outRef.current.scrollHeight;
   }, [call.output, expanded]);
 
-  const Icon = running ? Loader2 : failed ? TriangleAlert : isFetch ? Globe : Wrench;
+  const Icon = running
+    ? Loader2
+    : failed
+      ? TriangleAlert
+      : isFetch
+        ? Globe
+        : Wrench;
   const header = (
     <>
       <Icon
@@ -144,6 +171,16 @@ function ToolActivity({ call }: { call: MessageToolCall }) {
       </button>
       {expanded && (
         <div className="border-border/60 border-t">
+          {argsText && (
+            <div className="border-border/40 border-b">
+              <div className="text-muted-foreground px-2 pt-1 text-[10px] font-semibold tracking-wide uppercase select-none">
+                {t("chat.toolArguments")}
+              </div>
+              <pre className="text-foreground/80 max-h-48 overflow-auto px-2 pb-1 font-mono text-[11px] leading-snug whitespace-pre-wrap">
+                {argsText}
+              </pre>
+            </div>
+          )}
           {call.command && (
             <div className="text-foreground/80 bg-muted/30 px-2 py-1 font-mono break-all">
               <span className="text-muted-foreground select-none">$ </span>
@@ -186,6 +223,158 @@ function ToolActivity({ call }: { call: MessageToolCall }) {
               ))}
             </ul>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One research subagent (deep research mode, T55), rendered like a tool-activity
+ * panel: a collapsible card showing the subtask, a live status (spinner while
+ * dispatched/running, a telescope when done, a warning when failed), and — once
+ * done — the subagent's concise summary as Markdown. Structured system chrome the
+ * model can't fabricate, mirroring `ToolActivity`.
+ */
+function SubagentCard({ sub }: { sub: MessageSubagent }) {
+  const t = useT();
+  const running = sub.status === "dispatched" || sub.status === "running";
+  const failed = sub.status === "failed";
+  const hasSummary = Boolean(sub.summary && sub.summary.trim());
+  const [open, setOpen] = useState(false);
+  const expanded = open && hasSummary;
+  const Icon = running ? Loader2 : failed ? TriangleAlert : Telescope;
+  const status = running
+    ? t("chat.subagentResearching")
+    : failed
+      ? t("chat.subagentFailed")
+      : t("chat.subagentDone");
+
+  return (
+    <div className="border-border bg-background/70 w-full max-w-full overflow-hidden rounded-md border text-xs">
+      <button
+        type="button"
+        onClick={() => hasSummary && setOpen((o) => !o)}
+        disabled={!hasSummary}
+        title={sub.task}
+        className={cn(
+          "text-muted-foreground flex w-full items-center gap-1.5 px-2 py-1",
+          hasSummary && "hover:bg-muted/50 cursor-pointer",
+        )}
+      >
+        <Icon
+          className={cn(
+            "size-3 shrink-0",
+            running && "animate-spin",
+            failed && "text-destructive",
+          )}
+          aria-hidden
+        />
+        <span className="text-foreground/90 flex-1 truncate text-left">
+          {sub.task || t("chat.subagent")}
+        </span>
+        <span className="text-muted-foreground shrink-0">{status}</span>
+        {hasSummary && (
+          <ChevronRight
+            className={cn(
+              "size-3 shrink-0 transition-transform",
+              expanded && "rotate-90",
+            )}
+            aria-hidden
+          />
+        )}
+      </button>
+      {expanded && (
+        <div className="border-border/60 text-foreground/80 border-t px-2 py-1.5">
+          <Markdown content={sub.summary!} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The model's captured reasoning / extended thinking (when reasoning capture is
+ * on), rendered like a tool-activity panel: a collapsible "Reasoning" disclosure
+ * showing the thinking as Markdown. Lets the user see *how* the model reached
+ * its answer without cluttering the reply. Collapsed by default.
+ */
+function ReasoningPanel({ reasoning }: { reasoning: string }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border-border bg-background/70 w-full max-w-prose overflow-hidden rounded-md border text-xs">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="text-muted-foreground hover:bg-muted/50 flex w-full cursor-pointer items-center gap-1.5 px-2 py-1"
+      >
+        <Brain className="size-3 shrink-0" aria-hidden />
+        <span className="text-foreground/90 flex-1 text-left">
+          {t("chat.reasoning")}
+        </span>
+        <ChevronRight
+          className={cn(
+            "size-3 shrink-0 transition-transform",
+            open && "rotate-90",
+          )}
+          aria-hidden
+        />
+      </button>
+      {open && (
+        <div className="border-border/60 text-foreground/80 border-t px-2 py-1.5">
+          <Markdown content={reasoning} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The raw per-round API trace (when trace capture is on): a collapsible
+ * developer panel listing each request body (redacted) and response summary,
+ * pretty-printed. Structured system chrome the model can't fabricate.
+ */
+function ApiTracePanel({ trace }: { trace: ApiTraceEntry[] }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border-border bg-background/70 w-full max-w-prose overflow-hidden rounded-md border text-xs">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="text-muted-foreground hover:bg-muted/50 flex w-full cursor-pointer items-center gap-1.5 px-2 py-1"
+      >
+        <FileJson className="size-3 shrink-0" aria-hidden />
+        <span className="text-foreground/90 flex-1 text-left">
+          {t("chat.apiTrace")}
+        </span>
+        <span className="text-muted-foreground shrink-0">{trace.length}</span>
+        <ChevronRight
+          className={cn(
+            "size-3 shrink-0 transition-transform",
+            open && "rotate-90",
+          )}
+          aria-hidden
+        />
+      </button>
+      {open && (
+        <div className="border-border/60 divide-border/60 divide-y border-t">
+          {trace.map((e, i) => (
+            <div key={i} className="px-2 py-1">
+              <div className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase select-none">
+                {t(
+                  e.phase === "request"
+                    ? "chat.apiTraceRequest"
+                    : "chat.apiTraceResponse",
+                  { round: e.round + 1 },
+                )}
+              </div>
+              <pre className="text-foreground/80 max-h-72 overflow-auto font-mono text-[11px] leading-snug whitespace-pre-wrap">
+                {JSON.stringify(e.data, null, 2)}
+              </pre>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -551,10 +740,28 @@ function ChatMessage({
       ))}
     </div>
   );
+  const reasoning = m.role === "assistant" && m.reasoning && (
+    <ReasoningPanel reasoning={m.reasoning} />
+  );
+  const apiTrace = m.role === "assistant" &&
+    m.apiTrace &&
+    m.apiTrace.length > 0 && <ApiTracePanel trace={m.apiTrace} />;
   const tools = m.role === "assistant" && m.toolCalls.length > 0 && (
     <div className="flex flex-col items-start gap-1">
       {m.toolCalls.map((tc, i) => (
         <ToolActivity key={tc.id ?? i} call={tc} />
+      ))}
+    </div>
+  );
+  // Research subagents (deep research, T55): a labeled stack of subagent cards.
+  const subagents = m.role === "assistant" && m.subagents.length > 0 && (
+    <div className="flex w-full max-w-prose flex-col items-stretch gap-1">
+      <div className="text-muted-foreground flex items-center gap-1.5 text-xs">
+        <Telescope className="size-3 shrink-0" aria-hidden />
+        <span>{t("chat.subagentsTitle")}</span>
+      </div>
+      {m.subagents.map((s, i) => (
+        <SubagentCard key={s.id || i} sub={s} />
       ))}
     </div>
   );
@@ -564,7 +771,14 @@ function ChatMessage({
       // Assistant text is Markdown (GFM + highlighted code fences).
       // react-markdown tolerates partial/unclosed Markdown, so this
       // is safe to render against the growing streaming placeholder.
-      <Markdown content={m.content} suppressedVideoIds={suppressedVideoIds} />
+      <Markdown
+        content={m.content}
+        suppressedVideoIds={suppressedVideoIds}
+        // Real ids only: a streaming placeholder stays ephemeral so artifacts
+        // persist exactly once, when the reply is saved.
+        messageId={m.id === STREAM_ID ? null : m.id}
+        threadId={m.id === STREAM_ID ? null : m.thread_id}
+      />
     ) : (
       <span className="whitespace-pre-wrap">{m.content}</span>
     ));
@@ -638,7 +852,10 @@ function ChatMessage({
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             {images}
             {docs}
+            {reasoning}
             {tools}
+            {subagents}
+            {apiTrace}
             {body}
             {meta}
           </div>
@@ -685,7 +902,10 @@ function ChatMessage({
           </span>
           {images}
           {docs}
+          {reasoning}
           {tools}
+          {subagents}
+          {apiTrace}
           {body}
           {meta}
         </div>
@@ -728,7 +948,10 @@ function ChatMessage({
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             {images}
             {docs}
+            {reasoning}
             {tools}
+            {subagents}
+            {apiTrace}
             {body}
             {meta}
           </div>
@@ -752,7 +975,10 @@ function ChatMessage({
         {byline}
         {images}
         {docs}
+        {reasoning}
         {tools}
+        {subagents}
+        {apiTrace}
         {body}
         {meta}
       </div>

@@ -8,8 +8,8 @@ use anyhow::{anyhow, Context};
 use tauri::ipc::Channel;
 
 use super::{
-    for_each_sse_data, gemini_tools, is_cancelled, parse_gemini_usage, ChatResponse,
-    CompletionRequest, Provider, StreamDelta, ToolCall, Usage,
+    for_each_sse_data, gemini_tools, is_cancelled, parse_gemini_usage, redact_trace_body,
+    send_with_retry, ChatResponse, CompletionRequest, Provider, StreamDelta, ToolCall, Usage,
 };
 
 const BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -97,15 +97,33 @@ impl Provider for Gemini {
         if !req.tools.is_empty() {
             body["tools"] = serde_json::Value::Array(gemini_tools(req.tools));
         }
+        // Reasoning capture: ask Gemini 2.x thinking models to return thought
+        // summaries as `thought: true` parts (ignored by non-thinking models).
+        if req.reasoning {
+            body["generationConfig"] = serde_json::json!({
+                "thinkingConfig": { "includeThoughts": true }
+            });
+        }
+
+        // Developer trace: surface the exact (redacted) request before sending.
+        if req.trace {
+            let _ = channel.send(StreamDelta::api_trace(
+                "request",
+                req.round,
+                redact_trace_body(&body),
+            ));
+        }
 
         let url = format!("{BASE_URL}/{}:streamGenerateContent?alt=sse", req.model);
-        let resp = client
-            .post(url)
-            .header("x-goog-api-key", req.api_key)
-            .json(&body)
-            .send()
-            .await
-            .context("gemini request failed")?;
+        let resp = send_with_retry(
+            client
+                .post(url)
+                .header("x-goog-api-key", req.api_key)
+                .json(&body),
+            cancel,
+        )
+        .await
+        .context("gemini request failed")?;
 
         let status = resp.status();
         if !status.is_success() {
@@ -133,10 +151,19 @@ impl Provider for Gemini {
             {
                 for part in parts {
                     if let Some(t) = part.get("text").and_then(|t| t.as_str()) {
-                        content.push_str(t);
-                        channel
-                            .send(StreamDelta::text(t))
-                            .map_err(|e| anyhow!("channel send failed: {e}"))?;
+                        // A `thought: true` part is the model's reasoning summary
+                        // (thinking models, when capture is on) — route it to the
+                        // reasoning panel rather than the answer text.
+                        if part.get("thought").and_then(|b| b.as_bool()) == Some(true) {
+                            channel
+                                .send(StreamDelta::reasoning(t))
+                                .map_err(|e| anyhow!("channel send failed: {e}"))?;
+                        } else {
+                            content.push_str(t);
+                            channel
+                                .send(StreamDelta::text(t))
+                                .map_err(|e| anyhow!("channel send failed: {e}"))?;
+                        }
                     } else if let Some(fc) = part.get("functionCall") {
                         // Gemini emits a complete functionCall part (not streamed
                         // fragments) and supplies no id — synthesize one (T13).
@@ -166,6 +193,7 @@ impl Provider for Gemini {
             model: req.model.to_string(),
             usage,
             tool_calls,
+            thinking_blocks: Vec::new(),
         })
     }
 }
