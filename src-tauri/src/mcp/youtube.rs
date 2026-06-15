@@ -39,8 +39,7 @@ const MAX_TRANSCRIPT_LEN: usize = 20_000;
 
 /// A desktop browser UA + consent cookie avoids YouTube's EU consent interstitial
 /// when scraping HTML pages.
-const DESKTOP_UA: &str =
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) \
+const DESKTOP_UA: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) \
      Chrome/124.0 Safari/537.36";
 /// Public InnerTube API key (embedded in every youtube.com page; not a secret).
 const INNERTUBE_KEY: &str = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
@@ -210,9 +209,7 @@ pub fn parse_search_results(data: &Value, count: usize) -> Vec<VideoHit> {
         out.push(VideoHit {
             video_id: video_id.to_string(),
             title: clip(&runs_text(vr.get("title")), FIELD_MAX),
-            channel: runs_text(
-                vr.get("ownerText").or_else(|| vr.get("longBylineText")),
-            ),
+            channel: runs_text(vr.get("ownerText").or_else(|| vr.get("longBylineText"))),
             length: text_field(vr.get("lengthText")),
             views: text_field(vr.get("viewCountText")),
             snippet: clip(&snippet_text(vr), FIELD_MAX),
@@ -226,9 +223,8 @@ pub fn format_results(query: &str, hits: &[VideoHit]) -> String {
     if hits.is_empty() {
         return format!("No YouTube videos found for \"{query}\".");
     }
-    let mut out = format!(
-        "YouTube results for \"{query}\" (thumbnails shown to the user inline):\n"
-    );
+    let mut out =
+        format!("YouTube results for \"{query}\" (thumbnails shown to the user inline):\n");
     for (i, h) in hits.iter().enumerate() {
         out.push_str(&format!("\n{}. {}\n", i + 1, h.title));
         let mut meta = Vec::new();
@@ -279,9 +275,8 @@ async fn transcript(client: &reqwest::Client, args: &Value) -> anyhow::Result<St
     };
 
     let tracks = caption_tracks(&player);
-    let track = select_track(&tracks, lang).ok_or_else(|| {
-        anyhow!("this video has no closed captions available to extract")
-    })?;
+    let track = select_track(&tracks, lang)
+        .ok_or_else(|| anyhow!("this video has no closed captions available to extract"))?;
     // Strip `&fmt=srv3` so the endpoint returns the default `<text start dur>` XML
     // that `parse_timedtext` understands; `&amp;` decode covers the watch-page
     // fallback (its baseUrl is HTML-escaped).
@@ -348,10 +343,7 @@ async fn fetch_player_response(client: &reqwest::Client, video_id: &str) -> Opti
 }
 
 /// Fallback: scrape `ytInitialPlayerResponse` from the watch page.
-async fn fetch_watch_player_response(
-    client: &reqwest::Client,
-    video_id: &str,
-) -> Option<Value> {
+async fn fetch_watch_player_response(client: &reqwest::Client, video_id: &str) -> Option<Value> {
     let resp = client
         .get(format!("https://www.youtube.com/watch?v={video_id}"))
         .header("user-agent", DESKTOP_UA)
@@ -475,7 +467,11 @@ fn fmt_timestamp(secs: f64) -> String {
 /// unit-tested.
 pub fn parse_video_id(input: &str) -> Option<String> {
     let input = input.trim();
-    let is_id = |s: &str| s.len() == 11 && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    let is_id = |s: &str| {
+        s.len() == 11
+            && s.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    };
 
     if is_id(input) {
         return Some(input.to_string());
@@ -657,7 +653,10 @@ mod tests {
             parse_video_id("https://www.youtube.com/embed/dQw4w9WgXcQ").as_deref(),
             Some("dQw4w9WgXcQ")
         );
-        assert_eq!(parse_video_id("dQw4w9WgXcQ").as_deref(), Some("dQw4w9WgXcQ"));
+        assert_eq!(
+            parse_video_id("dQw4w9WgXcQ").as_deref(),
+            Some("dQw4w9WgXcQ")
+        );
         assert_eq!(parse_video_id("not a video"), None);
         assert_eq!(parse_video_id("https://example.com/page"), None);
     }
@@ -704,7 +703,10 @@ mod tests {
         assert_eq!(hits[0].length, "12:34");
         assert_eq!(hits[0].views, "1.2M views");
         assert_eq!(hits[0].snippet, "A great intro.");
-        assert_eq!(hits[0].watch_url(), "https://www.youtube.com/watch?v=abc12345678");
+        assert_eq!(
+            hits[0].watch_url(),
+            "https://www.youtube.com/watch?v=abc12345678"
+        );
         assert_eq!(hits[1].title, "Second");
     }
 
@@ -743,7 +745,10 @@ mod tests {
         // Prefers manual English over the asr track.
         assert_eq!(select_track(&tracks, None).unwrap()["baseUrl"], "manual");
         // Honors an explicit language.
-        assert_eq!(select_track(&tracks, Some("de")).unwrap()["baseUrl"], "german");
+        assert_eq!(
+            select_track(&tracks, Some("de")).unwrap()["baseUrl"],
+            "german"
+        );
         // Empty → none.
         assert!(select_track(&[], None).is_none());
     }
@@ -799,9 +804,13 @@ mod tests {
 
         let captured: Mutex<Vec<ToolImage>> = Mutex::new(Vec::new());
         let emit = |imgs: Vec<ToolImage>| captured.lock().unwrap().extend(imgs);
-        let summary = search(&client, &json!({ "query": "rust ownership explained" }), &emit)
-            .await
-            .expect("search should not error");
+        let summary = search(
+            &client,
+            &json!({ "query": "rust ownership explained" }),
+            &emit,
+        )
+        .await
+        .expect("search should not error");
         eprintln!("\n--- search ---\n{summary}");
         assert!(captured.into_inner().unwrap().len() <= MAX_COUNT);
 
