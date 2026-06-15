@@ -30,4 +30,6 @@ into tasks when they firm up.
 23. Smaller models struggle to search the web for information. We need to make that possible. How do we make the harness find the URLs to fetch to gather information that the smaller models is missing.Extend browser plugin to include this functionality. → **T52**
 24. Context size display in bottom of the chat. This allows us to know much context each chat consume in the model. → **T53**
 25. Backgrounds on mermaid charts, when enlarged. → **T54**
+26. Deep research mode. Activate in chat to allow the model to spend more time investigating something. If the model is doing tool calls then allow it to dispatch multiple simultanious subagents to gather the information that it seeks - The composer will also to able to run agents syncronously say it needs information A before it knows to gather information B to conclude something. The reason to use the subagents is to save context as each subagent operates with it's own context and will only work with the information that the main thread gives it. This will also save the main thread for context polution.
+During this phase the UI should show the subagents being dispatched and their process status. Subagents will always try to respond with only the relevant information, at keep it to the point.
 
