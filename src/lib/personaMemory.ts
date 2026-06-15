@@ -10,6 +10,13 @@ import { useBots } from "@/store/bots";
 import type { Bot, BotMemory, Provider } from "@/types/db";
 
 /**
+ * Synthetic thread key for the off-path memory-update call. It isn't a real chat
+ * thread, so it reuses one MCP session bucket across persona-memory calls; the
+ * backend idle reaper reclaims it (it's never tied to a deletable thread).
+ */
+const PERSONA_MEMORY_THREAD_ID = "__persona__";
+
+/**
  * T40 persona self-managed memory + mood. After each completed exchange in a
  * persona thread, `send()` fires `runPersonaMemoryUpdate` off-path: a
  * follow-up call to the thread's model reviews the exchange against the
@@ -190,7 +197,13 @@ export async function runPersonaMemoryUpdate(
       userText,
       assistantText,
     );
-    const result = await chatStream(provider, model, messages, () => {});
+    const result = await chatStream(
+      provider,
+      model,
+      messages,
+      () => {},
+      PERSONA_MEMORY_THREAD_ID,
+    );
     const ops = parseMemoryOps(result.content);
     if (!ops) return;
 

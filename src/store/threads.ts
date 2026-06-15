@@ -59,6 +59,7 @@ import { hasRenderer } from "@/lib/plugins";
 import { selectRegistry, usePlugins } from "@/store/plugins";
 import { useKeys } from "@/store/keys";
 import { buildGlobalSystemText } from "@/lib/systemContext";
+import { mcpCloseThreadSessions } from "@/lib/mcp";
 import { t } from "@/store/i18n";
 import { isKeylessProvider, PROVIDERS } from "@/lib/providers";
 import { deriveOffline, useConnectivity } from "@/store/connectivity";
@@ -863,6 +864,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           replyModel,
           history,
           onDelta,
+          threadId,
         );
         // Persist the assistant turn when it produced text, invoked a tool, or
         // fetched images. (Skip a truly empty row, e.g. cancelled before any
@@ -1181,6 +1183,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         replyModel,
         history,
         onDelta,
+        id,
       );
       if (
         result.content.length > 0 ||
@@ -1275,6 +1278,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         thread.model,
         request,
         () => {},
+        id,
       );
       // Stopped mid-summarization → don't persist a truncated summary; the
       // thread simply stays uncompacted.
@@ -1368,6 +1372,12 @@ export const useThreads = create<ThreadsState>((set, get) => ({
 
   remove: async (id) => {
     await deleteThread(id);
+    // Best-effort: tear down any live MCP sessions for the deleted thread.
+    // A backend hiccup here must not strand the UI on the just-deleted thread,
+    // so fire-and-forget (the idle reaper would reclaim them anyway).
+    void mcpCloseThreadSessions(id).catch((e) =>
+      console.warn("mcpCloseThreadSessions failed:", e),
+    );
     const threads = await listThreads();
     set({ threads });
     if (get().currentThreadId === id) {

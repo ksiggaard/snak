@@ -241,6 +241,7 @@ describe("send() with @-mentions (T43)", () => {
       "m",
       expect.anything(),
       expect.anything(),
+      expect.anything(),
     );
   });
 

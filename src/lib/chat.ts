@@ -141,6 +141,7 @@ export async function chatStream(
   model: string,
   messages: ApiMessage[],
   onDelta: (event: StreamEvent) => void,
+  threadId: string,
 ): Promise<ChatResult> {
   const channel = new Channel<StreamEvent>();
   channel.onmessage = (msg) => onDelta(msg);
@@ -158,6 +159,7 @@ export async function chatStream(
     messages,
     onDelta: channel,
     mcpServers,
+    threadId,
   });
 }
 
