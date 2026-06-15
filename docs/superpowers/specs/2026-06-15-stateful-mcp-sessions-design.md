@@ -130,11 +130,12 @@ every later message in that thread. It dies on:
 
 ### Error handling
 
-- **Spawn/handshake failure** → that server contributes no tools (today's graceful
-  `unwrap_or_default`). Surface it in two places: (a) the **settings** "refresh tools" / per-server
-  test shows the error against that server (extends the existing error line); (b) during a live
-  chat, log it and emit a one-line failure note so the user isn't left wondering why the server
-  did nothing. Never fully silent.
+- **Spawn/handshake failure** → that server contributes no tools (today's graceful default in the
+  chat path). Surfacing: (a) the **settings** "refresh tools" returns per-server errors (a
+  `{ tools, errors }` report), so a broken server shows *why* against its row instead of silently
+  listing nothing; (b) in the live-chat path the failure is logged to stderr (dev-visible). An
+  in-chat failure note to the user is a **deferred** follow-up (it needs the `on_delta` channel
+  plumbed into tool-listing). Never fully silent.
 - **`call_tool` over a dead session** → one respawn+retry, else return the error string the
   loop already feeds back to the model (so a bad call doesn't abort the turn).
 
