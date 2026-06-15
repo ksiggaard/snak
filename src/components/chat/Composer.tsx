@@ -47,7 +47,9 @@ import { useBots } from "@/store/bots";
 import { selectRegistry, usePlugins } from "@/store/plugins";
 import { useThreads } from "@/store/threads";
 import { useKeys } from "@/store/keys";
+import { useModels } from "@/store/models";
 import { useOllama } from "@/store/ollama";
+import { useConnectivity, useIsOffline } from "@/store/connectivity";
 import { t as tNow, useT } from "@/store/i18n";
 import type { Bot, Provider } from "@/types/db";
 
@@ -206,6 +208,24 @@ export function Composer({
   const ollamaStatus = useOllama((s) => s.status);
   const refreshOllama = useOllama((s) => s.refresh);
   const keyless = isKeylessProvider(provider);
+
+  // Offline mode (effective = no internet OR manual "Work offline"). A cloud
+  // provider can't be reached, so we block the send and offer a one-click
+  // switch to the keyless local provider (Ollama). The user's selection is
+  // never changed automatically — only on pressing "Use local model".
+  const offline = useIsOffline();
+  const refreshConnectivity = useConnectivity((s) => s.refresh);
+  const setProviderModel = useThreads((s) => s.setProviderModel);
+  const allModels = useModels((s) => s.models);
+  const cloudBlockedOffline = providerEnabled && offline && !keyless;
+  function switchToLocal() {
+    // Prefer an actually-installed local model; fall back to the provider's
+    // default (the user can pull it from Ollama settings if missing).
+    const local = allModels.find((m) => m.provider === "ollama")?.model_id;
+    const fallback = providers.find((p) => p.id === "ollama")?.defaultModel;
+    const target = local ?? fallback;
+    if (target) void setProviderModel("ollama", target);
+  }
   const keyReady = keyless
     ? ollamaStatus === "unknown"
       ? null
@@ -474,7 +494,8 @@ export function Composer({
   // The selected provider being disabled overrides the no-key gating (the key
   // check is moot when the provider can't be used at all). Composes with T6.
   const noKey = providerEnabled && keyReady === false;
-  const composeDisabled = busy || !providerEnabled || noKey;
+  const composeDisabled =
+    busy || !providerEnabled || noKey || cloudBlockedOffline;
   // Sending is held while a document is mid-extraction so it can't be dropped.
   const canSend =
     !composeDisabled &&
@@ -516,7 +537,29 @@ export function Composer({
             {t("composer.noProviders")}
           </p>
         ))}
+      {cloudBlockedOffline && (
+        <p className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
+          {t("composer.offline", { provider: providerLabel(provider) })}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-xs"
+            onClick={switchToLocal}
+          >
+            {t("composer.useLocalModel")}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-xs"
+            onClick={() => void refreshConnectivity()}
+          >
+            {t("composer.checkConnection")}
+          </Button>
+        </p>
+      )}
       {noKey &&
+        !cloudBlockedOffline &&
         (keyless ? (
           <p className="text-muted-foreground flex items-center gap-2 text-xs">
             {t("composer.ollamaDown")}

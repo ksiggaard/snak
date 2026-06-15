@@ -8,7 +8,11 @@
 //! maps actions onto the existing stores (new chat, search, settings, …).
 
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
+// `Manager` is only needed for `get_webview_window`, which is called solely in
+// the non-macOS branches below (macOS installs the menu app-wide instead).
+#[cfg(not(target_os = "macos"))]
+use tauri::Manager;
 
 /// Event name the frontend listens on (see the menu effect in `App.tsx`).
 const MENU_EVENT: &str = "app-menu";

@@ -61,6 +61,7 @@ import { useKeys } from "@/store/keys";
 import { buildGlobalSystemText } from "@/lib/systemContext";
 import { t } from "@/store/i18n";
 import { isKeylessProvider, PROVIDERS } from "@/lib/providers";
+import { deriveOffline, useConnectivity } from "@/store/connectivity";
 import type { PreparedImage } from "@/lib/image";
 import type { PendingDocument } from "@/lib/documents";
 import type { Bot, Provider, Thread } from "@/types/db";
@@ -598,6 +599,27 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     if (!content.trim() && images.length === 0 && documents.length === 0)
       return;
     if (get().busy) return;
+
+    // Offline backstop: a cloud provider can't be reached. The Composer already
+    // blocks this in the UI, but the QuickInput overlay submits straight through
+    // send() (App's `quick-submit` handler), bypassing that gate — so enforce it
+    // here too. The keyless local provider (Ollama) is never blocked. Done before
+    // any thread/message is persisted so a blocked send leaves no junk thread.
+    {
+      const cid = get().currentThreadId;
+      const effProvider = cid
+        ? (get().threads.find((x) => x.id === cid)?.provider ??
+          get().draftProvider)
+        : get().draftProvider;
+      const { status, forceOffline } = useConnectivity.getState();
+      if (!isKeylessProvider(effProvider) && deriveOffline(status, forceOffline)) {
+        const label =
+          PROVIDERS.find((p) => p.id === effProvider)?.label ?? effProvider;
+        set({ error: t("composer.offline", { provider: label }) });
+        return;
+      }
+    }
+
     set({
       busy: true,
       cancelling: false,

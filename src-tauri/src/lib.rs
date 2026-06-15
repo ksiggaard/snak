@@ -293,6 +293,7 @@ pub fn run() {
             commands::languages::list_languages,
             commands::languages::languages_directory,
             commands::media::media_playback_available,
+            commands::connectivity::connectivity_probe,
             commands::ollama::ollama_status,
             commands::ollama::ollama_list_models,
             commands::ollama::ollama_ps,

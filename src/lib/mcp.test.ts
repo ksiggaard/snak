@@ -5,6 +5,7 @@ import {
   BUILTIN_WEB_SERVER,
   BUILTIN_YOUTUBE_SERVER,
   gateServersForChat,
+  gateServersForOffline,
   parseServers,
   withBuiltins,
   type McpServer,
@@ -119,5 +120,40 @@ describe("gateServersForChat", () => {
   it("never gates non-sys servers on provider locality", () => {
     const out = gateServersForChat([web], false, false);
     expect(out.map((s) => s.id)).toEqual(["web"]);
+  });
+});
+
+describe("gateServersForOffline", () => {
+  const web = { ...BUILTIN_WEB_SERVER, enabled: true };
+  const youtube = { ...BUILTIN_YOUTUBE_SERVER, enabled: true };
+  const sys = { ...BUILTIN_SYSDEBUG_SERVER, enabled: true };
+  const httpCustom: McpServer = {
+    id: "github",
+    label: "GitHub",
+    transport: "http",
+    url: "https://example.com/mcp",
+    enabled: true,
+  };
+  const stdioCustom: McpServer = {
+    id: "local-tool",
+    label: "Local tool",
+    transport: "stdio",
+    command: "my-tool",
+    enabled: true,
+  };
+
+  it("is a no-op when online", () => {
+    const all = [web, youtube, sys, httpCustom, stdioCustom];
+    expect(gateServersForOffline(all, false)).toEqual(all);
+  });
+
+  it("drops web + youtube but keeps the local sys server when offline", () => {
+    const out = gateServersForOffline([web, youtube, sys], true);
+    expect(out.map((s) => s.id)).toEqual(["sys"]);
+  });
+
+  it("drops remote http custom servers but keeps local stdio ones when offline", () => {
+    const out = gateServersForOffline([httpCustom, stdioCustom], true);
+    expect(out.map((s) => s.id)).toEqual(["local-tool"]);
   });
 });

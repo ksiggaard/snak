@@ -193,11 +193,37 @@ export async function setAllowCloudSysTools(allow: boolean): Promise<void> {
  */
 export async function enabledServersForChat(
   provider: Provider,
+  offline: boolean,
 ): Promise<McpServer[] | undefined> {
   const local = isKeylessProvider(provider);
   const allowCloudSys = local ? true : await loadAllowCloudSysTools();
-  const enabled = gateServersForChat(await loadServers(), local, allowCloudSys);
+  let enabled = gateServersForChat(await loadServers(), local, allowCloudSys);
+  enabled = gateServersForOffline(enabled, offline);
   return enabled.length > 0 ? enabled : undefined;
+}
+
+/**
+ * Built-in servers whose tools require the internet (offline mode). The
+ * read-only `sys` server is local-only and stays available offline.
+ */
+export const INTERNET_SERVER_IDS: readonly string[] = [
+  BUILTIN_WEB_SERVER.id,
+  BUILTIN_YOUTUBE_SERVER.id,
+];
+
+/**
+ * Drop internet-requiring servers when offline: the built-in `web`/`youtube`
+ * servers and any custom `http` (remote) server. Local stdio servers and the
+ * read-only `sys` server stay. Pure — unit-tested.
+ */
+export function gateServersForOffline(
+  servers: McpServer[],
+  offline: boolean,
+): McpServer[] {
+  if (!offline) return servers;
+  return servers.filter(
+    (s) => !INTERNET_SERVER_IDS.includes(s.id) && s.transport !== "http",
+  );
 }
 
 /**

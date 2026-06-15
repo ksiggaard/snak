@@ -1,6 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type { Provider, Role } from "@/types/db";
 import { enabledServersForChat } from "@/lib/mcp";
+import { useConnectivity, deriveOffline } from "@/store/connectivity";
 
 export interface ApiImage {
   media_type: string;
@@ -144,8 +145,13 @@ export async function chatStream(
   const channel = new Channel<StreamEvent>();
   channel.onmessage = (msg) => onDelta(msg);
   // Provider-gated: the system-diagnostics tools are filtered out for cloud
-  // providers unless the user opted in (local models always get them).
-  const mcpServers = await enabledServersForChat(provider);
+  // providers unless the user opted in (local models always get them). When
+  // offline, the internet-requiring servers (`web`, `youtube`, custom http) are
+  // also dropped so the model isn't offered tools it can't reach. Read the
+  // connectivity store here so `send()`'s call site stays unchanged.
+  const { status, forceOffline } = useConnectivity.getState();
+  const offline = deriveOffline(status, forceOffline);
+  const mcpServers = await enabledServersForChat(provider, offline);
   return invoke("chat_stream", {
     provider,
     model,

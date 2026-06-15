@@ -67,6 +67,12 @@ export const en = {
   "titleBar.themeSystem": "System",
   "titleBar.themeLight": "Light",
   "titleBar.themeDark": "Dark",
+  "titleBar.offline": "Offline",
+  "titleBar.offlineHint":
+    "You're offline — only local models and tools are available. Click to check the connection.",
+  "titleBar.offlineForcedHint":
+    "Working offline (manual). Turn off “Work offline” in the menu to use cloud models again.",
+  "titleBar.workOffline": "Work offline",
   "titleBar.minimize": "Minimize",
   "titleBar.maximize": "Maximize",
   "titleBar.close": "Close",
@@ -236,6 +242,10 @@ export const en = {
   "composer.ollamaDown":
     "Ollama isn't running. Start the daemon (ollama serve) to send messages.",
   "composer.ollamaCheckAgain": "Check again",
+  "composer.offline":
+    "You're offline. Pick a local model to keep chatting, or reconnect to use {provider}.",
+  "composer.useLocalModel": "Use local model",
+  "composer.checkConnection": "Check connection",
   "composer.imageError":
     "Couldn't process that image — it may be too large or an unsupported format.",
   "composer.terminalUsage": "Usage: /terminal <shell command>",
@@ -285,6 +295,7 @@ export const en = {
   "model.choose": "Choose model",
   "model.aria": "Model",
   "model.unavailable": "unavailable",
+  "model.offline": "offline",
 
   // --- Quick-input overlay -------------------------------------------------------
   "quick.placeholder":

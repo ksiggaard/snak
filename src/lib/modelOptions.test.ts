@@ -76,6 +76,39 @@ describe("buildModelOptions", () => {
   it("returns [] when nothing qualifies and there is no current combo", () => {
     expect(buildModelOptions(providers, new Set(), models, null)).toEqual([]);
   });
+
+  it("marks cloud providers inactive with reason 'offline' when offline", () => {
+    const opts = buildModelOptions(
+      providers,
+      new Set(["anthropic", "openai"]),
+      models,
+      null,
+      true, // offline
+    );
+    expect(opts.length).toBeGreaterThan(0);
+    expect(opts.every((o) => !o.active && o.reason === "offline")).toBe(true);
+  });
+
+  it("keeps the keyless local provider (ollama) active when offline", () => {
+    const withOllama = [...providers, provider("ollama", "Local (Ollama)")];
+    const withOllamaModels = [
+      ...models,
+      model(4, "ollama", "llama3.2:1b", "llama3.2:1b", 0),
+    ];
+    const opts = buildModelOptions(
+      withOllama,
+      new Set(["anthropic", "ollama"]),
+      withOllamaModels,
+      null,
+      true, // offline
+    );
+    const ollama = opts.filter((o) => o.provider === "ollama");
+    const cloud = opts.filter((o) => o.provider === "anthropic");
+    expect(ollama.length).toBe(1);
+    expect(ollama[0].active).toBe(true);
+    expect(ollama[0].reason).toBeUndefined();
+    expect(cloud.every((o) => !o.active && o.reason === "offline")).toBe(true);
+  });
 });
 
 describe("currentModelLabel", () => {

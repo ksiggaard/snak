@@ -3,6 +3,10 @@
 // SPDX-License-Identifier: MIT
 
 #![allow(clippy::uninlined_format_args)]
+// Local patch: newer Rust + objc2 bindings made the macOS `unsafe` blocks in
+// `platform_impl/macos/mod.rs` redundant. Silence the resulting `unused_unsafe`
+// noise rather than touching each call site in the vendored source.
+#![allow(unused_unsafe)]
 
 //! tray-icon lets you create tray icons for desktop applications.
 //!

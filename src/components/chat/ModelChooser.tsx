@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { useModels } from "@/store/models";
 import { useKeys } from "@/store/keys";
+import { useIsOffline } from "@/store/connectivity";
 import { useT } from "@/store/i18n";
 import { useProviders, withKeylessProviders } from "@/lib/providers";
 import { buildModelOptions, currentModelLabel } from "@/lib/modelOptions";
@@ -50,10 +51,11 @@ export function ModelChooser({
   const keyed =
     keyedProp ?? (keysLoaded ? withKeylessProviders(present, providers) : null);
 
+  const offline = useIsOffline();
   const options =
     keyed === null
       ? []
-      : buildModelOptions(providers, keyed, models, { provider, model });
+      : buildModelOptions(providers, keyed, models, { provider, model }, offline);
 
   const groups: { providerLabel: string; items: typeof options }[] = [];
   for (const o of options) {
@@ -162,7 +164,11 @@ export function ModelChooser({
                       </span>
                       {!o.active && (
                         <span className="text-muted-foreground text-xs">
-                          {t("model.unavailable")}
+                          {t(
+                            o.reason === "offline"
+                              ? "model.offline"
+                              : "model.unavailable",
+                          )}
                         </span>
                       )}
                     </button>

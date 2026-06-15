@@ -34,6 +34,7 @@ import {
 import { usePlugins } from "@/store/plugins";
 import { useModels } from "@/store/models";
 import { useKeys } from "@/store/keys";
+import { useConnectivity, useIsOffline } from "@/store/connectivity";
 import { useI18n, useT } from "@/store/i18n";
 import { PROVIDERS, useProviders, withKeylessProviders } from "@/lib/providers";
 import { buildModelOptions, currentModelLabel } from "@/lib/modelOptions";
@@ -76,10 +77,11 @@ export function QuickInput() {
   const present = useKeys((s) => s.present);
   const keysLoaded = useKeys((s) => s.loaded);
   const keyed = keysLoaded ? withKeylessProviders(present, providers) : null;
+  const offline = useIsOffline();
   const modelOptions =
     keyed === null
       ? []
-      : buildModelOptions(providers, keyed, models, { provider, model });
+      : buildModelOptions(providers, keyed, models, { provider, model }, offline);
   const modelGroups: { providerLabel: string; items: typeof modelOptions }[] =
     [];
   for (const o of modelOptions) {
@@ -105,6 +107,9 @@ export function QuickInput() {
     void usePlugins.getState().load();
     void useModels.getState().load();
     void useKeys.getState().load();
+    // Detect connectivity in this window too (separate store instance) so the
+    // model chooser greys out cloud providers when offline (offline mode).
+    void useConnectivity.getState().init();
     // Bundled language packs apply synchronously; this folds in user packs.
     void useI18n.getState().loadUserPacks();
     void Promise.all([
@@ -365,7 +370,15 @@ export function QuickInput() {
                           o.provider === provider && o.modelId === model
                         }
                         disabled={!o.active}
-                        hint={!o.active ? t("model.unavailable") : undefined}
+                        hint={
+                          !o.active
+                            ? t(
+                                o.reason === "offline"
+                                  ? "model.offline"
+                                  : "model.unavailable",
+                              )
+                            : undefined
+                        }
                         onSelect={() => pickModel(o.provider, o.modelId)}
                       />
                     ))}

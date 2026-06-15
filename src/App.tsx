@@ -38,6 +38,7 @@ import { useModels } from "@/store/models";
 import { useContextWindows } from "@/store/contextWindows";
 import { useKeys } from "@/store/keys";
 import { useOllama } from "@/store/ollama";
+import { useConnectivity } from "@/store/connectivity";
 import { useView } from "@/store/view";
 import { useLayout } from "@/store/layout";
 import { useTitleBar } from "@/store/titlebar";
@@ -55,6 +56,7 @@ function App() {
   const loadContextWindows = useContextWindows((s) => s.load);
   const loadKeys = useKeys((s) => s.load);
   const refreshOllama = useOllama((s) => s.refresh);
+  const initConnectivity = useConnectivity((s) => s.init);
   const loadUserLanguagePacks = useI18n((s) => s.loadUserPacks);
   const openProjectId = useProjects((s) => s.openProjectId);
   const openBotId = useBots((s) => s.openBotId);
@@ -93,6 +95,9 @@ function App() {
     // Probe the local Ollama daemon once at startup (T37) — fire-and-forget;
     // the composer/settings react to the store as the answer lands.
     void refreshOllama();
+    // Detect internet reachability + wire online/offline listeners (offline
+    // mode) — fire-and-forget; the UI gates off the store as the answer lands.
+    void initConnectivity();
     // Bundled language packs apply synchronously at module load (no flash);
     // this folds in user packs from the app-data languages folder (T32).
     void loadUserLanguagePacks();
@@ -105,6 +110,7 @@ function App() {
     loadModels,
     loadContextWindows,
     refreshOllama,
+    initConnectivity,
     loadUserLanguagePacks,
   ]);
 

@@ -3,7 +3,7 @@
 // are active (passed in via `keyedProviderIds`). Kept pure and unit-tested; the
 // React layer supplies the inputs.
 
-import type { ProviderMeta } from "@/lib/providers";
+import { isKeylessProvider, type ProviderMeta } from "@/lib/providers";
 import type { Model, Provider } from "@/types/db";
 
 export interface ModelOption {
@@ -15,8 +15,12 @@ export interface ModelOption {
   label: string;
   /** `${providerLabel} - ${label}` for the dropdown. */
   display: string;
-  /** false only for an injected current-combo entry not in the configured list. */
+  /** false for a cloud model blocked while offline, or an injected current-combo
+   *  entry not in the configured list. */
   active: boolean;
+  /** Why the option is inactive, so the picker can show the right hint.
+   *  "offline" = a cloud provider blocked because we're offline. */
+  reason?: "offline";
 }
 
 /**
@@ -30,10 +34,14 @@ export function buildModelOptions(
   keyedProviderIds: Set<Provider>,
   models: Model[],
   current: { provider: Provider; model: string } | null,
+  offline = false,
 ): ModelOption[] {
   const options: ModelOption[] = [];
   for (const p of providers) {
     if (!keyedProviderIds.has(p.id)) continue;
+    // Offline: cloud providers are blocked; the keyless local provider (Ollama)
+    // stays available so the user can keep chatting.
+    const cloudBlocked = offline && !isKeylessProvider(p.id);
     const provModels = models
       .filter((m) => m.provider === p.id)
       .sort((a, b) => a.sort_order - b.sort_order || a.label.localeCompare(b.label));
@@ -44,7 +52,8 @@ export function buildModelOptions(
         modelId: m.model_id,
         label: m.label,
         display: `${p.label} - ${m.label}`,
-        active: true,
+        active: !cloudBlocked,
+        reason: cloudBlocked ? "offline" : undefined,
       });
     }
   }

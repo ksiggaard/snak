@@ -10,10 +10,12 @@ import {
   Search,
   Settings2,
   Square,
+  WifiOff,
   X,
 } from "lucide-react";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -32,6 +34,7 @@ import { useLayout } from "@/store/layout";
 import { useView } from "@/store/view";
 import { useTheme } from "@/store/theme";
 import { useTitleBar } from "@/store/titlebar";
+import { useConnectivity, useIsOffline } from "@/store/connectivity";
 import { useT } from "@/store/i18n";
 import { runMenuAction, shortcutLabel } from "@/lib/menuActions";
 import type { Theme } from "@/lib/theme";
@@ -48,6 +51,10 @@ export function TitleBar() {
   const barMode = useTitleBar((s) => s.mode);
   const controlsSide = useTitleBar((s) => s.side);
   const controlsStyle = useTitleBar((s) => s.style);
+  const offline = useIsOffline();
+  const forceOffline = useConnectivity((s) => s.forceOffline);
+  const setForceOffline = useConnectivity((s) => s.setForceOffline);
+  const refreshConnectivity = useConnectivity((s) => s.refresh);
 
   // In native mode the OS draws the window controls; the bar keeps only the
   // app-specific affordances (sidebar toggle, menu).
@@ -115,6 +122,28 @@ export function TitleBar() {
       {/* Drag region fills remaining space */}
       <div data-tauri-drag-region className="min-w-0 flex-1 self-stretch" />
 
+      {/* Offline badge — visible only when offline (auto-detected or forced).
+          Clicking re-probes connectivity. */}
+      {offline && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => void refreshConnectivity()}
+              className="text-amber-600 hover:bg-sidebar-accent dark:text-amber-500 mr-1 flex h-6 items-center gap-1 rounded-md px-2 text-[11px] font-medium transition-colors"
+              aria-label={t("titleBar.offline")}
+            >
+              <WifiOff className="size-3" />
+              {t("titleBar.offline")}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            {forceOffline
+              ? t("titleBar.offlineForcedHint")
+              : t("titleBar.offlineHint")}
+          </TooltipContent>
+        </Tooltip>
+      )}
+
       {/* Search (opens the top-center search overlay) */}
       <Tooltip>
         <TooltipTrigger asChild>
@@ -152,6 +181,13 @@ export function TitleBar() {
             {t("titleBar.usage")}
             <DropdownMenuShortcut>{shortcutLabel("U")}</DropdownMenuShortcut>
           </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuCheckboxItem
+            checked={forceOffline === true}
+            onCheckedChange={(v) => void setForceOffline(v === true)}
+          >
+            {t("titleBar.workOffline")}
+          </DropdownMenuCheckboxItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel>{t("titleBar.theme")}</DropdownMenuLabel>
           <DropdownMenuRadioGroup

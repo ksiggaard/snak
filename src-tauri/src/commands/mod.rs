@@ -1,4 +1,5 @@
 pub mod chat;
+pub mod connectivity;
 pub mod documents;
 pub mod files;
 pub mod keys;
