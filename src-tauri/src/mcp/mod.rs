@@ -256,12 +256,25 @@ async fn call_tool_inner(
             )
             .await
         }
+        // External servers may return image content (e.g. a screenshot tool). Route
+        // any images to the UI via the same `tool_images` delta the built-ins use
+        // (keeping base64 out of the model-facing text); return the text part.
         Transport::Stdio => {
-            sessions
+            let (text, imgs) = sessions
                 .call_tool(thread_id, server, tool, &call.arguments)
-                .await
+                .await?;
+            if !imgs.is_empty() {
+                emit_images(imgs);
+            }
+            Ok(text)
         }
-        Transport::Http => call_http_tool(client, server, tool, &call.arguments).await,
+        Transport::Http => {
+            let (text, imgs) = call_http_tool(client, server, tool, &call.arguments).await?;
+            if !imgs.is_empty() {
+                emit_images(imgs);
+            }
+            Ok(text)
+        }
     }
 }
 
@@ -368,23 +381,55 @@ pub(crate) fn tools_from_list_result(result: &Value) -> Vec<ToolDef> {
 /// Extract the text payload from an MCP `tools/call` result. MCP returns
 /// `{content:[{type:"text",text:"…"}, …], isError?}`; we concatenate the text
 /// parts. Pure / unit-tested.
-pub(crate) fn text_from_call_result(result: &Value) -> String {
-    let mut out = String::new();
+pub(crate) fn split_call_result(result: &Value) -> (String, Vec<ToolImage>) {
+    let mut text = String::new();
+    let mut images = Vec::new();
+    let mut push_line = |s: &str| {
+        if !text.is_empty() {
+            text.push('\n');
+        }
+        text.push_str(s);
+    };
     if let Some(arr) = result.get("content").and_then(|c| c.as_array()) {
         for part in arr {
-            if let Some(t) = part.get("text").and_then(|t| t.as_str()) {
-                if !out.is_empty() {
-                    out.push('\n');
+            match part.get("type").and_then(|t| t.as_str()) {
+                // Image content (e.g. a screenshot tool): pull the base64 OUT of
+                // the model-facing text — dumping it would flood/garble the model's
+                // context — and route it to the UI like the built-in image tools.
+                // The model just sees a short placeholder.
+                Some("image") => {
+                    let Some(data) = part.get("data").and_then(|d| d.as_str()) else {
+                        continue;
+                    };
+                    let media_type = part
+                        .get("mimeType")
+                        .and_then(|m| m.as_str())
+                        .unwrap_or("image/png")
+                        .to_string();
+                    push_line(&format!(
+                        "[image returned by the tool and shown to the user: {media_type}]"
+                    ));
+                    images.push(ToolImage {
+                        media_type,
+                        data: data.to_string(),
+                        source_url: None,
+                        title: None,
+                    });
                 }
-                out.push_str(t);
+                // Text content (and any other type that carries a `text` field).
+                _ => {
+                    if let Some(t) = part.get("text").and_then(|t| t.as_str()) {
+                        push_line(t);
+                    }
+                }
             }
         }
     }
-    if out.is_empty() {
+    if text.is_empty() && images.is_empty() {
         // Fall back to the raw result so the model still sees something.
-        out = result.to_string();
+        text = result.to_string();
     }
-    out
+    (text, images)
 }
 
 // ---------------------------------------------------------------------------
@@ -452,7 +497,7 @@ async fn call_http_tool(
     server: &ServerConfig,
     tool: &str,
     args: &Value,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<(String, Vec<ToolImage>)> {
     let result = http_roundtrip(
         client,
         server,
@@ -460,7 +505,7 @@ async fn call_http_tool(
         json!({ "name": tool, "arguments": args }),
     )
     .await?;
-    Ok(text_from_call_result(&result))
+    Ok(split_call_result(&result))
 }
 
 // ---------------------------------------------------------------------------
@@ -606,20 +651,63 @@ mod tests {
     }
 
     #[test]
-    fn extracts_text_from_call_result() {
+    fn splits_text_content() {
         let result = json!({
             "content": [
                 { "type": "text", "text": "hello" },
                 { "type": "text", "text": "world" }
             ]
         });
-        assert_eq!(text_from_call_result(&result), "hello\nworld");
+        let (text, images) = split_call_result(&result);
+        assert_eq!(text, "hello\nworld");
+        assert!(images.is_empty());
     }
 
     #[test]
-    fn call_result_falls_back_to_raw() {
+    fn split_falls_back_to_raw_when_nothing_extractable() {
         let result = json!({ "something": 1 });
-        assert_eq!(text_from_call_result(&result), result.to_string());
+        let (text, images) = split_call_result(&result);
+        assert_eq!(text, result.to_string());
+        assert!(images.is_empty());
+    }
+
+    #[test]
+    fn split_pulls_images_out_of_model_text() {
+        // A screenshot-style result: text + an inline base64 image.
+        let result = json!({
+            "content": [
+                { "type": "text", "text": "captured" },
+                { "type": "image", "data": "AAAABBBBbase64", "mimeType": "image/png" }
+            ]
+        });
+        let (text, images) = split_call_result(&result);
+        // The base64 must NOT leak into the model-facing text (it would flood the
+        // context); the text part survives and a placeholder marks the image.
+        assert!(
+            !text.contains("AAAABBBBbase64"),
+            "base64 leaked into model text"
+        );
+        assert!(text.contains("captured"));
+        assert!(text.contains("image/png"));
+        assert_eq!(images.len(), 1);
+        assert_eq!(images[0].media_type, "image/png");
+        assert_eq!(images[0].data, "AAAABBBBbase64");
+    }
+
+    #[test]
+    fn split_image_only_result_is_placeholder_not_base64() {
+        // The reported bug: `screenshot_page` returns image-only content.
+        let result = json!({
+            "content": [{ "type": "image", "data": "HUGEBASE64", "mimeType": "image/png" }]
+        });
+        let (text, images) = split_call_result(&result);
+        assert!(
+            !text.contains("HUGEBASE64"),
+            "raw base64 must not reach the model"
+        );
+        assert!(!text.is_empty(), "model still gets a placeholder");
+        assert_eq!(images.len(), 1);
+        assert_eq!(images[0].data, "HUGEBASE64");
     }
 
     #[test]

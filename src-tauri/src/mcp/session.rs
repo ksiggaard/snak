@@ -20,7 +20,7 @@ use serde_json::{json, Value};
 use tokio::sync::Mutex;
 
 use super::ServerConfig;
-use crate::providers::ToolDef;
+use crate::providers::{ToolDef, ToolImage};
 
 /// Split a whitespace-delimited command line into (program, args).
 fn parse_command(command: &str) -> anyhow::Result<(String, Vec<String>)> {
@@ -140,9 +140,9 @@ impl McpSessions {
         server: &ServerConfig,
         tool: &str,
         args: &Value,
-    ) -> anyhow::Result<String> {
+    ) -> anyhow::Result<(String, Vec<ToolImage>)> {
         match self.try_call(thread_id, server, tool, args).await {
-            Ok(text) => Ok(text),
+            Ok(out) => Ok(out),
             Err(first) => {
                 self.close_one(thread_id, &server.id).await;
                 self.try_call(thread_id, server, tool, args)
@@ -152,19 +152,22 @@ impl McpSessions {
         }
     }
 
+    /// Returns the model-facing text plus any images the tool returned (e.g. a
+    /// screenshot), pulled out of the text so their base64 never enters the model
+    /// context — the caller streams them to the UI.
     async fn try_call(
         &self,
         thread_id: &str,
         server: &ServerConfig,
         tool: &str,
         args: &Value,
-    ) -> anyhow::Result<String> {
+    ) -> anyhow::Result<(String, Vec<ToolImage>)> {
         let peer = self.get_or_create(thread_id, server).await?;
         let mut params = CallToolRequestParams::new(tool.to_string());
         params.arguments = args.as_object().cloned();
         let result = peer.call_tool(params).await?;
         let v = serde_json::to_value(&result)?;
-        Ok(super::text_from_call_result(&v))
+        Ok(super::split_call_result(&v))
     }
 
     /// Cancel + remove one session.
@@ -301,11 +304,11 @@ mod tests {
         assert!(tools.iter().any(|t| t.name == "increment"));
 
         // Same thread reuses the process -> counter persists (1, then 2).
-        let r1 = sessions
+        let (r1, _) = sessions
             .call_tool("A", &cfg, "increment", &args)
             .await
             .unwrap();
-        let r2 = sessions
+        let (r2, _) = sessions
             .call_tool("A", &cfg, "increment", &args)
             .await
             .unwrap();
@@ -313,7 +316,7 @@ mod tests {
         assert_eq!(r2.trim(), "2");
 
         // A different thread gets its own fresh process -> resets to 1.
-        let r3 = sessions
+        let (r3, _) = sessions
             .call_tool("B", &cfg, "increment", &args)
             .await
             .unwrap();
