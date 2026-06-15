@@ -22,6 +22,7 @@
 //! `chat_stream`; an empty/all-disabled list produces an empty tool slice.
 
 pub mod image_search;
+pub mod session;
 pub mod sysdebug;
 pub mod web_browse;
 pub mod web_search;
