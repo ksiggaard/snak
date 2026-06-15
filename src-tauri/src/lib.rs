@@ -194,6 +194,7 @@ pub fn run() {
         .manage(CloseToTray::default())
         .manage(commands::chat::CancelFlag::default())
         .manage(commands::chat::PendingApprovals::default())
+        .manage(commands::keys::KeyCache::default())
         .manage(mcp::session::McpSessions::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())

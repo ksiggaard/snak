@@ -90,6 +90,7 @@ pub async fn chat_stream(
     sessions: State<'_, crate::mcp::session::McpSessions>,
     cancel: State<'_, CancelFlag>,
     approvals: State<'_, PendingApprovals>,
+    key_cache: State<'_, keys::KeyCache>,
 ) -> Result<ChatResponse, String> {
     // Reset any leftover cancellation from a previous request.
     let flag = cancel.0.clone();
@@ -104,7 +105,9 @@ pub async fn chat_stream(
     let api_key = if providers::is_keyless(&provider) {
         String::new()
     } else {
-        keys::get_api_key(&provider)?
+        // Cached read: the keychain (and its OS authorization prompt) is hit at
+        // most once per provider per app run, not on every message send.
+        keys::get_api_key_cached(&key_cache, &provider)?
             .ok_or_else(|| format!("No API key set for {provider}. Add one in Settings."))?
     };
 
