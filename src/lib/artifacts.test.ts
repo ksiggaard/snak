@@ -132,6 +132,42 @@ describe("assembleArtifact", () => {
   });
 });
 
+describe("parseArtifact / JSON fallback", () => {
+  it("parses the {title, files:[{path, contents}]} JSON shape", () => {
+    const out = parseArtifact(
+      JSON.stringify({
+        title: "My Website",
+        files: [
+          { path: "index.html", contents: "<!DOCTYPE html><h1>Hi</h1>" },
+          { path: "style.css", contents: "h1{color:red}" },
+        ],
+      }),
+    );
+    expect(out).not.toBeNull();
+    expect(out!.title).toBe("My Website");
+    expect(out!.files.map((f) => f.path)).toEqual(["index.html", "style.css"]);
+    expect(out!.files[0].content).toContain("<h1>Hi</h1>");
+  });
+
+  it("accepts content/contents/code/source and path/name keys", () => {
+    const out = parseArtifact(
+      JSON.stringify({ files: [{ name: "app.js", code: "x()" }] }),
+    );
+    expect(out!.files[0]).toEqual({ path: "app.js", content: "x()" });
+  });
+
+  it("extracts JSON from surrounding prose or a ```json fence", () => {
+    const prose =
+      'Here is the site:\n```json\n{"files":[{"path":"a.html","content":"<p>a</p>"}]}\n```\nEnjoy!';
+    expect(parseArtifact(prose)!.files[0].path).toBe("a.html");
+  });
+
+  it("returns null for non-artifact JSON and incomplete JSON", () => {
+    expect(parseArtifact('{"foo": 1, "bar": [1,2,3]}')).toBeNull();
+    expect(parseArtifact('{"files":[{"path":"a.js","content":"x"')).toBeNull();
+  });
+});
+
 describe("serializeArtifact / round-trip", () => {
   it("round-trips through parseArtifact", () => {
     const files = [

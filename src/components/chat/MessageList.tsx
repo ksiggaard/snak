@@ -26,6 +26,9 @@ import {
 import { cn } from "@/lib/utils";
 import { openExternal } from "@/lib/openExternal";
 import { Markdown } from "@/components/chat/Markdown";
+import { ArtifactCard } from "@/components/chat/ArtifactCard";
+import { ArtifactContext } from "@/components/chat/artifactContext";
+import { parseArtifact } from "@/lib/artifacts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { BotAvatar } from "@/components/bots/BotAvatar";
@@ -765,20 +768,43 @@ function ChatMessage({
       ))}
     </div>
   );
+  // A model that ignores the ```artifact fence and emits the whole artifact as
+  // raw JSON / delimiter text (common with local models) still renders as an
+  // artifact: detect a fence-less, whole-message artifact and show the card.
+  const wholeArtifact = useMemo(
+    () =>
+      m.role === "assistant" && m.content && !m.content.includes("```")
+        ? parseArtifact(m.content)
+        : null,
+    [m.role, m.content],
+  );
+  const realMessageId = m.id === STREAM_ID ? null : m.id;
   const body =
     m.content &&
     (m.role === "assistant" ? (
-      // Assistant text is Markdown (GFM + highlighted code fences).
-      // react-markdown tolerates partial/unclosed Markdown, so this
-      // is safe to render against the growing streaming placeholder.
-      <Markdown
-        content={m.content}
-        suppressedVideoIds={suppressedVideoIds}
-        // Real ids only: a streaming placeholder stays ephemeral so artifacts
-        // persist exactly once, when the reply is saved.
-        messageId={m.id === STREAM_ID ? null : m.id}
-        threadId={m.id === STREAM_ID ? null : m.thread_id}
-      />
+      wholeArtifact ? (
+        <ArtifactContext.Provider
+          value={{
+            messageId: realMessageId,
+            threadId: realMessageId ? m.thread_id : null,
+            ordinalFor: () => 0,
+          }}
+        >
+          <ArtifactCard code={m.content} />
+        </ArtifactContext.Provider>
+      ) : (
+        // Assistant text is Markdown (GFM + highlighted code fences).
+        // react-markdown tolerates partial/unclosed Markdown, so this
+        // is safe to render against the growing streaming placeholder.
+        <Markdown
+          content={m.content}
+          suppressedVideoIds={suppressedVideoIds}
+          // Real ids only: a streaming placeholder stays ephemeral so artifacts
+          // persist exactly once, when the reply is saved.
+          messageId={realMessageId}
+          threadId={realMessageId ? m.thread_id : null}
+        />
+      )
     ) : (
       <span className="whitespace-pre-wrap">{m.content}</span>
     ));

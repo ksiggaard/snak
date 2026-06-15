@@ -130,10 +130,65 @@ export function parseArtifact(text: string): ParsedArtifact | null {
     if (current) current.content += current.content === "" ? line : "\n" + line;
   }
 
-  if (files.length === 0) return null;
+  // No `--- path ---` delimiters → fall back to the JSON shape many models emit
+  // instead of the fence format (e.g. `{title, files:[{path, content}]}`).
+  if (files.length === 0) return parseArtifactJson(text);
   // Trim a single trailing newline-run left by the block's closing fence.
   for (const f of files) f.content = f.content.replace(/\s+$/, "");
   if (!title) title = titleFromHtml(files) ?? "Artifact";
+  return { title, files };
+}
+
+/** Pull a balanced `{…}` object out of `text` (optionally inside a ```json /
+ * ```artifact fence, or amid surrounding prose). Returns the JSON substring. */
+function extractJsonObject(text: string): string | null {
+  const fence = /```(?:json|artifact)?\s*\n?([\s\S]*?)```/i.exec(text);
+  const body = (fence ? fence[1] : text).trim();
+  const start = body.indexOf("{");
+  const end = body.lastIndexOf("}");
+  if (start === -1 || end <= start) return null;
+  return body.slice(start, end + 1);
+}
+
+/**
+ * Parse the JSON artifact shape some models emit instead of the fence format:
+ * `{ title?, files: [{ path|name, content|contents|code }] }`. Returns `null`
+ * unless it parses to an object with a non-empty array of `{path, content}`
+ * files (so ordinary JSON answers aren't mistaken for artifacts).
+ */
+function parseArtifactJson(text: string): ParsedArtifact | null {
+  const json = extractJsonObject(text);
+  if (!json) return null;
+  let obj: unknown;
+  try {
+    obj = JSON.parse(json);
+  } catch {
+    return null; // incomplete (still streaming) or not JSON
+  }
+  if (!obj || typeof obj !== "object") return null;
+  const o = obj as Record<string, unknown>;
+  const raw = Array.isArray(o.files)
+    ? o.files
+    : Array.isArray(o.artifacts)
+      ? o.artifacts
+      : null;
+  if (!raw) return null;
+  const pick = (v: unknown, keys: string[]): string => {
+    const r = v as Record<string, unknown>;
+    for (const k of keys) if (typeof r?.[k] === "string") return r[k] as string;
+    return "";
+  };
+  const files: ArtifactFile[] = raw
+    .map((f) => ({
+      path: pick(f, ["path", "name", "filename"]),
+      content: pick(f, ["content", "contents", "code", "source"]),
+    }))
+    .filter((f) => f.path);
+  if (files.length === 0) return null;
+  const title =
+    typeof o.title === "string" && o.title.trim()
+      ? o.title.trim()
+      : (titleFromHtml(files) ?? "Artifact");
   return { title, files };
 }
 

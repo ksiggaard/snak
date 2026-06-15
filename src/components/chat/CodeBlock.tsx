@@ -7,7 +7,7 @@ import { isShellLanguage, openInTerminal } from "@/lib/terminal";
 import { Mermaid } from "@/components/chat/Mermaid";
 import { VegaChart } from "@/components/chat/VegaChart";
 import { ArtifactCard } from "@/components/chat/ArtifactCard";
-import { ARTIFACT_LANGUAGE } from "@/lib/artifacts";
+import { ARTIFACT_LANGUAGE, parseArtifact } from "@/lib/artifacts";
 import { selectRegistry, usePlugins } from "@/store/plugins";
 import { useT } from "@/store/i18n";
 
@@ -45,6 +45,16 @@ export function CodeBlock({ className, children }: CodeBlockProps) {
     language &&
     language.toLowerCase() === ARTIFACT_LANGUAGE &&
     hasRenderer(registry, ARTIFACT_LANGUAGE)
+  ) {
+    return <ArtifactCard code={text} />;
+  }
+  // Some models emit the artifact as a JSON object in a ```json fence instead of
+  // the ```artifact format — render it as an artifact when it's clearly one.
+  if (
+    language &&
+    language.toLowerCase() === "json" &&
+    hasRenderer(registry, ARTIFACT_LANGUAGE) &&
+    parseArtifact(text)
   ) {
     return <ArtifactCard code={text} />;
   }

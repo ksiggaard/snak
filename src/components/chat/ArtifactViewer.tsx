@@ -147,14 +147,15 @@ export function ArtifactViewer({
         (e) => {
           if (!e.text) return;
           acc += e.text;
-          const block = extractArtifactBlock(acc);
-          const live = block ? parseArtifact(block) : null;
+          // Accept either the ```artifact fence or a bare JSON/delimiter body.
+          const live = parseArtifact(extractArtifactBlock(acc) ?? acc);
           if (live && live.files.length) setFiles(live.files); // live preview
         },
         thread.id,
       );
-      const block = extractArtifactBlock(result.content);
-      const parsedFinal = block ? parseArtifact(block) : null;
+      const parsedFinal = parseArtifact(
+        extractArtifactBlock(result.content) ?? result.content,
+      );
       if (!parsedFinal || !parsedFinal.files.length)
         throw new Error(t("artifact.editNoArtifact"));
       setFiles(parsedFinal.files);

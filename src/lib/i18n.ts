@@ -309,6 +309,9 @@ export const en = {
 
   // --- Artifacts ---------------------------------------------------------------
   "artifact.building": "Building artifact…",
+  "artifact.writing": "writing…",
+  "artifact.chars.one": "{n} char",
+  "artifact.chars.other": "{n} chars",
   "artifact.previewTitle": "Artifact preview",
   "artifact.open": "Open",
   "artifact.code": "Code",

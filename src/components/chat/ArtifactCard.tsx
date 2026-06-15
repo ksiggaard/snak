@@ -7,6 +7,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
+  Check,
   Code2,
   FileCode,
   GripHorizontal,
@@ -119,17 +120,65 @@ export function ArtifactCard({ code }: { code: string }) {
     };
   }, [parsed, ctx, ensure, slotKey]);
 
+  // No real message id yet → the reply is still streaming (ephemeral). Used to
+  // show a live build-progress view instead of the finished card.
+  const isStreaming = ctx.messageId === null;
+
   if (!parsed) {
     return (
       <div className="border-border bg-background/60 text-muted-foreground my-2 flex items-center gap-2 rounded-md border px-3 py-2 text-xs">
         <Loader2 className="size-3 animate-spin" />
-        {t("artifact.building")}
+        <span>{t("artifact.building")}</span>
+        {isStreaming && code.length > 0 && (
+          <span className="opacity-70">
+            · {tp("artifact.chars", code.length)}
+          </span>
+        )}
       </div>
     );
   }
 
   const files = stored?.files ?? parsed.files;
   const title = stored?.title ?? parsed.title;
+
+  // While streaming, show which files have been written and which one is in
+  // progress (with its growing size) — so a slow/stuck model is visible at a
+  // glance. The last parsed file is the one currently being written.
+  if (isStreaming) {
+    const lastIndex = files.length - 1;
+    return (
+      <div className="border-border bg-background/60 my-2 overflow-hidden rounded-md border">
+        <div className="border-border flex items-center gap-2 border-b px-3 py-1.5 text-xs">
+          <Loader2 className="text-muted-foreground size-3.5 shrink-0 animate-spin" />
+          <span className="truncate font-medium">{title}</span>
+          <span className="text-muted-foreground shrink-0">
+            {t("artifact.building")}
+          </span>
+        </div>
+        <ul className="flex flex-col gap-1 px-3 py-2 text-xs">
+          {files.map((f, i) => {
+            const active = i === lastIndex;
+            return (
+              <li key={`${f.path}-${i}`} className="flex items-center gap-2">
+                {active ? (
+                  <Loader2 className="text-muted-foreground size-3 shrink-0 animate-spin" />
+                ) : (
+                  <Check className="size-3 shrink-0 text-green-600 dark:text-green-500" />
+                )}
+                <span className="truncate font-mono">{f.path}</span>
+                {active && (
+                  <span className="text-muted-foreground shrink-0">
+                    · {t("artifact.writing")}{" "}
+                    {tp("artifact.chars", f.content.length)}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  }
 
   return (
     <div className="border-border bg-background/60 my-2 overflow-hidden rounded-md border">
