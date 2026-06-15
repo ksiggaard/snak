@@ -77,12 +77,17 @@ pub struct CancelFlag(pub Arc<AtomicBool>);
 pub struct PendingApprovals(pub Mutex<HashMap<String, oneshot::Sender<bool>>>);
 
 #[tauri::command]
+// Tauri command surface: provider/model/messages, the delta channel, the MCP
+// server list + per-thread session registry, and the cancel/approval state.
+#[allow(clippy::too_many_arguments)]
 pub async fn chat_stream(
     provider: String,
     model: String,
     messages: Vec<ChatMessage>,
     on_delta: Channel<StreamDelta>,
     #[allow(non_snake_case)] mcpServers: Option<Vec<ServerConfig>>,
+    #[allow(non_snake_case)] threadId: String,
+    sessions: State<'_, crate::mcp::session::McpSessions>,
     cancel: State<'_, CancelFlag>,
     approvals: State<'_, PendingApprovals>,
 ) -> Result<ChatResponse, String> {
@@ -113,7 +118,7 @@ pub async fn chat_stream(
     let tools = if servers.is_empty() {
         Vec::new()
     } else {
-        mcp::list_tools(&client, &servers).await
+        mcp::list_tools(&client, sessions.inner(), &threadId, &servers).await
     };
 
     // Working history grows as the loop appends assistant tool-call turns and
@@ -198,7 +203,15 @@ pub async fn chat_stream(
                 .map_err(|e| format!("channel send failed: {e}"))?;
 
             // Runs the tool, streaming any live output to the UI as it arrives.
-            let content = mcp::call_tool(&client, &servers, call, &on_delta).await;
+            let content = mcp::call_tool(
+                &client,
+                sessions.inner(),
+                &threadId,
+                &servers,
+                call,
+                &on_delta,
+            )
+            .await;
             let ok = !content.starts_with("tool error:");
             on_delta
                 .send(StreamDelta::tool_done(&call.id, ok))

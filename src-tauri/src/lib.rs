@@ -194,6 +194,7 @@ pub fn run() {
         .manage(CloseToTray::default())
         .manage(commands::chat::CancelFlag::default())
         .manage(commands::chat::PendingApprovals::default())
+        .manage(mcp::session::McpSessions::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(
@@ -225,6 +226,20 @@ pub fn run() {
 
             // Native application menu (macOS menu bar / Linux global menu).
             menu::install(app)?;
+
+            // Reap idle external-stdio MCP sessions (e.g. a lingering headless
+            // browser) ~every minute; 10-minute idle window.
+            {
+                let sessions = app.state::<mcp::session::McpSessions>().inner().clone();
+                tauri::async_runtime::spawn(async move {
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                        sessions
+                            .reap_idle(std::time::Duration::from_secs(600))
+                            .await;
+                    }
+                });
+            }
 
             // System tray: icon + menu (Show/Hide, Quit) and click-to-toggle.
             let show_hide = MenuItem::with_id(app, "show_hide", "Show / Hide", true, None::<&str>)?;
@@ -306,7 +321,18 @@ pub fn run() {
             plugins::set_plugin_enabled,
             plugins::uninstall_plugin,
             mcp::mcp_list_tools,
+            mcp::mcp_close_thread_sessions,
+            mcp::mcp_close_server_sessions,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                let sessions = app_handle
+                    .state::<mcp::session::McpSessions>()
+                    .inner()
+                    .clone();
+                tauri::async_runtime::block_on(sessions.close_all());
+            }
+        });
 }
