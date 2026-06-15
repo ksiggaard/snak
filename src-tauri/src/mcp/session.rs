@@ -8,6 +8,7 @@
 //! change, and app exit. Built-in and HTTP servers do NOT use this module.
 
 use anyhow::anyhow;
+use std::time::Duration;
 
 /// Split a whitespace-delimited command line into (program, args).
 fn parse_command(command: &str) -> anyhow::Result<(String, Vec<String>)> {
@@ -17,6 +18,15 @@ fn parse_command(command: &str) -> anyhow::Result<(String, Vec<String>)> {
         .ok_or_else(|| anyhow!("empty stdio command"))?
         .to_string();
     Ok((prog, parts.map(|s| s.to_string()).collect()))
+}
+
+/// Keys whose idle time is at least `max_idle`. Pure, so it is unit-tested.
+fn reap_targets<K: Clone>(entries: &[(K, Duration)], max_idle: Duration) -> Vec<K> {
+    entries
+        .iter()
+        .filter(|(_, idle)| *idle >= max_idle)
+        .map(|(k, _)| k.clone())
+        .collect()
 }
 
 #[cfg(test)]
@@ -37,5 +47,18 @@ mod tests {
     #[test]
     fn empty_command_errors() {
         assert!(parse_command("   ").is_err());
+    }
+
+    #[test]
+    fn reap_targets_picks_only_expired() {
+        let max = Duration::from_secs(600);
+        let entries = [
+            ("a", Duration::from_secs(700)), // expired
+            ("b", Duration::from_secs(599)), // fresh
+            ("c", Duration::from_secs(600)), // exactly at limit -> expired
+        ];
+        let mut got = reap_targets(&entries, max);
+        got.sort();
+        assert_eq!(got, ["a", "c"]);
     }
 }
