@@ -321,8 +321,8 @@ mod tests {
     fn all_builtins_are_valid_and_enabled_by_default() {
         let builtins = builtin_manifests();
         // Five provider plugins (T18/T37) + the /terminal slash-command plugin
-        // (T14) + the mermaid renderer plugin (T42).
-        assert_eq!(builtins.len(), 7, "expected 7 built-in plugins");
+        // (T14) + three renderer plugins: mermaid (T42), charts, and youtube.
+        assert_eq!(builtins.len(), 9, "expected 9 built-in plugins");
         let providers = builtins.iter().filter(|m| m.category == "provider").count();
         assert_eq!(providers, 5, "expected 5 built-in providers");
         for m in &builtins {
