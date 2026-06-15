@@ -76,6 +76,19 @@ export interface McpListedTool {
   description: string;
 }
 
+/** A server that failed to list its tools, surfaced in settings. Mirrors the
+ * Rust `ServerToolError`. */
+export interface McpServerToolError {
+  server_id: string;
+  message: string;
+}
+
+/** Result of a settings tool refresh: listed tools + per-server errors. */
+export interface McpToolsReport {
+  tools: McpListedTool[];
+  errors: McpServerToolError[];
+}
+
 /** The always-present built-in web-browse server entry (enabled by default). */
 export const BUILTIN_WEB_SERVER: McpServer = {
   id: "web",
@@ -282,7 +295,8 @@ export function mcpCloseServerSessions(serverId: string): Promise<void> {
   return invoke("mcp_close_server_sessions", { serverId });
 }
 
-/** List the tools the given servers expose (settings "refresh/test"). */
-export function listTools(servers: McpServer[]): Promise<McpListedTool[]> {
+/** List the tools the given servers expose, plus per-server errors (settings
+ * "refresh/test"). */
+export function listTools(servers: McpServer[]): Promise<McpToolsReport> {
   return invoke("mcp_list_tools", { servers });
 }
