@@ -467,6 +467,11 @@ async fn call_http_tool(
 // Command surface
 // ---------------------------------------------------------------------------
 
+/// Reserved synthetic thread key used by `mcp_list_tools` so a settings "refresh"
+/// can spin up (and tear down) stdio sessions without colliding with a real chat
+/// thread's sessions. Never a real thread id (those are DB row ids).
+const SETTINGS_THREAD_KEY: &str = "__settings__";
+
 /// A tool as surfaced to the settings UI (server id + tool metadata), so the
 /// "refresh / test" action can show what a configured server exposes.
 #[derive(Debug, Serialize)]
@@ -506,7 +511,7 @@ pub async fn mcp_list_tools(
     for server in servers.iter().filter(|s| s.enabled) {
         let res: anyhow::Result<Vec<ToolDef>> = match server.transport() {
             Transport::Builtin => Ok(builtin_tools(&server.id)),
-            Transport::Stdio => sessions.list_tools("__settings__", server).await,
+            Transport::Stdio => sessions.list_tools(SETTINGS_THREAD_KEY, server).await,
             Transport::Http => list_http_tools(&client, server).await,
         };
         match res {
@@ -525,7 +530,7 @@ pub async fn mcp_list_tools(
             }),
         }
     }
-    sessions.close_thread("__settings__").await;
+    sessions.close_thread(SETTINGS_THREAD_KEY).await;
     Ok(ListToolsReport { tools, errors })
 }
 
