@@ -85,6 +85,10 @@ pub struct ServerConfig {
     /// (`duckduckgo` (default) / `brave` / `serper`). Ignored by other servers.
     #[serde(default)]
     pub search_provider: Option<String>,
+    /// Environment variables for a `Stdio` server's child process. Nested arg,
+    /// so (like `search_provider`) it rides snake_case as-is from the frontend.
+    #[serde(default)]
+    pub env: Option<std::collections::HashMap<String, String>>,
 }
 
 fn default_true() -> bool {
@@ -97,6 +101,32 @@ impl ServerConfig {
             .clone()
             .or_else(|| self.transport_alias.clone())
             .unwrap_or(Transport::Builtin)
+    }
+
+    /// A hash of the launch-relevant config (command + env + enabled). The session
+    /// manager uses it to detect when a server was edited and respawn it.
+    ///
+    /// NOTE: uses `DefaultHasher` (SipHash), whose output is not guaranteed stable
+    /// across Rust releases — this value is only meaningful within a single process
+    /// run. Do not persist it across restarts.
+    pub fn fingerprint(&self) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut h = DefaultHasher::new();
+        self.command.hash(&mut h);
+        self.enabled.hash(&mut h);
+        // Sort env pairs so HashMap iteration order doesn't change the hash.
+        let mut pairs: Vec<(&String, &String)> = self
+            .env
+            .as_ref()
+            .map(|m| m.iter().collect())
+            .unwrap_or_default();
+        pairs.sort();
+        for (k, v) in pairs {
+            k.hash(&mut h);
+            v.hash(&mut h);
+        }
+        h.finish()
     }
 }
 
@@ -225,8 +255,15 @@ async fn builtin_call(
         sysdebug::SERVER_ID => sysdebug::call_tool(tool, args, emit).await,
         youtube::SERVER_ID => youtube::call_tool(client, tool, args, emit_images).await,
         _ => {
-            web_browse::call_tool(client, tool, args, search_provider, emit_images, emit_sources)
-                .await
+            web_browse::call_tool(
+                client,
+                tool,
+                args,
+                search_provider,
+                emit_images,
+                emit_sources,
+            )
+            .await
         }
     }
 }
@@ -631,8 +668,60 @@ mod tests {
             url: None,
             enabled: false,
             search_provider: None,
+            env: None,
         };
         assert!(!cfg.enabled);
         assert!(matches!(cfg.transport(), Transport::Builtin));
+    }
+
+    fn cfg(command: &str, env: Option<std::collections::HashMap<String, String>>) -> ServerConfig {
+        ServerConfig {
+            id: "x".into(),
+            transport_kind: Some(Transport::Stdio),
+            transport_alias: None,
+            command: Some(command.into()),
+            url: None,
+            enabled: true,
+            search_provider: None,
+            env,
+        }
+    }
+
+    #[test]
+    fn fingerprint_is_stable_and_env_order_independent() {
+        use std::collections::HashMap;
+        let a = cfg(
+            "npx -y srv",
+            Some(HashMap::from([
+                ("A".to_string(), "1".to_string()),
+                ("B".to_string(), "2".to_string()),
+            ])),
+        );
+        let b = cfg(
+            "npx -y srv",
+            Some(HashMap::from([
+                ("B".to_string(), "2".to_string()),
+                ("A".to_string(), "1".to_string()),
+            ])),
+        );
+        assert_eq!(a.fingerprint(), b.fingerprint());
+        // Idempotent within a run (the "stable" half of the name).
+        assert_eq!(a.fingerprint(), a.fingerprint());
+    }
+
+    #[test]
+    fn fingerprint_changes_with_command_env_and_enabled() {
+        use std::collections::HashMap;
+        let base = cfg("npx -y srv", None);
+        let other_cmd = cfg("npx -y other", None);
+        let with_env = cfg(
+            "npx -y srv",
+            Some(HashMap::from([("A".to_string(), "1".to_string())])),
+        );
+        let mut disabled = cfg("npx -y srv", None);
+        disabled.enabled = false;
+        assert_ne!(base.fingerprint(), other_cmd.fingerprint());
+        assert_ne!(base.fingerprint(), with_env.fingerprint());
+        assert_ne!(base.fingerprint(), disabled.fingerprint());
     }
 }
