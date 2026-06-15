@@ -13,21 +13,37 @@ import { NativeSelect } from "@/components/NativeSelect";
 import {
   BUILTIN_SYSDEBUG_SERVER,
   BUILTIN_WEB_SERVER,
+  formatEnvText,
   KEYED_SEARCH_PROVIDERS,
   listTools,
   loadAllowCloudSysTools,
   loadServers,
+  mcpCloseServerSessions,
+  parseEnvText,
   saveServers,
   setAllowCloudSysTools,
   setSearchApiKey,
   type McpListedTool,
   type McpServer,
+  type McpServerToolError,
   type McpTransport,
   type WebSearchProvider,
 } from "@/lib/mcp";
 import { confirmDialog } from "@/store/confirm";
 import { t as tNow, useT } from "@/store/i18n";
 import { ShieldAlert } from "lucide-react";
+
+/** Shared styling for the env-vars textareas (add + edit forms). */
+const ENV_TEXTAREA_CLASS =
+  "border-input bg-transparent placeholder:text-muted-foreground focus-visible:ring-ring rounded-md border px-3 py-2 font-mono text-xs focus-visible:ring-1 focus-visible:outline-none";
+
+/** Fire-and-forget MCP session teardown: a backend hiccup must not disrupt the
+ * settings UI, so log and move on (the idle reaper would reclaim them anyway). */
+function closeServerSessions(id: string) {
+  void mcpCloseServerSessions(id).catch((e) =>
+    console.warn("mcpCloseServerSessions failed:", e),
+  );
+}
 
 /**
  * MCP servers settings card (T13). Lets the user toggle the built-in web-browse
@@ -40,6 +56,7 @@ export function McpServers() {
   const t = useT();
   const [servers, setServers] = useState<McpServer[]>([]);
   const [tools, setTools] = useState<McpListedTool[]>([]);
+  const [serverErrors, setServerErrors] = useState<McpServerToolError[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Cloud opt-in for the read-only system-diagnostics server (default off).
@@ -49,6 +66,12 @@ export function McpServers() {
   const [draftLabel, setDraftLabel] = useState("");
   const [draftTransport, setDraftTransport] = useState<McpTransport>("stdio");
   const [draftTarget, setDraftTarget] = useState("");
+  const [draftEnv, setDraftEnv] = useState("");
+
+  // Inline edit state for custom (non-builtin) servers.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTarget, setEditTarget] = useState("");
+  const [editEnv, setEditEnv] = useState("");
 
   // Web-search API key entry (T52), for keyed providers (Brave/Serper).
   const [searchKey, setSearchKey] = useState("");
@@ -106,13 +129,42 @@ export function McpServers() {
   }
 
   function toggle(id: string) {
-    void persist(
-      servers.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)),
+    const next = servers.map((s) =>
+      s.id === id ? { ...s, enabled: !s.enabled } : s,
     );
+    const nowEnabled = next.find((s) => s.id === id)?.enabled;
+    if (nowEnabled === false) closeServerSessions(id);
+    void persist(next);
   }
 
   function remove(id: string) {
+    closeServerSessions(id);
     void persist(servers.filter((s) => s.id !== id));
+  }
+
+  function beginEdit(s: McpServer) {
+    setEditingId(s.id);
+    setEditTarget(s.command ?? s.url ?? "");
+    setEditEnv(formatEnvText(s.env));
+  }
+
+  function saveEdit(s: McpServer) {
+    const target = editTarget.trim();
+    if (!target) return;
+    closeServerSessions(s.id);
+    const env = s.transport === "stdio" ? parseEnvText(editEnv) : {};
+    void persist(
+      servers.map((x) =>
+        x.id === s.id
+          ? {
+              ...x,
+              ...(s.transport === "http" ? { url: target } : { command: target }),
+              env: Object.keys(env).length > 0 ? env : undefined,
+            }
+          : x,
+      ),
+    );
+    setEditingId(null);
   }
 
   function addCustom() {
@@ -129,23 +181,28 @@ export function McpServers() {
     let n = 1;
     while (servers.some((s) => s.id === id)) id = `${base}-${++n}`;
 
+    const env = draftTransport === "stdio" ? parseEnvText(draftEnv) : {};
     const server: McpServer = {
       id,
       label,
       transport: draftTransport,
       enabled: true,
       ...(draftTransport === "http" ? { url: target } : { command: target }),
+      ...(Object.keys(env).length > 0 ? { env } : {}),
     };
     void persist([...servers, server]);
     setDraftLabel("");
     setDraftTarget("");
+    setDraftEnv("");
   }
 
   async function refreshTools() {
     setLoading(true);
     setError(null);
     try {
-      setTools(await listTools(servers.filter((s) => s.enabled)));
+      const report = await listTools(servers.filter((s) => s.enabled));
+      setTools(report.tools);
+      setServerErrors(report.errors);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -197,24 +254,68 @@ export function McpServers() {
                     </span>
                   </label>
                   {!s.builtin && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        void confirmDialog({
-                          title: tNow("mcp.removeTitle", { label: s.label }),
-                          confirmText: tNow("common.remove"),
-                          destructive: true,
-                        }).then((ok) => {
-                          if (ok) remove(s.id);
-                        });
-                      }}
-                    >
-                      {t("common.remove")}
-                    </Button>
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          editingId === s.id ? setEditingId(null) : beginEdit(s)
+                        }
+                      >
+                        {editingId === s.id
+                          ? t("common.cancel")
+                          : t("common.edit")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          void confirmDialog({
+                            title: tNow("mcp.removeTitle", { label: s.label }),
+                            confirmText: tNow("common.remove"),
+                            destructive: true,
+                          }).then((ok) => {
+                            if (ok) remove(s.id);
+                          });
+                        }}
+                      >
+                        {t("common.remove")}
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
+              {editingId === s.id && (
+                <div className="mt-2 flex flex-col gap-2">
+                  <Input
+                    value={editTarget}
+                    onChange={(e) => setEditTarget(e.target.value)}
+                    placeholder={
+                      s.transport === "http"
+                        ? "https://server/mcp"
+                        : "command --arg"
+                    }
+                  />
+                  {s.transport === "stdio" && (
+                    <textarea
+                      className={ENV_TEXTAREA_CLASS}
+                      rows={2}
+                      aria-label={t("mcp.envLabel")}
+                      placeholder={t("mcp.envPlaceholder")}
+                      value={editEnv}
+                      onChange={(e) => setEditEnv(e.target.value)}
+                    />
+                  )}
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="self-start"
+                    onClick={() => saveEdit(s)}
+                  >
+                    {t("common.save")}
+                  </Button>
+                </div>
+              )}
               {s.id === BUILTIN_WEB_SERVER.id && s.enabled && (
                 <div className="bg-muted/40 flex flex-col gap-2 rounded-md border p-2 text-xs">
                   <span className="text-muted-foreground">
@@ -332,6 +433,16 @@ export function McpServers() {
               onChange={(e) => setDraftTarget(e.target.value)}
             />
           </div>
+          {draftTransport === "stdio" && (
+            <textarea
+              className={ENV_TEXTAREA_CLASS}
+              rows={2}
+              aria-label={t("mcp.envLabel")}
+              placeholder={t("mcp.envPlaceholder")}
+              value={draftEnv}
+              onChange={(e) => setDraftEnv(e.target.value)}
+            />
+          )}
           <Button
             size="sm"
             variant="outline"
@@ -356,6 +467,18 @@ export function McpServers() {
               {loading ? t("common.loading") : t("common.refresh")}
             </Button>
           </div>
+          {serverErrors.length > 0 && (
+            <ul className="flex flex-col gap-1">
+              {serverErrors.map((e) => (
+                <li
+                  key={e.server_id}
+                  className="text-destructive text-xs break-all"
+                >
+                  <code>{e.server_id}</code>: {e.message}
+                </li>
+              ))}
+            </ul>
+          )}
           {tools.length === 0 ? (
             <p className="text-muted-foreground text-sm">
               {t("mcp.refreshHint")}

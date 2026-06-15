@@ -45,6 +45,8 @@ export interface McpServer {
    * match the Rust `ServerConfig` field — nested command args aren't
    * camelCase-converted by Tauri. */
   search_provider?: WebSearchProvider;
+  /** For stdio servers: environment variables for the child process. */
+  env?: Record<string, string>;
 }
 
 /** Web-search backends for the built-in `web` server (T52). */
@@ -72,6 +74,19 @@ export interface McpListedTool {
   server_id: string;
   name: string;
   description: string;
+}
+
+/** A server that failed to list its tools, surfaced in settings. Mirrors the
+ * Rust `ServerToolError`. */
+export interface McpServerToolError {
+  server_id: string;
+  message: string;
+}
+
+/** Result of a settings tool refresh: listed tools + per-server errors. */
+export interface McpToolsReport {
+  tools: McpListedTool[];
+  errors: McpServerToolError[];
 }
 
 /** The always-present built-in web-browse server entry (enabled by default). */
@@ -245,7 +260,43 @@ export function gateServersForChat(
   });
 }
 
-/** List the tools the given servers expose (settings "refresh/test"). */
-export function listTools(servers: McpServer[]): Promise<McpListedTool[]> {
+/** Parse a textarea of `KEY=value` lines into an env record. Blank lines and
+ * lines starting with `#` are ignored; the value is everything after the first
+ * `=`. Keys are trimmed. Pure — unit-tested. */
+export function parseEnvText(text: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq < 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    if (key) out[key] = trimmed.slice(eq + 1).trim();
+  }
+  return out;
+}
+
+/** Render an env record as sorted `KEY=value` lines (for the settings textarea). */
+export function formatEnvText(env: Record<string, string> | undefined): string {
+  return Object.entries(env ?? {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}=${v}`)
+    .join("\n");
+}
+
+/** Close every live MCP session for a thread (call when a thread is deleted). */
+export function mcpCloseThreadSessions(threadId: string): Promise<void> {
+  return invoke("mcp_close_thread_sessions", { threadId });
+}
+
+/** Close every live MCP session for a server id across threads (call when a
+ * server is disabled, edited, or removed in settings). */
+export function mcpCloseServerSessions(serverId: string): Promise<void> {
+  return invoke("mcp_close_server_sessions", { serverId });
+}
+
+/** List the tools the given servers expose, plus per-server errors (settings
+ * "refresh/test"). */
+export function listTools(servers: McpServer[]): Promise<McpToolsReport> {
   return invoke("mcp_list_tools", { servers });
 }

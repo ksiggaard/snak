@@ -22,6 +22,7 @@
 //! `chat_stream`; an empty/all-disabled list produces an empty tool slice.
 
 pub mod image_search;
+pub mod session;
 pub mod sysdebug;
 pub mod web_browse;
 pub mod web_search;
@@ -31,7 +32,6 @@ use anyhow::{anyhow, Context};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::ipc::Channel;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 use crate::providers::{StreamDelta, ToolCall, ToolDef, ToolImage, ToolSource};
 
@@ -85,6 +85,10 @@ pub struct ServerConfig {
     /// (`duckduckgo` (default) / `brave` / `serper`). Ignored by other servers.
     #[serde(default)]
     pub search_provider: Option<String>,
+    /// Environment variables for a `Stdio` server's child process. Nested arg,
+    /// so (like `search_provider`) it rides snake_case as-is from the frontend.
+    #[serde(default)]
+    pub env: Option<std::collections::HashMap<String, String>>,
 }
 
 fn default_true() -> bool {
@@ -97,6 +101,32 @@ impl ServerConfig {
             .clone()
             .or_else(|| self.transport_alias.clone())
             .unwrap_or(Transport::Builtin)
+    }
+
+    /// A hash of the launch-relevant config (command + env + enabled). The session
+    /// manager uses it to detect when a server was edited and respawn it.
+    ///
+    /// NOTE: uses `DefaultHasher` (SipHash), whose output is not guaranteed stable
+    /// across Rust releases — this value is only meaningful within a single process
+    /// run. Do not persist it across restarts.
+    pub fn fingerprint(&self) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut h = DefaultHasher::new();
+        self.command.hash(&mut h);
+        self.enabled.hash(&mut h);
+        // Sort env pairs so HashMap iteration order doesn't change the hash.
+        let mut pairs: Vec<(&String, &String)> = self
+            .env
+            .as_ref()
+            .map(|m| m.iter().collect())
+            .unwrap_or_default();
+        pairs.sort();
+        for (k, v) in pairs {
+            k.hash(&mut h);
+            v.hash(&mut h);
+        }
+        h.finish()
     }
 }
 
@@ -119,12 +149,26 @@ fn split_namespaced(name: &str) -> (&str, &str) {
 /// built-in web-browse server is always represented by an entry in `servers`
 /// (the frontend includes it); a caller that passes an empty list gets no tools
 /// (the no-tools invariant).
-pub async fn list_tools(client: &reqwest::Client, servers: &[ServerConfig]) -> Vec<ToolDef> {
+pub async fn list_tools(
+    client: &reqwest::Client,
+    sessions: &session::McpSessions,
+    thread_id: &str,
+    servers: &[ServerConfig],
+) -> Vec<ToolDef> {
     let mut out = Vec::new();
     for server in servers.iter().filter(|s| s.enabled) {
         let tools = match server.transport() {
             Transport::Builtin => builtin_tools(&server.id),
-            Transport::Stdio => list_stdio_tools(server).await.unwrap_or_default(),
+            Transport::Stdio => match sessions.list_tools(thread_id, server).await {
+                Ok(t) => t,
+                Err(e) => {
+                    // Resilient in the chat path: a broken server contributes no
+                    // tools rather than aborting the turn. Logged (dev-visible);
+                    // the settings refresh surfaces it to the user (mcp_list_tools).
+                    eprintln!("MCP server `{}` failed to start: {e:#}", server.id);
+                    Vec::new()
+                }
+            },
             Transport::Http => list_http_tools(client, server).await.unwrap_or_default(),
         };
         for mut t in tools {
@@ -140,6 +184,8 @@ pub async fn list_tools(client: &reqwest::Client, servers: &[ServerConfig]) -> V
 /// model as a failed `tool_result` (so a bad call doesn't abort the turn).
 pub async fn call_tool(
     client: &reqwest::Client,
+    sessions: &session::McpSessions,
+    thread_id: &str,
     servers: &[ServerConfig],
     call: &ToolCall,
     on_delta: &Channel<StreamDelta>,
@@ -158,14 +204,28 @@ pub async fn call_tool(
     let emit_sources = move |sources: Vec<ToolSource>| {
         let _ = on_delta.send(StreamDelta::tool_sources(&call.id, sources));
     };
-    match call_tool_inner(client, servers, call, &emit, &emit_images, &emit_sources).await {
+    match call_tool_inner(
+        client,
+        sessions,
+        thread_id,
+        servers,
+        call,
+        &emit,
+        &emit_images,
+        &emit_sources,
+    )
+    .await
+    {
         Ok(text) => text,
         Err(e) => format!("tool error: {e}"),
     }
 }
 
+#[allow(clippy::too_many_arguments)] // sessions+thread_id thread the registry through.
 async fn call_tool_inner(
     client: &reqwest::Client,
+    sessions: &session::McpSessions,
+    thread_id: &str,
     servers: &[ServerConfig],
     call: &ToolCall,
     emit: LineSink<'_>,
@@ -196,7 +256,11 @@ async fn call_tool_inner(
             )
             .await
         }
-        Transport::Stdio => call_stdio_tool(server, tool, &call.arguments).await,
+        Transport::Stdio => {
+            sessions
+                .call_tool(thread_id, server, tool, &call.arguments)
+                .await
+        }
         Transport::Http => call_http_tool(client, server, tool, &call.arguments).await,
     }
 }
@@ -225,8 +289,15 @@ async fn builtin_call(
         sysdebug::SERVER_ID => sysdebug::call_tool(tool, args, emit).await,
         youtube::SERVER_ID => youtube::call_tool(client, tool, args, emit_images).await,
         _ => {
-            web_browse::call_tool(client, tool, args, search_provider, emit_images, emit_sources)
-                .await
+            web_browse::call_tool(
+                client,
+                tool,
+                args,
+                search_provider,
+                emit_images,
+                emit_sources,
+            )
+            .await
         }
     }
 }
@@ -316,116 +387,6 @@ pub(crate) fn text_from_call_result(result: &Value) -> String {
     out
 }
 
-fn split_command(command: &str) -> anyhow::Result<(String, Vec<String>)> {
-    let mut parts = command.split_whitespace();
-    let prog = parts
-        .next()
-        .ok_or_else(|| anyhow!("empty stdio command"))?
-        .to_string();
-    Ok((prog, parts.map(|s| s.to_string()).collect()))
-}
-
-// ---------------------------------------------------------------------------
-// stdio transport
-// ---------------------------------------------------------------------------
-
-/// Run a single JSON-RPC `initialize` → request round-trip against a freshly
-/// spawned stdio server. We spawn per call (no long-lived pooling this wave) to
-/// keep the manager stateless; servers are cheap relative to a model round-trip.
-async fn stdio_roundtrip(
-    server: &ServerConfig,
-    method: &str,
-    params: Value,
-) -> anyhow::Result<Value> {
-    let command = server
-        .command
-        .as_deref()
-        .ok_or_else(|| anyhow!("stdio server `{}` has no command", server.id))?;
-    let (prog, args) = split_command(command)?;
-
-    let mut child = tokio::process::Command::new(&prog)
-        .args(&args)
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .with_context(|| format!("spawning MCP stdio server `{prog}`"))?;
-
-    let mut stdin = child
-        .stdin
-        .take()
-        .ok_or_else(|| anyhow!("no child stdin"))?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| anyhow!("no child stdout"))?;
-    let mut lines = BufReader::new(stdout).lines();
-
-    // initialize (id 1), then the real request (id 2). Newline-framed.
-    let init = rpc_request(
-        1,
-        "initialize",
-        json!({
-            "protocolVersion": "2024-11-05",
-            "capabilities": {},
-            "clientInfo": { "name": "snak", "version": "0.1" }
-        }),
-    );
-    let req = rpc_request(2, method, params);
-    let mut payload = serde_json::to_string(&init)?;
-    payload.push('\n');
-    payload.push_str(&serde_json::to_string(&req)?);
-    payload.push('\n');
-    stdin
-        .write_all(payload.as_bytes())
-        .await
-        .context("writing to MCP stdio server")?;
-    stdin.flush().await.ok();
-    drop(stdin); // signal EOF after our requests
-
-    // Read responses until we see the one with id 2.
-    let mut result = None;
-    while let Some(line) = lines
-        .next_line()
-        .await
-        .context("reading MCP stdio output")?
-    {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-        let Ok(v) = serde_json::from_str::<Value>(line) else {
-            continue;
-        };
-        if v.get("id").and_then(|i| i.as_u64()) == Some(2) {
-            result = Some(parse_rpc_result(&v)?);
-            break;
-        }
-    }
-    // Best-effort cleanup.
-    let _ = child.kill().await;
-    result.ok_or_else(|| anyhow!("MCP stdio server closed before responding"))
-}
-
-async fn list_stdio_tools(server: &ServerConfig) -> anyhow::Result<Vec<ToolDef>> {
-    let result = stdio_roundtrip(server, "tools/list", json!({})).await?;
-    Ok(tools_from_list_result(&result))
-}
-
-async fn call_stdio_tool(
-    server: &ServerConfig,
-    tool: &str,
-    args: &Value,
-) -> anyhow::Result<String> {
-    let result = stdio_roundtrip(
-        server,
-        "tools/call",
-        json!({ "name": tool, "arguments": args }),
-    )
-    .await?;
-    Ok(text_from_call_result(&result))
-}
-
 // ---------------------------------------------------------------------------
 // HTTP transport
 // ---------------------------------------------------------------------------
@@ -506,6 +467,11 @@ async fn call_http_tool(
 // Command surface
 // ---------------------------------------------------------------------------
 
+/// Reserved synthetic thread key used by `mcp_list_tools` so a settings "refresh"
+/// can spin up (and tear down) stdio sessions without colliding with a real chat
+/// thread's sessions. Never a real thread id (those are DB row ids).
+const SETTINGS_THREAD_KEY: &str = "__settings__";
+
 /// A tool as surfaced to the settings UI (server id + tool metadata), so the
 /// "refresh / test" action can show what a configured server exposes.
 #[derive(Debug, Serialize)]
@@ -515,24 +481,79 @@ pub struct ListedTool {
     pub description: String,
 }
 
+/// A server that failed to list its tools (settings refresh surfaces this).
+#[derive(Debug, Serialize)]
+pub struct ServerToolError {
+    pub server_id: String,
+    pub message: String,
+}
+
+/// Result of a settings "refresh tools": the tools that listed, plus per-server
+/// errors for those that failed to start/handshake.
+#[derive(Debug, Serialize)]
+pub struct ListToolsReport {
+    pub tools: Vec<ListedTool>,
+    pub errors: Vec<ServerToolError>,
+}
+
 /// List the tools across the given servers (for the settings UI). Always
 /// includes the built-in web-browse server's tools when its config entry is
-/// present and enabled.
+/// present and enabled. Surfaces per-server failures so the refresh can show
+/// which servers couldn't start/handshake.
 #[tauri::command]
-pub async fn mcp_list_tools(servers: Vec<ServerConfig>) -> Result<Vec<ListedTool>, String> {
+pub async fn mcp_list_tools(
+    servers: Vec<ServerConfig>,
+    sessions: tauri::State<'_, session::McpSessions>,
+) -> Result<ListToolsReport, String> {
     let client = reqwest::Client::new();
-    let defs = list_tools(&client, &servers).await;
-    Ok(defs
-        .into_iter()
-        .map(|d| {
-            let (server_id, name) = split_namespaced(&d.name);
-            ListedTool {
-                server_id: server_id.to_string(),
-                name: name.to_string(),
-                description: d.description,
+    let mut tools = Vec::new();
+    let mut errors = Vec::new();
+    for server in servers.iter().filter(|s| s.enabled) {
+        let res: anyhow::Result<Vec<ToolDef>> = match server.transport() {
+            Transport::Builtin => Ok(builtin_tools(&server.id)),
+            Transport::Stdio => sessions.list_tools(SETTINGS_THREAD_KEY, server).await,
+            Transport::Http => list_http_tools(&client, server).await,
+        };
+        match res {
+            Ok(defs) => {
+                for d in defs {
+                    tools.push(ListedTool {
+                        server_id: server.id.clone(),
+                        name: d.name,
+                        description: d.description,
+                    });
+                }
             }
-        })
-        .collect())
+            Err(e) => errors.push(ServerToolError {
+                server_id: server.id.clone(),
+                message: format!("{e:#}"),
+            }),
+        }
+    }
+    sessions.close_thread(SETTINGS_THREAD_KEY).await;
+    Ok(ListToolsReport { tools, errors })
+}
+
+/// Close every live session for a thread (called by the frontend when a thread is
+/// deleted, so its stdio servers — e.g. a headless browser — shut down promptly).
+#[tauri::command]
+pub async fn mcp_close_thread_sessions(
+    thread_id: String,
+    sessions: tauri::State<'_, session::McpSessions>,
+) -> Result<(), String> {
+    sessions.close_thread(&thread_id).await;
+    Ok(())
+}
+
+/// Close every live session for a server id across all threads (called when a
+/// server is disabled, edited, or removed in settings).
+#[tauri::command]
+pub async fn mcp_close_server_sessions(
+    server_id: String,
+    sessions: tauri::State<'_, session::McpSessions>,
+) -> Result<(), String> {
+    sessions.close_server(&server_id).await;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -631,8 +652,60 @@ mod tests {
             url: None,
             enabled: false,
             search_provider: None,
+            env: None,
         };
         assert!(!cfg.enabled);
         assert!(matches!(cfg.transport(), Transport::Builtin));
+    }
+
+    fn cfg(command: &str, env: Option<std::collections::HashMap<String, String>>) -> ServerConfig {
+        ServerConfig {
+            id: "x".into(),
+            transport_kind: Some(Transport::Stdio),
+            transport_alias: None,
+            command: Some(command.into()),
+            url: None,
+            enabled: true,
+            search_provider: None,
+            env,
+        }
+    }
+
+    #[test]
+    fn fingerprint_is_stable_and_env_order_independent() {
+        use std::collections::HashMap;
+        let a = cfg(
+            "npx -y srv",
+            Some(HashMap::from([
+                ("A".to_string(), "1".to_string()),
+                ("B".to_string(), "2".to_string()),
+            ])),
+        );
+        let b = cfg(
+            "npx -y srv",
+            Some(HashMap::from([
+                ("B".to_string(), "2".to_string()),
+                ("A".to_string(), "1".to_string()),
+            ])),
+        );
+        assert_eq!(a.fingerprint(), b.fingerprint());
+        // Idempotent within a run (the "stable" half of the name).
+        assert_eq!(a.fingerprint(), a.fingerprint());
+    }
+
+    #[test]
+    fn fingerprint_changes_with_command_env_and_enabled() {
+        use std::collections::HashMap;
+        let base = cfg("npx -y srv", None);
+        let other_cmd = cfg("npx -y other", None);
+        let with_env = cfg(
+            "npx -y srv",
+            Some(HashMap::from([("A".to_string(), "1".to_string())])),
+        );
+        let mut disabled = cfg("npx -y srv", None);
+        disabled.enabled = false;
+        assert_ne!(base.fingerprint(), other_cmd.fingerprint());
+        assert_ne!(base.fingerprint(), with_env.fingerprint());
+        assert_ne!(base.fingerprint(), disabled.fingerprint());
     }
 }

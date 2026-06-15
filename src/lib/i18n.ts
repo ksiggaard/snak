@@ -33,6 +33,7 @@ export const en = {
   "common.confirm": "Confirm",
   "common.delete": "Delete",
   "common.remove": "Remove",
+  "common.edit": "Edit",
   "common.add": "Add",
   "common.update": "Update",
   "common.reset": "Reset",
@@ -559,6 +560,9 @@ export const en = {
   "mcp.removeTitle": 'Remove "{label}"?',
   "mcp.addCustom": "Add custom server",
   "mcp.labelPlaceholder": "Label (e.g. GitHub)",
+  "mcp.envPlaceholder":
+    "Environment variables, one KEY=value per line (e.g. START_URL=about:blank)",
+  "mcp.envLabel": "Environment variables",
   "mcp.addServer": "Add server",
   "mcp.availableTools": "Available tools",
   "mcp.refreshHint": "Refresh to list tools from enabled servers.",

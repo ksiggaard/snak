@@ -33,6 +33,10 @@ reqwest = { version = "0.12", default-features = false, features = [
     "stream",
 ] }
 anyhow = "1"
+# Official MCP SDK — used as a client for external stdio MCP servers, giving us
+# a correct initialize/initialized handshake and a persistent, id-correlating
+# session per server (replaces the old spawn-per-call stdio path). T-stateful-mcp.
+rmcp = { version = "1.7", features = ["client", "transport-child-process"] }
 futures-util = "0.3"
 base64 = "0.22"
 # Async process + IO for the MCP stdio transport (T13). Tauri already pulls tokio

@@ -4,8 +4,10 @@ import {
   BUILTIN_SYSDEBUG_SERVER,
   BUILTIN_WEB_SERVER,
   BUILTIN_YOUTUBE_SERVER,
+  formatEnvText,
   gateServersForChat,
   gateServersForOffline,
+  parseEnvText,
   parseServers,
   withBuiltins,
   type McpServer,
@@ -155,5 +157,30 @@ describe("gateServersForOffline", () => {
   it("drops remote http custom servers but keeps local stdio ones when offline", () => {
     const out = gateServersForOffline([httpCustom, stdioCustom], true);
     expect(out.map((s) => s.id)).toEqual(["local-tool"]);
+  });
+});
+
+describe("env text helpers", () => {
+  it("parses KEY=value lines, ignoring blanks and comments", () => {
+    expect(parseEnvText("A=1\nB=two words\n\n# a comment\nNOEQUALS")).toEqual({
+      A: "1",
+      B: "two words",
+    });
+  });
+
+  it("trims the key and keeps everything after the first = as the value", () => {
+    expect(parseEnvText("  TOKEN = ab=cd ")).toEqual({ TOKEN: "ab=cd" });
+  });
+
+  it("formats a record back to sorted KEY=value lines", () => {
+    expect(formatEnvText({ B: "2", A: "1" })).toBe("A=1\nB=2");
+  });
+
+  it("round-trips through parseServers via the env field", () => {
+    const json = JSON.stringify([
+      { id: "fx", label: "FF", transport: "stdio", command: "npx -y fx", enabled: true, env: { A: "1" } },
+    ]);
+    const out = parseServers(json).find((s) => s.id === "fx");
+    expect(out?.env).toEqual({ A: "1" });
   });
 });
