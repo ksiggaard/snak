@@ -184,6 +184,8 @@ export const en = {
   "chat.apiTraceResponse": "Response · round {round}",
   "chat.copy": "Copy",
   "chat.copied": "Copied",
+  "chat.fullWidth": "Full width",
+  "chat.exitFullWidth": "Fit to column",
   // --- Response variations (T54) -------------------------------------------
   "chat.newVariation": "New variation",
   "chat.prevVariation": "Previous variation",
@@ -610,6 +612,13 @@ export const en = {
   "chatList.full": "Full",
   "chatList.mockTitle": "Weekend plans",
   "chatList.mockPreview": "Here's the packing list you asked for…",
+
+  // --- Settings: appearance — chat width card ------------------------------
+  "chatWidth.title": "Chat width",
+  "chatWidth.description":
+    "Cap how wide messages and the composer get on large windows, centering the conversation. Individual replies can still be expanded to full width.",
+  "chatWidth.label": "Limit width",
+  "chatWidth.widthLabel": "Max width",
 
   // --- Settings: language card ----------------------------------------------------------------------------------------------------
   "language.title": "Language",
