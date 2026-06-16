@@ -23,6 +23,7 @@ export type MenuAction =
   | "zoom-in"
   | "zoom-out"
   | "zoom-reset"
+  | "focus-composer"
   | "quit";
 
 /**
@@ -51,6 +52,8 @@ export function menuActionForKey(e: KeyboardEvent): MenuAction | null {
       return "search";
     case "b":
       return "toggle-sidebar";
+    case "l":
+      return "focus-composer";
     case ",":
       return "settings";
     case "u":
@@ -102,6 +105,9 @@ export function runMenuAction(action: MenuAction): void {
       break;
     case "zoom-reset":
       useZoom.getState().resetZoom();
+      break;
+    case "focus-composer":
+      useThreads.getState().focusComposer();
       break;
     case "quit":
       // Exits outright, bypassing close-to-tray (like the tray's Quit).

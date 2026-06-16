@@ -118,6 +118,8 @@ export function Composer({
   // field, posted by the empty-screen suggestions. Applied via render-time sync
   // below (keyed by nonce).
   const composerInsert = useThreads((s) => s.composerInsert);
+  // A request to focus this input (Cmd/Ctrl+L), no text change.
+  const composerFocus = useThreads((s) => s.composerFocus);
 
   // A command pending the user's explicit confirmation before it runs (the
   // safety gate for backend actions like /terminal — never auto-executed).
@@ -198,6 +200,22 @@ export function Composer({
     el.setSelectionRange(el.value.length, el.value.length);
   }, [appliedNonce]);
 
+  // Focus the input on an external focus request (Cmd/Ctrl+L), without
+  // touching the text. The ref is seeded with the current nonce, so mounting —
+  // or returning to chat from another view — never steals focus; only a *new*
+  // request (a nonce change after mount) does. So if no Composer is mounted
+  // when the shortcut fires, it's simply a no-op (behavior B).
+  const lastFocusNonce = useRef(composerFocus?.nonce ?? 0);
+  useEffect(() => {
+    const nonce = composerFocus?.nonce ?? 0;
+    if (nonce === lastFocusNonce.current) return;
+    lastFocusNonce.current = nonce;
+    const el = textareaRef.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, [composerFocus]);
+
   // Whether the selected provider has a stored API key — from the cached keys
   // store (no keychain prompt). `null` while the cache is still loading, which
   // matches the previous "checking" state so Send isn't blocked before we know.
@@ -257,8 +275,8 @@ export function Composer({
   const setDeepResearch = useThreads((s) => s.setDeepResearch);
   const deepResearchOn = useThreads((s) =>
     s.currentThreadId
-      ? (s.threads.find((x) => x.id === s.currentThreadId)?.deep_research ?? 0) !==
-        0
+      ? (s.threads.find((x) => x.id === s.currentThreadId)?.deep_research ??
+          0) !== 0
       : s.draftDeepResearch,
   );
 

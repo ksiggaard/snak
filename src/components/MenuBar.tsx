@@ -46,6 +46,9 @@ export function MenuBar() {
         <Item action="toggle-sidebar" shortcut="B">
           {t("menu.toggleSidebar")}
         </Item>
+        <Item action="focus-composer" shortcut="L">
+          {t("menu.focusInput")}
+        </Item>
         <DropdownMenuSeparator />
         <Item action="usage" shortcut="U">
           {t("menu.usage")}

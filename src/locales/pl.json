@@ -47,6 +47,7 @@
     "menu.quit": "Zakończ",
     "menu.searchChats": "Szukaj w czatach…",
     "menu.toggleSidebar": "Przełącz pasek boczny",
+    "menu.focusInput": "Przejdź do pola wprowadzania",
     "menu.usage": "Zużycie",
     "sidebar.newChat": "Nowy czat",
     "sidebar.newIncognitoChat": "Nowy czat incognito",

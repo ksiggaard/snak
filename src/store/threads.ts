@@ -203,6 +203,10 @@ interface ThreadsState {
    * The Composer applies it via render-time sync, keyed by `nonce` so repeated
    * inserts of the same text still fire. null = nothing pending. */
   composerInsert: { text: string; nonce: number } | null;
+  /** A request to focus the Composer's input without changing its text
+   * (Cmd/Ctrl+L). The Composer focuses on a nonce change; a no-op when no
+   * Composer is mounted (e.g. Settings/Usage). null = nothing pending. */
+  composerFocus: { nonce: number } | null;
   error: string | null;
   initialized: boolean;
 
@@ -229,6 +233,9 @@ interface ThreadsState {
   /** Load `text` into the Composer and focus it (a quick action's `prefill`
    * mode). Bumps a nonce so the Composer re-applies even for identical text. */
   insertIntoComposer: (text: string) => void;
+  /** Focus the Composer's input without changing its text (Cmd/Ctrl+L). Bumps
+   * a nonce so a mounted Composer re-focuses; a no-op when none is mounted. */
+  focusComposer: () => void;
   /** Persist the default provider+model for new interactions. */
   setDefaultModel: (provider: Provider, model: string) => Promise<void>;
   /** Recompute `systemTokens` for the current thread/draft (skills + global +
@@ -493,6 +500,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   awaitingModel: false,
   systemTokens: 0,
   composerInsert: null,
+  composerFocus: null,
   error: null,
   initialized: false,
 
@@ -628,6 +636,10 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     set({
       composerInsert: { text, nonce: (get().composerInsert?.nonce ?? 0) + 1 },
     });
+  },
+
+  focusComposer: () => {
+    set({ composerFocus: { nonce: (get().composerFocus?.nonce ?? 0) + 1 } });
   },
 
   setDefaultModel: async (provider, model) => {

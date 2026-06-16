@@ -47,6 +47,7 @@
     "menu.quit": "Beenden",
     "menu.searchChats": "Chats durchsuchen…",
     "menu.toggleSidebar": "Seitenleiste umschalten",
+    "menu.focusInput": "Eingabefeld fokussieren",
     "menu.usage": "Nutzung",
     "sidebar.newChat": "Neuer Chat",
     "sidebar.newIncognitoChat": "Neuer Inkognito-Chat",

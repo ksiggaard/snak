@@ -47,6 +47,7 @@
     "menu.quit": "Salir",
     "menu.searchChats": "Buscar en los chats…",
     "menu.toggleSidebar": "Alternar barra lateral",
+    "menu.focusInput": "Enfocar el campo de entrada",
     "menu.usage": "Consumo",
     "sidebar.newChat": "Nuevo chat",
     "sidebar.newIncognitoChat": "Nuevo chat de incógnito",

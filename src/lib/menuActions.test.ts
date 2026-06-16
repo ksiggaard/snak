@@ -32,3 +32,19 @@ describe("menuActionForKey — zoom", () => {
     expect(menuActionForKey(key({ key: "k", ctrlKey: true }))).toBe("search");
   });
 });
+
+describe("menuActionForKey — focus composer", () => {
+  it("maps Ctrl+L to focus-composer", () => {
+    expect(menuActionForKey(key({ key: "l", ctrlKey: true }))).toBe(
+      "focus-composer",
+    );
+    // Case-insensitive (Shift not required; capital L from caps lock still maps).
+    expect(menuActionForKey(key({ key: "L", ctrlKey: true }))).toBe(
+      "focus-composer",
+    );
+  });
+
+  it("ignores L without the modifier", () => {
+    expect(menuActionForKey(key({ key: "l" }))).toBeNull();
+  });
+});

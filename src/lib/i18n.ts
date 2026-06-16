@@ -81,6 +81,7 @@ export const en = {
   "menu.quit": "Quit",
   "menu.searchChats": "Search Chats…",
   "menu.toggleSidebar": "Toggle Sidebar",
+  "menu.focusInput": "Focus Chat Input",
   "menu.usage": "Usage",
   "menu.zoomIn": "Zoom In",
   "menu.zoomOut": "Zoom Out",

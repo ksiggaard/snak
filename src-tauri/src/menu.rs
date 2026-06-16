@@ -37,6 +37,13 @@ pub fn install(app: &tauri::App) -> tauri::Result<()> {
         Some("CmdOrCtrl+B"),
     )?;
     let usage = MenuItem::with_id(app, "menu_usage", "Usage", true, Some("CmdOrCtrl+U"))?;
+    let focus_input = MenuItem::with_id(
+        app,
+        "menu_focus_input",
+        "Focus Chat Input",
+        true,
+        Some("CmdOrCtrl+L"),
+    )?;
     let zoom_in = MenuItem::with_id(app, "menu_zoom_in", "Zoom In", true, Some("CmdOrCtrl+Plus"))?;
     let zoom_out = MenuItem::with_id(app, "menu_zoom_out", "Zoom Out", true, Some("CmdOrCtrl+-"))?;
     let zoom_reset = MenuItem::with_id(
@@ -79,6 +86,7 @@ pub fn install(app: &tauri::App) -> tauri::Result<()> {
         &[
             &search,
             &toggle_sidebar,
+            &focus_input,
             &PredefinedMenuItem::separator(app)?,
             &usage,
             &PredefinedMenuItem::separator(app)?,
@@ -177,6 +185,7 @@ pub fn on_menu_event(app: &AppHandle, event: MenuEvent) {
         "menu_new_chat" => "new-chat",
         "menu_search" => "search",
         "menu_toggle_sidebar" => "toggle-sidebar",
+        "menu_focus_input" => "focus-composer",
         "menu_settings" => "settings",
         "menu_usage" => "usage",
         "menu_zoom_in" => "zoom-in",

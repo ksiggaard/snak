@@ -47,6 +47,7 @@
     "menu.quit": "Afslut",
     "menu.searchChats": "Søg i chats…",
     "menu.toggleSidebar": "Slå sidepanelet til/fra",
+    "menu.focusInput": "Fokusér inputfeltet",
     "menu.usage": "Forbrug",
     "sidebar.newChat": "Ny chat",
     "sidebar.newIncognitoChat": "Ny inkognito-chat",

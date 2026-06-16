@@ -47,6 +47,7 @@
     "menu.quit": "Quitter",
     "menu.searchChats": "Rechercher dans les discussions…",
     "menu.toggleSidebar": "Basculer la barre latérale",
+    "menu.focusInput": "Cibler le champ de saisie",
     "menu.usage": "Consommation",
     "sidebar.newChat": "Nouvelle discussion",
     "sidebar.newIncognitoChat": "Nouvelle discussion privée",
