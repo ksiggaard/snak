@@ -10,14 +10,16 @@ function key(init: KeyboardEventInit): KeyboardEvent {
 describe("menuActionForKey — zoom", () => {
   it("maps Ctrl+= and Ctrl++ to zoom-in", () => {
     expect(menuActionForKey(key({ key: "=", ctrlKey: true }))).toBe("zoom-in");
-    expect(menuActionForKey(key({ key: "+", ctrlKey: true, shiftKey: true }))).toBe(
-      "zoom-in",
-    );
+    expect(
+      menuActionForKey(key({ key: "+", ctrlKey: true, shiftKey: true })),
+    ).toBe("zoom-in");
   });
 
   it("maps Ctrl+- to zoom-out and Ctrl+0 to zoom-reset", () => {
     expect(menuActionForKey(key({ key: "-", ctrlKey: true }))).toBe("zoom-out");
-    expect(menuActionForKey(key({ key: "0", ctrlKey: true }))).toBe("zoom-reset");
+    expect(menuActionForKey(key({ key: "0", ctrlKey: true }))).toBe(
+      "zoom-reset",
+    );
   });
 
   it("ignores the zoom keys without the modifier", () => {

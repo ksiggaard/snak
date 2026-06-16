@@ -72,7 +72,10 @@ export function SidebarPane() {
         <div className="flex items-center gap-0.5">
           {mode === "chats" ? (
             <>
-              <PaneAction label={t("sidebar.newChat")} onClick={() => onNewChat()}>
+              <PaneAction
+                label={t("sidebar.newChat")}
+                onClick={() => onNewChat()}
+              >
                 <Plus className="size-4" />
               </PaneAction>
               <PaneAction
@@ -90,7 +93,10 @@ export function SidebarPane() {
               <FolderPlus className="size-4" />
             </PaneAction>
           ) : (
-            <PaneAction label={t("sidebar.newBot")} onClick={() => void onNewBot()}>
+            <PaneAction
+              label={t("sidebar.newBot")}
+              onClick={() => void onNewBot()}
+            >
               <Bot className="size-4" />
             </PaneAction>
           )}

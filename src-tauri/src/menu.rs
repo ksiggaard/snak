@@ -39,8 +39,13 @@ pub fn install(app: &tauri::App) -> tauri::Result<()> {
     let usage = MenuItem::with_id(app, "menu_usage", "Usage", true, Some("CmdOrCtrl+U"))?;
     let zoom_in = MenuItem::with_id(app, "menu_zoom_in", "Zoom In", true, Some("CmdOrCtrl+Plus"))?;
     let zoom_out = MenuItem::with_id(app, "menu_zoom_out", "Zoom Out", true, Some("CmdOrCtrl+-"))?;
-    let zoom_reset =
-        MenuItem::with_id(app, "menu_zoom_reset", "Reset Zoom", true, Some("CmdOrCtrl+0"))?;
+    let zoom_reset = MenuItem::with_id(
+        app,
+        "menu_zoom_reset",
+        "Reset Zoom",
+        true,
+        Some("CmdOrCtrl+0"),
+    )?;
 
     // Quit: macOS gets the predefined item in the application menu (standard
     // Cmd+Q via NSApp.terminate); elsewhere a custom item handled in

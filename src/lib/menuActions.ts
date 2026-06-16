@@ -38,7 +38,8 @@ export function menuActionForKey(e: KeyboardEvent): MenuAction | null {
   if (!mod || e.altKey || e.isComposing) return null;
 
   // Zoom — allow Shift (US "+" is Shift+=). Match by key and by numpad code.
-  if (e.key === "+" || e.key === "=" || e.code === "NumpadAdd") return "zoom-in";
+  if (e.key === "+" || e.key === "=" || e.code === "NumpadAdd")
+    return "zoom-in";
   if (e.key === "-" || e.code === "NumpadSubtract") return "zoom-out";
   if (e.key === "0" || e.code === "Numpad0") return "zoom-reset";
 

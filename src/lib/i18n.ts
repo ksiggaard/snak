@@ -58,11 +58,9 @@ export const en = {
   "time.daysAgo": "{n}d ago",
 
   // --- Title bar -------------------------------------------------------------
-  "titleBar.openSidebar": "Open sidebar",
   "titleBar.hideSidebar": "Hide sidebar",
   "titleBar.showSidebar": "Show sidebar",
   "titleBar.searchChats": "Search chats",
-  "titleBar.menu": "Menu",
   "titleBar.settings": "Settings",
   "titleBar.usage": "Usage",
   "titleBar.offline": "Offline",
