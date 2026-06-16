@@ -26,6 +26,7 @@ export function TitleBar() {
   const sidebarOpen = useLayout((s) => s.sidebarOpen);
   const tier = useLayout((s) => s.tier);
   const toggleSidebar = useLayout((s) => s.toggleSidebar);
+  const compactNav = useLayout((s) => s.compactNav);
   const barMode = useTitleBar((s) => s.mode);
   const controlsSide = useTitleBar((s) => s.side);
   const controlsStyle = useTitleBar((s) => s.style);
@@ -59,7 +60,7 @@ export function TitleBar() {
             onClick={toggleSidebar}
             className="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground flex h-8 w-8 items-center justify-center transition-colors"
             aria-label={
-              sidebarOpen
+              (tier === "wide" ? sidebarOpen : compactNav > 0)
                 ? t("titleBar.hideSidebar")
                 : t("titleBar.showSidebar")
             }
@@ -72,7 +73,9 @@ export function TitleBar() {
           </button>
         </TooltipTrigger>
         <TooltipContent side="bottom">
-          {sidebarOpen ? t("titleBar.hideSidebar") : t("titleBar.showSidebar")}
+          {(tier === "wide" ? sidebarOpen : compactNav > 0)
+            ? t("titleBar.hideSidebar")
+            : t("titleBar.showSidebar")}
         </TooltipContent>
       </Tooltip>
 

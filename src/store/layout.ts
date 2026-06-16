@@ -61,7 +61,7 @@ export const useLayout = create<LayoutState>((set, get) => {
         set({ sidebarOpen: open });
       } else {
         // Compact: the 3-step cycle (chat → pane → pane+rail → chat).
-        set({ compactNav: ((get().compactNav + 1) % 3) as 0 | 1 | 2 });
+        get().cycleCompactNav();
       }
     },
 
