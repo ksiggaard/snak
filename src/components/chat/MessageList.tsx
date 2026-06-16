@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Brain,
@@ -8,12 +8,14 @@ import {
   Copy,
   FileJson,
   FileText,
+  FoldHorizontal,
   FoldVertical,
   Globe,
   Loader2,
   RefreshCw,
   Telescope,
   TriangleAlert,
+  UnfoldHorizontal,
   Wrench,
 } from "lucide-react";
 import {
@@ -394,6 +396,8 @@ function AssistantMeta({
   now,
   content,
   trailing,
+  onToggleWide,
+  wide,
 }: {
   createdAt: string;
   durationMs: number | null;
@@ -402,6 +406,10 @@ function AssistantMeta({
   content: string;
   /** Inline controls rendered after the copy button (T54 variation controls). */
   trailing?: React.ReactNode;
+  /** When provided, renders the full-width toggle (cap is on + assistant reply). */
+  onToggleWide?: () => void;
+  /** Whether this reply is currently expanded to full width. */
+  wide?: boolean;
 }) {
   const t = useT();
   // Active-locale formatting (T32): labels + Intl locale follow the language.
@@ -442,6 +450,21 @@ function AssistantMeta({
           <Copy className="size-3.5" aria-hidden />
         )}
       </button>
+      {onToggleWide && (
+        <button
+          type="button"
+          onClick={onToggleWide}
+          aria-label={wide ? t("chat.exitFullWidth") : t("chat.fullWidth")}
+          title={wide ? t("chat.exitFullWidth") : t("chat.fullWidth")}
+          className="hover:bg-muted hover:text-foreground rounded p-1 transition-colors"
+        >
+          {wide ? (
+            <FoldHorizontal className="size-3.5" aria-hidden />
+          ) : (
+            <UnfoldHorizontal className="size-3.5" aria-hidden />
+          )}
+        </button>
+      )}
       {trailing}
     </div>
   );
@@ -619,6 +642,9 @@ function ChatMessage({
   latestReply,
   imageLabelStart,
   videoLabelStart,
+  maxWidth,
+  wide,
+  onToggleWide,
 }: {
   m: MessageView;
   chatStyle: ChatStyle;
@@ -638,6 +664,13 @@ function ChatMessage({
   /** True for the thread's most recent assistant reply (T54) — the only one
    *  that shows the variation carousel + regenerate controls. */
   latestReply?: boolean;
+  /** Effective max-width (px) for this row, or undefined for full width
+   *  (cap off, or this reply toggled wide). Applied as inline style. */
+  maxWidth?: number;
+  /** Whether this reply is expanded to full width (session-only). */
+  wide?: boolean;
+  /** Toggle this reply's full-width state; only passed when the cap is on. */
+  onToggleWide?: () => void;
 }) {
   const t = useT();
   const isUser = m.role === "user";
@@ -821,6 +854,8 @@ function ChatMessage({
       now={now}
       content={m.content}
       trailing={variations}
+      wide={wide}
+      onToggleWide={onToggleWide}
     />
   );
   const flashRing = flashed && "ring-primary rounded-lg ring-2 ring-offset-2";
@@ -842,7 +877,12 @@ function ChatMessage({
     // Dense IRC-like row: a fixed-width role gutter, then the text. Markdown
     // margins are tightened by the `.chat-style-compact` rules in index.css.
     return (
-      <div ref={innerRef} data-mid={m.id} className="flex scroll-mt-4">
+      <div
+        ref={innerRef}
+        data-mid={m.id}
+        className="mx-auto flex w-full scroll-mt-4"
+        style={{ maxWidth }}
+      >
         <div
           className={cn(
             // chat-content: hook for the custom chat font/size overrides
@@ -894,7 +934,12 @@ function ChatMessage({
     // Slack/Discord-style: a round avatar monogram and a bold role name above
     // each message, everything left-aligned.
     return (
-      <div ref={innerRef} data-mid={m.id} className="flex scroll-mt-4 gap-2.5">
+      <div
+        ref={innerRef}
+        data-mid={m.id}
+        className="mx-auto flex w-full scroll-mt-4 gap-2.5"
+        style={{ maxWidth }}
+      >
         {asBot ? (
           <BotAvatar bot={asBot} className="size-7 shrink-0" />
         ) : (
@@ -945,7 +990,12 @@ function ChatMessage({
     // output. Markdown rhythm is tightened by the same index.css rules as
     // compact.
     return (
-      <div ref={innerRef} data-mid={m.id} className="flex scroll-mt-4">
+      <div
+        ref={innerRef}
+        data-mid={m.id}
+        className="mx-auto flex w-full scroll-mt-4"
+        style={{ maxWidth }}
+      >
         <div
           className={cn(
             "chat-content flex w-full max-w-full gap-2 font-mono text-sm",
@@ -988,7 +1038,12 @@ function ChatMessage({
 
   const { row, content } = styleClasses(chatStyle, isUser);
   return (
-    <div ref={innerRef} data-mid={m.id} className={cn("flex scroll-mt-4", row)}>
+    <div
+      ref={innerRef}
+      data-mid={m.id}
+      className={cn("mx-auto flex w-full scroll-mt-4", row)}
+      style={{ maxWidth }}
+    >
       <div
         className={cn(
           // chat-content: hook for the custom chat font/size overrides
@@ -1023,6 +1078,21 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
   const consumeScroll = useSearch((s) => s.consumeScroll);
   // How messages render (T34): default / bubbles / compact / document.
   const chatStyle = useAppearance((s) => s.chatStyle);
+  const chatMaxWidth = useAppearance((s) => s.chatMaxWidth);
+  // Session-only set of reply ids expanded to full width. Not persisted —
+  // resets on restart, mirroring other per-session chat UI state.
+  const [wideIds, setWideIds] = useState<Set<string>>(() => new Set());
+  const toggleWide = useCallback((id: string) => {
+    setWideIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  // The cap (and the per-reply toggle) only apply when a max-width is set;
+  // null = full width everywhere.
+  const capped = chatMaxWidth != null;
   // Message briefly highlighted after jumping to it from a search result.
   const [flashId, setFlashId] = useState<string | null>(null);
 
@@ -1110,10 +1180,11 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
               else messageRefs.current.delete(m.id);
             }}
             className={cn(
-              "scroll-mt-4",
+              "mx-auto w-full scroll-mt-4",
               flashId === m.id &&
                 "ring-primary rounded-lg ring-2 ring-offset-2",
             )}
+            style={{ maxWidth: chatMaxWidth ?? undefined }}
           >
             <div className="text-muted-foreground flex items-center gap-2 text-xs">
               <div className="bg-border h-px flex-1" />
@@ -1147,11 +1218,17 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
               if (el) messageRefs.current.set(m.id, el);
               else messageRefs.current.delete(m.id);
             }}
+            maxWidth={capped && !wideIds.has(m.id) ? chatMaxWidth : undefined}
+            wide={wideIds.has(m.id)}
+            onToggleWide={capped ? () => toggleWide(m.id) : undefined}
           />
         ),
       )}
       {pending && (
-        <div className="flex justify-start">
+        <div
+          className="mx-auto flex w-full justify-start"
+          style={{ maxWidth: chatMaxWidth ?? undefined }}
+        >
           <div className="text-muted-foreground flex items-center gap-1.5 text-sm">
             <span>{t("chat.thinking")}</span>
             {/* Three dots pulsing in sequence (T46). Static when animations
