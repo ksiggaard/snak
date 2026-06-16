@@ -61,10 +61,15 @@ export const CHAT_SIZE: SizeRange = { min: 14, max: 20, fallback: 14 };
 /** Corner-radius bounds (px) for the `--radius` token every rounded-* size
  * derives from. Default is the built-in 0.625rem = 10px; 0 = sharp corners. */
 export const RADIUS: SizeRange = { min: 0, max: 20, fallback: 10 };
+/** Chat column max-width bounds (px). Caps message + composer width on wide
+ * windows and centers the conversation; default 760 (cap on). `null` = off
+ * (full width). Consumed via React props, not injected CSS — see store. */
+export const CHAT_WIDTH: SizeRange = { min: 560, max: 1280, fallback: 760 };
 
 const COLORS_KEY = "custom-colors";
 const TYPOGRAPHY_KEY = "custom-typography";
 const RADIUS_KEY = "custom-radius";
+const CHAT_WIDTH_KEY = "chat-max-width";
 const ANIMATIONS_KEY = "animations";
 const COLORS_STYLE_ID = "custom-colors";
 const TYPOGRAPHY_STYLE_ID = "custom-typography";
@@ -349,6 +354,34 @@ export function getStoredRadius(): number | null {
 export function storeRadius(v: number | null): void {
   if (v === null) localStorage.removeItem(RADIUS_KEY);
   else localStorage.setItem(RADIUS_KEY, String(clampSize(v, RADIUS)));
+}
+
+/**
+ * The chat column max-width in px, or `null` when the cap is off (full width).
+ * Default (nothing stored) is `CHAT_WIDTH.fallback` (cap on). The literal
+ * `"off"` is the explicit opt-out; any stored number is clamped to CHAT_WIDTH.
+ */
+export function getStoredChatMaxWidth(): number | null {
+  const raw = localStorage.getItem(CHAT_WIDTH_KEY);
+  if (raw === null) return CHAT_WIDTH.fallback;
+  if (raw === "off") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? clampSize(n, CHAT_WIDTH) : CHAT_WIDTH.fallback;
+}
+
+/**
+ * Persist the chat max-width: `null` writes the `"off"` opt-out; the default
+ * width removes the key (absence = default-on); any other value is clamped and
+ * stored as a number string.
+ */
+export function storeChatMaxWidth(v: number | null): void {
+  if (v === null) {
+    localStorage.setItem(CHAT_WIDTH_KEY, "off");
+    return;
+  }
+  const clamped = clampSize(v, CHAT_WIDTH);
+  if (clamped === CHAT_WIDTH.fallback) localStorage.removeItem(CHAT_WIDTH_KEY);
+  else localStorage.setItem(CHAT_WIDTH_KEY, String(clamped));
 }
 
 export function storeTypography(t: TypographyPrefs): void {

@@ -29,6 +29,9 @@ import {
   CHAT_SIZE,
   CONTRAST,
   UI_SIZE,
+  CHAT_WIDTH,
+  getStoredChatMaxWidth,
+  storeChatMaxWidth,
   type TypographyPrefs,
 } from "@/lib/appearance";
 
@@ -476,5 +479,41 @@ describe("chat list style persistence (T35)", () => {
     storeChatListStyle("detailed");
     storeChatListStyle("title");
     expect(localStorage.getItem("chat-list-style")).toBeNull();
+  });
+});
+
+describe("chat max-width preference (CHAT_WIDTH)", () => {
+  it("defaults to the fallback width when nothing is stored", () => {
+    expect(getStoredChatMaxWidth()).toBe(CHAT_WIDTH.fallback);
+  });
+
+  it("stores the 'off' sentinel for null and reads it back as null (cap off)", () => {
+    storeChatMaxWidth(null);
+    expect(localStorage.getItem("chat-max-width")).toBe("off");
+    expect(getStoredChatMaxWidth()).toBeNull();
+  });
+
+  it("round-trips a custom in-range width", () => {
+    storeChatMaxWidth(900);
+    expect(getStoredChatMaxWidth()).toBe(900);
+  });
+
+  it("clamps an out-of-range stored width to the bounds", () => {
+    localStorage.setItem("chat-max-width", "5000");
+    expect(getStoredChatMaxWidth()).toBe(CHAT_WIDTH.max);
+    localStorage.setItem("chat-max-width", "100");
+    expect(getStoredChatMaxWidth()).toBe(CHAT_WIDTH.min);
+  });
+
+  it("falls back to the default for unparseable values", () => {
+    localStorage.setItem("chat-max-width", "garbage");
+    expect(getStoredChatMaxWidth()).toBe(CHAT_WIDTH.fallback);
+  });
+
+  it("removes the key when set to the default width (absence = default-on)", () => {
+    storeChatMaxWidth(900);
+    storeChatMaxWidth(CHAT_WIDTH.fallback);
+    expect(localStorage.getItem("chat-max-width")).toBeNull();
+    expect(getStoredChatMaxWidth()).toBe(CHAT_WIDTH.fallback);
   });
 });
