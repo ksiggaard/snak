@@ -613,12 +613,12 @@ export const en = {
   "chatList.mockTitle": "Weekend plans",
   "chatList.mockPreview": "Here's the packing list you asked for…",
 
-  // --- Settings: appearance — chat width card ------------------------------
+  // --- Settings: appearance — chat width card --------------------------------------------------------------------------------
   "chatWidth.title": "Chat width",
   "chatWidth.description":
     "Cap how wide messages and the composer get on large windows, centering the conversation. Individual replies can still be expanded to full width.",
   "chatWidth.label": "Limit width",
-  "chatWidth.widthLabel": "Max width",
+  "chatWidth.maxWidth": "Max width",
 
   // --- Settings: language card ----------------------------------------------------------------------------------------------------
   "language.title": "Language",
