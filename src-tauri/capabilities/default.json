@@ -10,6 +10,7 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-close",
     "core:window:allow-set-decorations",
+    "core:webview:allow-set-webview-zoom",
     "core:tray:default",
     "core:menu:default",
     "opener:default",

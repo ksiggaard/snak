@@ -42,6 +42,7 @@ import { useConnectivity } from "@/store/connectivity";
 import { useView } from "@/store/view";
 import { useLayout } from "@/store/layout";
 import { useTitleBar } from "@/store/titlebar";
+import { useZoom } from "@/store/zoom";
 // Side-effect import: applies the stored custom color/typography overrides at
 // module load, before first paint (T30/T33) — mirrors store/theme's bootstrap.
 import "@/store/appearance";
@@ -101,6 +102,8 @@ function App() {
     // Bundled language packs apply synchronously at module load (no flash);
     // this folds in user packs from the app-data languages folder (T32).
     void loadUserLanguagePacks();
+    // Re-apply the persisted webview zoom (browser-style Ctrl/Cmd +/-/0).
+    useZoom.getState().setZoom(useZoom.getState().zoom);
   }, [
     init,
     initProjects,
