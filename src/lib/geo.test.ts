@@ -49,7 +49,14 @@ describe("lineWaypoints", () => {
   });
 
   it("returns the positions of a LineString with >=2 points", () => {
-    expect(lineWaypoints(line([[1, 2], [3, 4]]))).toEqual([
+    expect(
+      lineWaypoints(
+        line([
+          [1, 2],
+          [3, 4],
+        ]),
+      ),
+    ).toEqual([
       [1, 2],
       [3, 4],
     ]);

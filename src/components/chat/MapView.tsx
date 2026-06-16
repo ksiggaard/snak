@@ -102,7 +102,10 @@ export function MapView({ code }: { code: string }) {
       cancelled = true;
       map?.remove();
     };
-  }, [parsed, resolved]);
+    // `resolved` is intentionally NOT a dependency: the dark-mode tile filter is
+    // a CSS class on the container (applied in JSX), so a theme toggle restyles
+    // the existing map without tearing it down and re-running the routing calls.
+  }, [parsed]);
 
   if (!parsed) {
     // Raw source: initial / streaming / invalid state.
