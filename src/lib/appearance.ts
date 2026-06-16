@@ -166,6 +166,20 @@ export const CHAT_CONTAINER_CLASSES: Record<ChatStyle, string> = {
   zebra: "gap-2 p-3",
 };
 
+/** Horizontal padding per chat style — the `px` half of CHAT_CONTAINER_CLASSES's
+ * `p-*`. The composer column (`ChatView`) insets by the same amount so the input
+ * lines up with the message column. **Keep in sync with CHAT_CONTAINER_CLASSES.** */
+export const CHAT_X_PADDING: Record<ChatStyle, string> = {
+  default: "px-4",
+  bubbles: "px-4",
+  compact: "px-2",
+  document: "px-4",
+  cards: "px-4",
+  cozy: "px-4",
+  terminal: "px-3",
+  zebra: "px-3",
+};
+
 /** Per-chat-style classes for a message row + its content wrapper (T34).
  * Compact, cozy, and terminal have their own markup (gutter/avatar/prompt
  * prefixes) and don't use this table. Shared by `MessageList` and the settings
