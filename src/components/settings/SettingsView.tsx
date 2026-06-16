@@ -1,5 +1,4 @@
 import { useState, type ComponentType } from "react";
-import { ApiKeys } from "@/components/settings/ApiKeys";
 import { DefaultModel } from "@/components/settings/DefaultModel";
 import { Models } from "@/components/settings/Models";
 import { ContextWindows } from "@/components/settings/ContextWindows";
@@ -29,7 +28,6 @@ interface Section {
 // card has the full width/height of the content pane instead of being stacked
 // and clipped — see the left-nav layout below.
 const SECTIONS: Section[] = [
-  { id: "api-keys", label: "settings.nav.apiKeys", Component: ApiKeys },
   {
     id: "default-model",
     label: "settings.nav.defaultModel",
