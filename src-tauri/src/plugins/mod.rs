@@ -125,6 +125,7 @@ fn builtin_manifests() -> Vec<PluginManifest> {
         include_str!("builtin/charts.json"),
         include_str!("builtin/youtube.json"),
         include_str!("builtin/artifacts.json"),
+        include_str!("builtin/maps.json"),
     ];
     BUILTINS
         .iter()
@@ -322,15 +323,27 @@ mod tests {
     fn all_builtins_are_valid_and_enabled_by_default() {
         let builtins = builtin_manifests();
         // Five provider plugins (T18/T37) + the /terminal slash-command plugin
-        // (T14) + four renderer plugins: mermaid (T42), charts, youtube, and
-        // artifacts.
-        assert_eq!(builtins.len(), 10, "expected 10 built-in plugins");
+        // (T14) + five renderer plugins: mermaid (T42), charts, youtube,
+        // artifacts, and maps (disabled by default).
+        assert_eq!(builtins.len(), 11, "expected 11 built-in plugins");
         let providers = builtins.iter().filter(|m| m.category == "provider").count();
         assert_eq!(providers, 5, "expected 5 built-in providers");
         for m in &builtins {
             validate_manifest(m).expect("built-in must validate");
-            assert!(m.enabled_by_default, "built-ins default enabled");
+            if m.id == "com.snak.maps" {
+                assert!(!m.enabled_by_default, "maps defaults disabled");
+            } else {
+                assert!(m.enabled_by_default, "other built-ins default enabled");
+            }
         }
+        // The maps renderer built-in is present, contributes the map language,
+        // and is disabled by default.
+        assert!(
+            builtins.iter().any(|m| m.category == "renderer"
+                && m.id == "com.snak.maps"
+                && !m.enabled_by_default),
+            "expected the built-in maps renderer plugin (disabled by default)",
+        );
         // The slash-command built-in is present and contributes /terminal.
         assert!(
             builtins

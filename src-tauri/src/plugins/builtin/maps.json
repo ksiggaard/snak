@@ -1,0 +1,13 @@
+{
+  "id": "com.snak.maps",
+  "name": "Maps",
+  "version": "1.0.0",
+  "category": "renderer",
+  "apiVersion": 1,
+  "description": "Renders ```map (and ```geojson) fenced code blocks as interactive OpenStreetMap maps with markers and road-snapped routes. No API key. Disabled by default; disable to show the raw GeoJSON instead.",
+  "author": "snak",
+  "enabledByDefault": false,
+  "contributes": {
+    "language": "map"
+  }
+}
