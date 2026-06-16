@@ -58,17 +58,11 @@ export const en = {
   "time.daysAgo": "{n}d ago",
 
   // --- Title bar -------------------------------------------------------------
-  "titleBar.openSidebar": "Open sidebar",
   "titleBar.hideSidebar": "Hide sidebar",
   "titleBar.showSidebar": "Show sidebar",
   "titleBar.searchChats": "Search chats",
-  "titleBar.menu": "Menu",
   "titleBar.settings": "Settings",
   "titleBar.usage": "Usage",
-  "titleBar.theme": "Theme",
-  "titleBar.themeSystem": "System",
-  "titleBar.themeLight": "Light",
-  "titleBar.themeDark": "Dark",
   "titleBar.offline": "Offline",
   "titleBar.offlineHint":
     "You're offline — only local models and tools are available. Click to check the connection.",
@@ -88,6 +82,13 @@ export const en = {
   "menu.searchChats": "Search Chats…",
   "menu.toggleSidebar": "Toggle Sidebar",
   "menu.usage": "Usage",
+  "menu.zoomIn": "Zoom In",
+  "menu.zoomOut": "Zoom Out",
+  "menu.resetZoom": "Reset Zoom",
+
+  // --- Icon rail / manage menu ------------------------------------------------
+  "rail.manage": "Manage",
+  "manage.zoom": "Zoom",
 
   // --- Sidebar ----------------------------------------------------------------
   "sidebar.newChat": "New chat",
@@ -517,6 +518,13 @@ export const en = {
     "When on, closing the window hides it to the system tray and the app keeps running for the global shortcut. Quit from the tray menu to exit fully.",
   "tray.hides": "Closing hides to tray",
   "tray.quits": "Closing quits the app",
+
+  // --- Settings: appearance — theme card ---------------------------------------------------------------
+  "appearance.theme.title": "Theme",
+  "appearance.theme.description": "Light, dark, or follow the system.",
+  "appearance.theme.system": "System",
+  "appearance.theme.light": "Light",
+  "appearance.theme.dark": "Dark",
 
   // --- Settings: appearance — title bar card ---------------------------------------------------------------
   "appearance.titleBar.title": "Title Bar",

@@ -10,7 +10,9 @@ import { ProjectView } from "@/components/projects/ProjectView";
 import { BotView } from "@/components/bots/BotView";
 import { UsageView } from "@/components/usage/UsageView";
 import { SearchOverlay } from "@/components/search/SearchOverlay";
-import { Sidebar, SidebarContent } from "@/components/sidebar/Sidebar";
+import { Sidebar } from "@/components/sidebar/Sidebar";
+import { SidebarRail } from "@/components/sidebar/SidebarRail";
+import { SidebarPane } from "@/components/sidebar/SidebarPane";
 import { TitleBar } from "@/components/TitleBar";
 import { MenuBar } from "@/components/MenuBar";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -18,6 +20,7 @@ import { ImageLightbox } from "@/components/ImageLightbox";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getSetting, purgeEphemeralThreads } from "@/lib/db";
+import { tierForWidth, RAIL_BREAKPOINT, PHONE_BREAKPOINT } from "@/lib/layout";
 import {
   menuActionForKey,
   runMenuAction,
@@ -42,6 +45,7 @@ import { useConnectivity } from "@/store/connectivity";
 import { useView } from "@/store/view";
 import { useLayout } from "@/store/layout";
 import { useTitleBar } from "@/store/titlebar";
+import { useZoom } from "@/store/zoom";
 // Side-effect import: applies the stored custom color/typography overrides at
 // module load, before first paint (T30/T33) — mirrors store/theme's bootstrap.
 import "@/store/appearance";
@@ -62,8 +66,10 @@ function App() {
   const openBotId = useBots((s) => s.openBotId);
   const view = useView((s) => s.view);
   const sidebarOpen = useLayout((s) => s.sidebarOpen);
-  const mobileOpen = useLayout((s) => s.mobileOpen);
-  const setMobileOpen = useLayout((s) => s.setMobileOpen);
+  const tier = useLayout((s) => s.tier);
+  const setTier = useLayout((s) => s.setTier);
+  const compactNav = useLayout((s) => s.compactNav);
+  const setCompactNav = useLayout((s) => s.setCompactNav);
   const titleBarMode = useTitleBar((s) => s.mode);
   const menuBarMode = useTitleBar((s) => s.menuBar);
 
@@ -101,6 +107,8 @@ function App() {
     // Bundled language packs apply synchronously at module load (no flash);
     // this folds in user packs from the app-data languages folder (T32).
     void loadUserLanguagePacks();
+    // Re-apply the persisted webview zoom (browser-style Ctrl/Cmd +/-/0).
+    useZoom.getState().setZoom(useZoom.getState().zoom);
   }, [
     init,
     initProjects,
@@ -113,6 +121,21 @@ function App() {
     initConnectivity,
     loadUserLanguagePacks,
   ]);
+
+  // Track the responsive tier (wide ≥600 / tablet / phone) for the rail + the
+  // 3-step compact toggle. matchMedia keeps it in sync without a resize storm.
+  useEffect(() => {
+    const apply = () => setTier(tierForWidth(window.innerWidth));
+    apply();
+    const mq = window.matchMedia(`(min-width: ${RAIL_BREAKPOINT}px)`);
+    const mqPhone = window.matchMedia(`(min-width: ${PHONE_BREAKPOINT}px)`);
+    mq.addEventListener("change", apply);
+    mqPhone.addEventListener("change", apply);
+    return () => {
+      mq.removeEventListener("change", apply);
+      mqPhone.removeEventListener("change", apply);
+    };
+  }, [setTier]);
 
   useEffect(() => {
     getSetting(SHORTCUT_KEY).then((v) => {
@@ -162,7 +185,7 @@ function App() {
       useProjects.getState().close();
       useBots.getState().close();
       useView.getState().showChat();
-      useLayout.getState().setMobileOpen(false);
+      useLayout.getState().setCompactNav(0);
       // Read the store at event time so the threads list is fresh (T31: the
       // payload may target an existing thread that was deleted meanwhile).
       const { threads, selectThread, startNewChat, send, setProviderModel } =
@@ -235,27 +258,35 @@ function App() {
         <SearchOverlay />
 
         <div className="flex min-h-0 flex-1">
-          {/* Inline sidebar (>= md), shown unless collapsed. */}
-          {sidebarOpen && <Sidebar />}
+          {/* Icon rail (wide tier): always visible, independent of the pane. */}
+          {tier === "wide" && <SidebarRail />}
 
-          {/* Overlay sidebar for narrow widths. Offset below the chrome
-              (TitleBar 32px + inline MenuBar 28px) so the Sheet doesn't cover
-              the topbar / the hamburger that opens it. Inline style overrides
-              the shadcn `top-0`/`h-full` classes. */}
-          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+          {/* Inline list pane (wide tier): shown unless collapsed. */}
+          {tier === "wide" && sidebarOpen && <Sidebar />}
+
+          {/* Compact tiers (<600px): rail + pane as a left overlay. compactNav
+              0 = chat only, 1 = pane, 2 = pane + rail (rail to the left). */}
+          <Sheet
+            open={compactNav >= 1}
+            onOpenChange={(o) => setCompactNav(o ? 1 : 0)}
+          >
             <SheetContent
               side="left"
               showCloseButton={false}
-              className="bg-sidebar text-sidebar-foreground gap-0 p-0"
+              className="bg-sidebar text-sidebar-foreground flex flex-row gap-0 p-0"
               style={{
                 top: menuBarMode === "inline" ? 60 : 32,
                 height: `calc(100% - ${menuBarMode === "inline" ? 60 : 32}px)`,
+                width: compactNav >= 2 ? 320 : 272,
               }}
             >
               <SheetTitle className="sr-only">
                 {t("sidebar.navigation")}
               </SheetTitle>
-              <SidebarContent />
+              {compactNav >= 2 && <SidebarRail variant="overlay" />}
+              <div className="flex min-w-0 flex-1 flex-col">
+                <SidebarPane />
+              </div>
             </SheetContent>
           </Sheet>
 

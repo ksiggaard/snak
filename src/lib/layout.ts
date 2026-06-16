@@ -49,3 +49,22 @@ export function getStoredSidebarMode(): SidebarMode {
 export function storeSidebarMode(mode: SidebarMode): void {
   localStorage.setItem(MODE_KEY, mode);
 }
+
+export type LayoutTier = "wide" | "tablet" | "phone";
+
+/** Width (px) at/above which the icon rail + list pane show inline. */
+export const RAIL_BREAKPOINT = 600;
+/** Width (px) below which only the chat shows by default (phone). */
+export const PHONE_BREAKPOINT = 480;
+
+export function tierForWidth(px: number): LayoutTier {
+  if (px >= RAIL_BREAKPOINT) return "wide";
+  if (px >= PHONE_BREAKPOINT) return "tablet";
+  return "phone";
+}
+
+/** Default compact disclosure level when entering a compact tier:
+ *  tablet shows the pane (1), phone shows chat only (0). */
+export function initialCompactNav(tier: LayoutTier): 0 | 1 {
+  return tier === "tablet" ? 1 : 0;
+}

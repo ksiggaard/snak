@@ -45,7 +45,7 @@ export function SidebarResizeHandle() {
       aria-orientation="vertical"
       aria-label={t("sidebar.resize")}
       onPointerDown={onPointerDown}
-      className="hover:bg-sidebar-ring/60 absolute inset-y-0 -right-1 z-20 hidden w-2 cursor-col-resize md:block"
+      className="hover:bg-sidebar-ring/60 absolute inset-y-0 -right-1 z-20 block w-2 cursor-col-resize"
     />
   );
 }
