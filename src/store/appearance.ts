@@ -14,6 +14,7 @@ import {
   getStoredRadius,
   getStoredTypography,
   isHexColor,
+  CHAT_WIDTH,
   RADIUS,
   storeChatListStyle,
   storeAnimations,
@@ -145,10 +146,9 @@ export const useAppearance = create<AppearanceState>((set, get) => ({
     applyAnimations(enabled);
     set({ animations: enabled });
   },
-
   setChatMaxWidth: (v) => {
     storeChatMaxWidth(v);
-    set({ chatMaxWidth: v });
+    set({ chatMaxWidth: v === null ? null : clampSize(v, CHAT_WIDTH) });
   },
 }));
 
