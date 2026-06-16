@@ -14,7 +14,7 @@ import { useTitleBar } from "@/store/titlebar";
 import { useTheme } from "@/store/theme";
 import { useAppearance } from "@/store/appearance";
 import { useT, type MessageKey } from "@/store/i18n";
-import { resolveTheme } from "@/lib/theme";
+import { resolveTheme, type Theme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import {
   CHAT_CONTAINER_CLASSES,
@@ -48,6 +48,7 @@ import {
 export function Appearance() {
   return (
     <div className="flex flex-col gap-4">
+      <ThemeCard />
       <TitleBarCard />
       <ColorsCard />
       <CornersCard />
@@ -699,6 +700,44 @@ function SizeRow({
         </Button>
       </div>
     </div>
+  );
+}
+
+/** Light / dark / system theme (moved here from the title-bar menu). */
+function ThemeCard() {
+  const t = useT();
+  const theme = useTheme((s) => s.theme);
+  const setTheme = useTheme((s) => s.setTheme);
+
+  return (
+    <Card className="w-full max-w-lg">
+      <CardHeader>
+        <CardTitle>{t("appearance.theme.title")}</CardTitle>
+        <CardDescription>{t("appearance.theme.description")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <OptionRow label={t("appearance.theme.title")}>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            spacing={0}
+            value={theme}
+            onValueChange={(v) => v && setTheme(v as Theme)}
+          >
+            <ToggleGroupItem value="system">
+              {t("appearance.theme.system")}
+            </ToggleGroupItem>
+            <ToggleGroupItem value="light">
+              {t("appearance.theme.light")}
+            </ToggleGroupItem>
+            <ToggleGroupItem value="dark">
+              {t("appearance.theme.dark")}
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </OptionRow>
+      </CardContent>
+    </Card>
   );
 }
 
