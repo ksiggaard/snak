@@ -6,6 +6,7 @@ import { useBots } from "@/store/bots";
 import { useSearch } from "@/store/search";
 import { useView } from "@/store/view";
 import { useLayout } from "@/store/layout";
+import { useZoom } from "@/store/zoom";
 
 /**
  * Application-menu actions, shared by the native menu (Rust emits the action
@@ -19,6 +20,9 @@ export type MenuAction =
   | "toggle-sidebar"
   | "settings"
   | "usage"
+  | "zoom-in"
+  | "zoom-out"
+  | "zoom-reset"
   | "quit";
 
 /**
@@ -31,7 +35,14 @@ export type MenuAction =
  */
 export function menuActionForKey(e: KeyboardEvent): MenuAction | null {
   const mod = isMac ? e.metaKey : e.ctrlKey;
-  if (!mod || e.altKey || e.shiftKey || e.isComposing) return null;
+  if (!mod || e.altKey || e.isComposing) return null;
+
+  // Zoom — allow Shift (US "+" is Shift+=). Match by key and by numpad code.
+  if (e.key === "+" || e.key === "=" || e.code === "NumpadAdd") return "zoom-in";
+  if (e.key === "-" || e.code === "NumpadSubtract") return "zoom-out";
+  if (e.key === "0" || e.code === "Numpad0") return "zoom-reset";
+
+  if (e.shiftKey) return null;
   switch (e.key.toLowerCase()) {
     case "n":
       return "new-chat";
@@ -81,6 +92,15 @@ export function runMenuAction(action: MenuAction): void {
       break;
     case "usage":
       useView.getState().setView("usage");
+      break;
+    case "zoom-in":
+      useZoom.getState().zoomIn();
+      break;
+    case "zoom-out":
+      useZoom.getState().zoomOut();
+      break;
+    case "zoom-reset":
+      useZoom.getState().resetZoom();
       break;
     case "quit":
       // Exits outright, bypassing close-to-tray (like the tray's Quit).
