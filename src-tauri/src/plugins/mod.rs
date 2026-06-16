@@ -320,7 +320,7 @@ mod tests {
     }
 
     #[test]
-    fn all_builtins_are_valid_and_enabled_by_default() {
+    fn all_builtins_valid_with_expected_default_enablement() {
         let builtins = builtin_manifests();
         // Five provider plugins (T18/T37) + the /terminal slash-command plugin
         // (T14) + five renderer plugins: mermaid (T42), charts, youtube,
