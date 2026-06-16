@@ -65,10 +65,6 @@ export const en = {
   "titleBar.menu": "Menu",
   "titleBar.settings": "Settings",
   "titleBar.usage": "Usage",
-  "titleBar.theme": "Theme",
-  "titleBar.themeSystem": "System",
-  "titleBar.themeLight": "Light",
-  "titleBar.themeDark": "Dark",
   "titleBar.offline": "Offline",
   "titleBar.offlineHint":
     "You're offline — only local models and tools are available. Click to check the connection.",
