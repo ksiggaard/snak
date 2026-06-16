@@ -6,6 +6,7 @@ import { ChatPanel } from "@/components/chat/ChatPanel";
 import { Button } from "@/components/ui/button";
 import { useThreads } from "@/store/threads";
 import { useBots } from "@/store/bots";
+import { useAppearance } from "@/store/appearance";
 import { useT } from "@/store/i18n";
 import { isKeylessProvider, useProviders } from "@/lib/providers";
 import { cn } from "@/lib/utils";
@@ -111,6 +112,7 @@ export function ChatView() {
   const draftModel = useThreads((s) => s.draftModel);
   const draftIncognito = useThreads((s) => s.draftIncognito);
   const draftBotId = useThreads((s) => s.draftBotId);
+  const chatMaxWidth = useAppearance((s) => s.chatMaxWidth);
 
   // Bots (T38): needed to resolve the active thread's persona for rendering.
   // Lazy-init in case the Bots pane was never opened this session.
@@ -183,19 +185,24 @@ export function ChatView() {
         ) : (
           <MessageList messages={messages} pending={pending} bot={bot} />
         )}
-        {error && <p className="text-destructive px-1 text-sm">{error}</p>}
-        <ApprovalGate providerLabel={providerLabel} local={providerLocal} />
-        <Composer
-          onSend={(text, images, documents) =>
-            void send(text, images, documents)
-          }
-          onCancel={() => void cancel()}
-          busy={busy}
-          provider={provider}
-          model={model}
-          providerEnabled={providerEnabled}
-          anyProvider={anyProvider}
-        />
+        <div
+          className="mx-auto flex w-full flex-col gap-3"
+          style={{ maxWidth: chatMaxWidth ?? undefined }}
+        >
+          {error && <p className="text-destructive px-1 text-sm">{error}</p>}
+          <ApprovalGate providerLabel={providerLabel} local={providerLocal} />
+          <Composer
+            onSend={(text, images, documents) =>
+              void send(text, images, documents)
+            }
+            onCancel={() => void cancel()}
+            busy={busy}
+            provider={provider}
+            model={model}
+            providerEnabled={providerEnabled}
+            anyProvider={anyProvider}
+          />
+        </div>
       </div>
       {!panelOpen && (
         // In-flow slim strip (mirrors the sidebar's reopen bar) so the toggle
