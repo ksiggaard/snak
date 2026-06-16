@@ -11,6 +11,12 @@ import {
   SIDEBAR_MAX,
   SIDEBAR_DEFAULT,
 } from "@/lib/layout";
+import {
+  tierForWidth,
+  initialCompactNav,
+  RAIL_BREAKPOINT,
+  PHONE_BREAKPOINT,
+} from "@/lib/layout";
 
 beforeEach(() => {
   localStorage.clear();
@@ -82,5 +88,30 @@ describe("sidebar mode persistence", () => {
   it("falls back to 'chats' for an unknown stored value", () => {
     localStorage.setItem("sidebar-mode", "bogus");
     expect(getStoredSidebarMode()).toBe("chats");
+  });
+});
+
+describe("tierForWidth", () => {
+  it("is 'wide' at/above the rail breakpoint", () => {
+    expect(tierForWidth(RAIL_BREAKPOINT)).toBe("wide");
+    expect(tierForWidth(RAIL_BREAKPOINT + 200)).toBe("wide");
+  });
+
+  it("is 'tablet' between phone and rail breakpoints", () => {
+    expect(tierForWidth(PHONE_BREAKPOINT)).toBe("tablet");
+    expect(tierForWidth(RAIL_BREAKPOINT - 1)).toBe("tablet");
+  });
+
+  it("is 'phone' below the phone breakpoint", () => {
+    expect(tierForWidth(PHONE_BREAKPOINT - 1)).toBe("phone");
+    expect(tierForWidth(0)).toBe("phone");
+  });
+});
+
+describe("initialCompactNav", () => {
+  it("opens the pane on tablet, hides everything on phone, 0 on wide", () => {
+    expect(initialCompactNav("tablet")).toBe(1);
+    expect(initialCompactNav("phone")).toBe(0);
+    expect(initialCompactNav("wide")).toBe(0);
   });
 });
