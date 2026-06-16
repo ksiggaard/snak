@@ -4,18 +4,22 @@ import {
   applyCustomColors,
   applyCustomRadius,
   applyCustomTypography,
+  applyScrollbarWidth,
   clampContrast,
   clampSize,
   getStoredAnimations,
   getStoredChatListStyle,
+  getStoredChatMaxWidth,
   getStoredChatStyle,
   getStoredCustomColors,
   getStoredRadius,
   getStoredTypography,
   isHexColor,
+  CHAT_WIDTH,
   RADIUS,
   storeChatListStyle,
   storeAnimations,
+  storeChatMaxWidth,
   storeChatStyle,
   storeCustomColors,
   storeRadius,
@@ -41,6 +45,8 @@ interface AppearanceState {
   radius: number | null;
   /** Whether UI animations/transitions play (T46); default on. */
   animations: boolean;
+  /** Chat column max-width in px; `null` = off (full width). Default 760. */
+  chatMaxWidth: number | null;
 
   /** Set one color pick for one mode, persist, and re-apply the overrides. */
   setColor: (mode: ColorMode, key: ColorKey, hex: string) => void;
@@ -60,6 +66,8 @@ interface AppearanceState {
   setRadius: (v: number | null) => void;
   /** Enable/disable UI animations globally (T46). */
   setAnimations: (enabled: boolean) => void;
+  /** Set the chat column max-width (number = capped px, `null` = off). */
+  setChatMaxWidth: (v: number | null) => void;
 }
 
 export const useAppearance = create<AppearanceState>((set, get) => ({
@@ -69,6 +77,7 @@ export const useAppearance = create<AppearanceState>((set, get) => ({
   chatListStyle: getStoredChatListStyle(),
   radius: getStoredRadius(),
   animations: getStoredAnimations(),
+  chatMaxWidth: getStoredChatMaxWidth(),
 
   setColor: (mode, key, hex) => {
     if (!isHexColor(hex)) return;
@@ -138,6 +147,10 @@ export const useAppearance = create<AppearanceState>((set, get) => ({
     applyAnimations(enabled);
     set({ animations: enabled });
   },
+  setChatMaxWidth: (v) => {
+    storeChatMaxWidth(v);
+    set({ chatMaxWidth: v === null ? null : clampSize(v, CHAT_WIDTH) });
+  },
 }));
 
 // Apply the stored overrides as soon as this module loads (before first
@@ -148,3 +161,11 @@ applyCustomColors(getStoredCustomColors());
 applyCustomTypography(getStoredTypography());
 applyCustomRadius(getStoredRadius());
 applyAnimations(getStoredAnimations());
+
+// Publish the OS scrollbar width so the composer can line up with the message
+// column (see lib/appearance.ts). Re-measured on focus/resize because macOS's
+// "Automatic" setting flips between overlay (0) and classic (~15px) when a
+// mouse is plugged in or removed.
+applyScrollbarWidth();
+window.addEventListener("focus", applyScrollbarWidth);
+window.addEventListener("resize", applyScrollbarWidth);

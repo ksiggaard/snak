@@ -131,7 +131,13 @@ export function MapView({ code }: { code: string }) {
       role="application"
       aria-label={t("chat.mapLabel")}
       className={cn(
-        "border-border bg-background/60 my-2 h-80 max-h-[80vh] min-h-48 w-full resize-y overflow-hidden rounded-md border",
+        // `isolate` (isolation: isolate) is load-bearing: Leaflet gives its
+        // panes/controls high z-indexes (up to 1000 for zoom controls) which,
+        // without a stacking context here, would resolve against the root and
+        // paint over the app's z-50 overlay layer (dropdowns, popovers, etc.).
+        // Isolating the map traps those z-indexes inside it while preserving
+        // Leaflet's own internal layering (popups > markers > tiles).
+        "isolate border-border bg-background/60 my-2 h-80 max-h-[80vh] min-h-48 w-full resize-y overflow-hidden rounded-md border",
         resolved === "dark" && "snak-map-dark",
       )}
     />

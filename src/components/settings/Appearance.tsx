@@ -21,6 +21,7 @@ import {
   CHAT_LIST_STYLES,
   CHAT_SIZE,
   CHAT_STYLES,
+  CHAT_WIDTH,
   CONTRAST,
   DEFAULT_PICKER_COLORS,
   RADIUS,
@@ -55,6 +56,7 @@ export function Appearance() {
       <AnimationsCard />
       <TypographyCard />
       <ChatStyleCard />
+      <ChatWidthCard />
       <ChatListCard />
     </div>
   );
@@ -206,6 +208,72 @@ function ChatStyleCard() {
           </span>
           <ChatStylePreview style={chatStyle} />
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Chat column max-width (T-chat-width): an on/off cap plus a width slider.
+ *  Off = full width; on = centered column at the chosen px on wide windows. */
+function ChatWidthCard() {
+  const t = useT();
+  const chatMaxWidth = useAppearance((s) => s.chatMaxWidth);
+  const setChatMaxWidth = useAppearance((s) => s.setChatMaxWidth);
+  const on = chatMaxWidth !== null;
+  const width = chatMaxWidth ?? CHAT_WIDTH.fallback;
+
+  return (
+    <Card className="w-full max-w-lg">
+      <CardHeader>
+        <CardTitle>{t("chatWidth.title")}</CardTitle>
+        <CardDescription>{t("chatWidth.description")}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <OptionRow label={t("chatWidth.label")}>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            spacing={0}
+            value={on ? "on" : "off"}
+            onValueChange={(v) =>
+              v && setChatMaxWidth(v === "on" ? width : null)
+            }
+          >
+            <ToggleGroupItem value="on">{t("common.on")}</ToggleGroupItem>
+            <ToggleGroupItem value="off">{t("common.off")}</ToggleGroupItem>
+          </ToggleGroup>
+        </OptionRow>
+        {on && (
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm font-medium">
+              {t("chatWidth.maxWidth")}
+            </span>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min={CHAT_WIDTH.min}
+                max={CHAT_WIDTH.max}
+                step={20}
+                value={width}
+                aria-label={t("chatWidth.maxWidth")}
+                onChange={(e) => setChatMaxWidth(Number(e.target.value))}
+                className="accent-primary w-36"
+              />
+              <span className="text-muted-foreground w-14 text-right text-xs tabular-nums">
+                {width}px
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={width === CHAT_WIDTH.fallback}
+                onClick={() => setChatMaxWidth(CHAT_WIDTH.fallback)}
+              >
+                {t("common.reset")}
+              </Button>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
