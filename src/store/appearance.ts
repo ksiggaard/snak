@@ -8,6 +8,7 @@ import {
   clampSize,
   getStoredAnimations,
   getStoredChatListStyle,
+  getStoredChatMaxWidth,
   getStoredChatStyle,
   getStoredCustomColors,
   getStoredRadius,
@@ -16,6 +17,7 @@ import {
   RADIUS,
   storeChatListStyle,
   storeAnimations,
+  storeChatMaxWidth,
   storeChatStyle,
   storeCustomColors,
   storeRadius,
@@ -41,6 +43,8 @@ interface AppearanceState {
   radius: number | null;
   /** Whether UI animations/transitions play (T46); default on. */
   animations: boolean;
+  /** Chat column max-width in px; `null` = off (full width). Default 760. */
+  chatMaxWidth: number | null;
 
   /** Set one color pick for one mode, persist, and re-apply the overrides. */
   setColor: (mode: ColorMode, key: ColorKey, hex: string) => void;
@@ -60,6 +64,8 @@ interface AppearanceState {
   setRadius: (v: number | null) => void;
   /** Enable/disable UI animations globally (T46). */
   setAnimations: (enabled: boolean) => void;
+  /** Set the chat column max-width (number = capped px, `null` = off). */
+  setChatMaxWidth: (v: number | null) => void;
 }
 
 export const useAppearance = create<AppearanceState>((set, get) => ({
@@ -69,6 +75,7 @@ export const useAppearance = create<AppearanceState>((set, get) => ({
   chatListStyle: getStoredChatListStyle(),
   radius: getStoredRadius(),
   animations: getStoredAnimations(),
+  chatMaxWidth: getStoredChatMaxWidth(),
 
   setColor: (mode, key, hex) => {
     if (!isHexColor(hex)) return;
@@ -137,6 +144,11 @@ export const useAppearance = create<AppearanceState>((set, get) => ({
     storeAnimations(enabled);
     applyAnimations(enabled);
     set({ animations: enabled });
+  },
+
+  setChatMaxWidth: (v) => {
+    storeChatMaxWidth(v);
+    set({ chatMaxWidth: v });
   },
 }));
 
