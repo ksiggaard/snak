@@ -166,19 +166,57 @@ export const CHAT_CONTAINER_CLASSES: Record<ChatStyle, string> = {
   zebra: "gap-2 p-3",
 };
 
-/** Horizontal padding per chat style — the `px` half of CHAT_CONTAINER_CLASSES's
- * `p-*`. The composer column (`ChatView`) insets by the same amount so the input
- * lines up with the message column. **Keep in sync with CHAT_CONTAINER_CLASSES.** */
+/** Base horizontal padding (CSS length) per chat style — the `px` half of
+ * CHAT_CONTAINER_CLASSES's `p-*` (p-4 → 1rem, p-3 → 0.75rem, p-2 → 0.5rem). The
+ * composer column (`ChatView`) uses this as its left padding and
+ * `base + var(--snak-scrollbar-width)` as its right padding, so it lines up with
+ * the message column — whose scroll container reserves a matching scrollbar
+ * gutter on the right (`scrollbar-gutter: stable`). **Keep in sync with
+ * CHAT_CONTAINER_CLASSES.** */
 export const CHAT_X_PADDING: Record<ChatStyle, string> = {
-  default: "px-4",
-  bubbles: "px-4",
-  compact: "px-2",
-  document: "px-4",
-  cards: "px-4",
-  cozy: "px-4",
-  terminal: "px-3",
-  zebra: "px-3",
+  default: "1rem",
+  bubbles: "1rem",
+  compact: "0.5rem",
+  document: "1rem",
+  cards: "1rem",
+  cozy: "1rem",
+  terminal: "0.75rem",
+  zebra: "0.75rem",
 };
+
+// ── Scrollbar width (chat composer ↔ message-column alignment) ───────────────
+//
+// The message scroll container (MessageList) reserves a `scrollbar-gutter` on
+// its right edge. A classic (space-taking) scrollbar — macOS "Automatic" with a
+// mouse attached, or WebKitGTK — is ~15px wide; an overlay scrollbar (trackpad)
+// is 0. The composer, which doesn't scroll, can't reserve a gutter the same way
+// (an `overflow` ancestor would clip the upward-opening model-picker popover),
+// so instead it pads its right edge by the measured width, published here as a
+// CSS variable. 0 (overlay) makes the whole thing a no-op.
+
+/** CSS custom property (set on `<html>`) holding the OS scrollbar width in px. */
+export const SCROLLBAR_WIDTH_VAR = "--snak-scrollbar-width";
+
+/** Measure the vertical scrollbar's layout width via an offscreen probe. */
+export function measureScrollbarWidth(): number {
+  const probe = document.createElement("div");
+  probe.style.cssText =
+    "position:absolute;top:-9999px;width:100px;height:100px;overflow:scroll;visibility:hidden";
+  (document.body ?? document.documentElement).appendChild(probe);
+  const width = probe.offsetWidth - probe.clientWidth;
+  probe.remove();
+  return width;
+}
+
+/** Re-measure the scrollbar width and publish it as the CSS variable. Safe to
+ * call repeatedly — the width can change at runtime when a mouse is (un)plugged
+ * under macOS's "Automatic" scrollbar setting (overlay ↔ classic). */
+export function applyScrollbarWidth(): void {
+  document.documentElement.style.setProperty(
+    SCROLLBAR_WIDTH_VAR,
+    `${measureScrollbarWidth()}px`,
+  );
+}
 
 /** Per-chat-style classes for a message row + its content wrapper (T34).
  * Compact, cozy, and terminal have their own markup (gutter/avatar/prompt

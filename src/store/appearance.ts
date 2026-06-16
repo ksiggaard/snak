@@ -4,6 +4,7 @@ import {
   applyCustomColors,
   applyCustomRadius,
   applyCustomTypography,
+  applyScrollbarWidth,
   clampContrast,
   clampSize,
   getStoredAnimations,
@@ -160,3 +161,11 @@ applyCustomColors(getStoredCustomColors());
 applyCustomTypography(getStoredTypography());
 applyCustomRadius(getStoredRadius());
 applyAnimations(getStoredAnimations());
+
+// Publish the OS scrollbar width so the composer can line up with the message
+// column (see lib/appearance.ts). Re-measured on focus/resize because macOS's
+// "Automatic" setting flips between overlay (0) and classic (~15px) when a
+// mouse is plugged in or removed.
+applyScrollbarWidth();
+window.addEventListener("focus", applyScrollbarWidth);
+window.addEventListener("resize", applyScrollbarWidth);

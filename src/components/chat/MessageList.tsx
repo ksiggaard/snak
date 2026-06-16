@@ -1162,6 +1162,14 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
       data-chat-scroll
       className={cn(
         "flex flex-1 flex-col overflow-y-auto",
+        // Always reserve the vertical scrollbar's gutter (even when not
+        // scrolling) so this container's content box has a stable width — the
+        // composer mirrors that reserved width on its right edge (ChatView, via
+        // `--snak-scrollbar-width`) so the two columns line up. A classic
+        // (space-taking) scrollbar would otherwise narrow this box only while
+        // scrolling, shifting the alignment. Overlay scrollbars reserve 0, so
+        // this is a no-op for them.
+        "[scrollbar-gutter:stable]",
         // Style hook consumed by the T34 rules in index.css (bubble break-out,
         // compact/terminal Markdown spacing).
         `chat-style-${chatStyle}`,

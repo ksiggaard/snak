@@ -189,7 +189,17 @@ export function ChatView() {
         ) : (
           <MessageList messages={messages} pending={pending} bot={bot} />
         )}
-        <div className={CHAT_X_PADDING[chatStyle]}>
+        <div
+          // Match the message column's inset: the same base horizontal padding
+          // as the message scroll container, plus — on the right — the width of
+          // that container's reserved scrollbar gutter (`--snak-scrollbar-width`),
+          // so the centered composer lines up with the centered messages whether
+          // the width cap is on or off, and whether or not the chat is scrolling.
+          style={{
+            paddingLeft: CHAT_X_PADDING[chatStyle],
+            paddingRight: `calc(${CHAT_X_PADDING[chatStyle]} + var(--snak-scrollbar-width, 0px))`,
+          }}
+        >
           <div
             className="mx-auto flex w-full flex-col gap-3"
             style={{ maxWidth: chatMaxWidth ?? undefined }}
