@@ -50,6 +50,16 @@ export function MenuBar() {
         <Item action="usage" shortcut="U">
           {t("menu.usage")}
         </Item>
+        <DropdownMenuSeparator />
+        <Item action="zoom-in" shortcut="+">
+          {t("menu.zoomIn")}
+        </Item>
+        <Item action="zoom-out" shortcut="-">
+          {t("menu.zoomOut")}
+        </Item>
+        <Item action="zoom-reset" shortcut="0">
+          {t("menu.resetZoom")}
+        </Item>
       </Menu>
     </div>
   );
