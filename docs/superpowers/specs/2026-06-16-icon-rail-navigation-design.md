@@ -1,7 +1,7 @@
 # Icon-rail navigation (activity bar) + zoom
 
 **Date:** 2026-06-16
-**Status:** Draft (design) — awaiting user review
+**Status:** Approved (design) — ready for implementation planning
 
 ## Goal
 
@@ -332,11 +332,9 @@ Remove `titleBar.theme`, `titleBar.themeSystem`, `titleBar.themeLight`,
   overlays (rail above pane). The exact visual layering is validated on a narrow
   window during implementation.
 
-## Open decision flagged for review
+## Resolved decisions
 
-- **Rail labels:** the approved mockup showed tiny text labels under each icon.
-  This spec specifies **icon-only with hover/focus tooltips** instead, because a
-  ~50px rail is too narrow to legibly fit "Projects" / "Personas", it matches the
-  cited VS Code / Teams references, and it scales as plugins add entries. If you
-  prefer visible labels, the rail widens (~64–72px) and shows a label line under
-  each icon — easy to switch.
+- **Rail labels:** **icon-only with hover/focus tooltips** (confirmed). A ~50px
+  rail is too narrow to legibly fit "Projects" / "Personas", it matches the cited
+  VS Code / Teams references, and it scales as plugins add entries. The labeled
+  variant (wider rail with a label line per icon) was considered and rejected.
