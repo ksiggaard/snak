@@ -195,6 +195,7 @@ export const en = {
   "chat.viewImage": "View image",
   "chat.viewDiagram": "View diagram",
   "chat.viewChart": "View chart",
+  "chat.mapLabel": "Map",
   "chat.playVideo": "Play video",
   "chat.openOnYouTube": "Open on YouTube",
   "chat.inlineVideoUnavailable":

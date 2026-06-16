@@ -262,6 +262,14 @@ html.overlay #root {
     transform: translateY(-5px);
   }
 }
+
+/* Maps renderer (com.snak.maps): tint the raster basemap toward dark mode so it
+   reads against the dark theme. Applied via the .snak-map-dark class MapView
+   adds when the app is in dark mode; only the tile layer is filtered so markers,
+   routes, and popups keep their colors. */
+.snak-map-dark .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9);
+}
 .snak-ghost-float {
   animation: snak-ghost-float 3.5s ease-in-out infinite;
 }
