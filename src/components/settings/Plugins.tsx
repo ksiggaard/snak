@@ -46,17 +46,17 @@ interface PluginManifestWithSettings extends PluginManifest {
   settings?: React.ReactNode;
 }
 
-function ProviderPluginRow({ p }: { p: PluginInfo }) {
+/** API Key settings component for provider plugins */
+function ApiKeySettings({ 
+  providerId, 
+  contributes,
+  enabled 
+}: { 
+  providerId: Provider | undefined;
+  contributes: { id: string; keyHint: string } | undefined;
+  enabled: boolean;
+}) {
   const t = useT();
-  const setEnabled = usePlugins((s) => s.setEnabled);
-  const uninstall = usePlugins((s) => s.uninstall);
-  const { id, name, version, description, author } = p.manifest;
-
-  // Get the provider contribution from this plugin
-  const contributes = p.manifest.contributes as { id: string; keyHint: string } | undefined;
-  const providerId = contributes?.id as Provider | undefined;
-
-  // Get presence and loaded state from keys store
   const present = useKeys((s) => s.present);
   const keysLoaded = useKeys((s) => s.loaded);
   const setPresent = useKeys((s) => s.setPresent);
@@ -65,12 +65,8 @@ function ProviderPluginRow({ p }: { p: PluginInfo }) {
   const [busy, setBusy] = useState<Provider | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Only show API key UI if this is a provider plugin with a valid provider id
-  const showApiKey = p.manifest.category === "provider" && providerId && !isKeylessProvider(providerId);
-
-  // Check if plugin has settings defined
-  const manifestWithSettings = p.manifest as PluginManifestWithSettings;
-  const hasSettings = p.enabled && manifestWithSettings.settings;
+  // Only show API key UI if we have a providerId and it's not keyless
+  const showApiKey = providerId && !isKeylessProvider(providerId);
 
   async function save(provider: Provider) {
     const key = (drafts[provider] ?? "").trim();
@@ -105,6 +101,79 @@ function ProviderPluginRow({ p }: { p: PluginInfo }) {
   const draft = providerId ? (drafts[providerId as Provider] ?? "") : "";
   const isBusy = providerId ? busy === providerId : false;
 
+  if (!showApiKey || !enabled) return null;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center justify-between">
+          <Label htmlFor={`key-${providerId}`}>API Key</Label>
+          <span className="text-xs">
+            {saved === undefined ? (
+              <span className="text-muted-foreground">{t("apiKeys.checking")}</span>
+            ) : saved ? (
+              <span className="text-emerald-600 dark:text-emerald-400">{t("apiKeys.saved")}</span>
+            ) : (
+              <span className="text-muted-foreground">{t("apiKeys.notSet")}</span>
+            )}
+          </span>
+        </div>
+        <div className="flex gap-2">
+          <Input
+            id={`key-${providerId}`}
+            type="password"
+            autoComplete="off"
+            placeholder={saved ? t("apiKeys.storedPlaceholder") : contributes?.keyHint}
+            value={draft}
+            disabled={isBusy}
+            onChange={(e) =>
+              providerId && setDrafts((d) => ({ ...d, [providerId as Provider]: e.target.value }))
+            }
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void save(providerId as Provider);
+            }}
+          />
+          <Button
+            size="sm"
+            onClick={() => void save(providerId as Provider)}
+            disabled={isBusy || draft.trim().length === 0}
+          >
+            {saved ? t("common.update") : t("common.save")}
+          </Button>
+          {saved && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void remove(providerId as Provider)}
+              disabled={isBusy}
+            >
+              {t("common.remove")}
+            </Button>
+          )}
+        </div>
+      </div>
+      {error && <p className="text-destructive text-sm">{error}</p>}
+    </div>
+  );
+}
+
+function ProviderPluginRow({ p }: { p: PluginInfo }) {
+  const t = useT();
+  const setEnabled = usePlugins((s) => s.setEnabled);
+  const uninstall = usePlugins((s) => s.uninstall);
+  const { id, name, version, description, author } = p.manifest;
+
+  // Get the provider contribution from this plugin
+  const contributes = p.manifest.contributes as { id: string; keyHint: string } | undefined;
+  const providerId = contributes?.id as Provider | undefined;
+
+  // Check if plugin has custom settings defined
+  const manifestWithSettings = p.manifest as PluginManifestWithSettings;
+  const hasCustomSettings = manifestWithSettings.settings;
+
+  // Plugin has settings if it's enabled and either has custom settings or is a provider with API key
+  const hasSettings = p.enabled && (hasCustomSettings || (providerId && !isKeylessProvider(providerId)));
+
   return (
     <div className="flex flex-col gap-3 border-t py-3 first:border-t-0 first:pt-0">
       <div className="flex items-start justify-between gap-3">
@@ -154,65 +223,7 @@ function ProviderPluginRow({ p }: { p: PluginInfo }) {
           )}
         </div>
       </div>
-      {showApiKey && providerId && (
-        <div className="flex flex-col gap-1.5 pl-1">
-          <div className="flex items-center justify-between">
-            <Label htmlFor={`key-${id}`}>API Key</Label>
-            <span className="text-xs">
-              {saved === undefined ? (
-                <span className="text-muted-foreground">
-                  {t("apiKeys.checking")}
-                </span>
-              ) : saved ? (
-                <span className="text-emerald-600 dark:text-emerald-400">
-                  {t("apiKeys.saved")}
-                </span>
-              ) : (
-                <span className="text-muted-foreground">
-                  {t("apiKeys.notSet")}
-                </span>
-              )}
-            </span>
-          </div>
-          <div className="flex gap-2">
-            <Input
-              id={`key-${id}`}
-              type="password"
-              autoComplete="off"
-              placeholder={
-                saved ? t("apiKeys.storedPlaceholder") : contributes?.keyHint
-              }
-              value={draft}
-              disabled={isBusy}
-              onChange={(e) =>
-                providerId && setDrafts((d) => ({ ...d, [providerId as Provider]: e.target.value }))
-              }
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void save(providerId);
-              }}
-            />
-            <Button
-              size="sm"
-              onClick={() => void save(providerId)}
-              disabled={isBusy || draft.trim().length === 0}
-            >
-              {saved ? t("common.update") : t("common.save")}
-            </Button>
-            {saved && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void remove(providerId)}
-                disabled={isBusy}
-              >
-                {t("common.remove")}
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
-      {error && <p className="text-destructive text-sm pl-1">{error}</p>}
-      {/* Plugin settings - only shown when plugin is enabled */}
+      {/* Settings accordion - only shown when plugin is enabled and has settings */}
       {hasSettings && (
         <div className="pl-1">
           <Accordion type="single" collapsible defaultValue="">
@@ -221,7 +232,16 @@ function ProviderPluginRow({ p }: { p: PluginInfo }) {
                 {t("common.settings")}
               </AccordionTrigger>
               <AccordionContent>
-                {manifestWithSettings.settings}
+                {/* API Key settings for provider plugins */}
+                {providerId && !isKeylessProvider(providerId) && (
+                  <ApiKeySettings 
+                    providerId={providerId} 
+                    contributes={contributes} 
+                    enabled={p.enabled} 
+                  />
+                )}
+                {/* Custom plugin settings if defined */}
+                {hasCustomSettings && manifestWithSettings.settings}
               </AccordionContent>
             </AccordionItem>
           </Accordion>
@@ -237,9 +257,12 @@ function PluginRow({ p }: { p: PluginInfo }) {
   const uninstall = usePlugins((s) => s.uninstall);
   const { id, name, version, description, author } = p.manifest;
 
-  // Check if plugin has settings defined
+  // Check if plugin has custom settings defined
   const manifestWithSettings = p.manifest as PluginManifestWithSettings;
-  const hasSettings = p.enabled && manifestWithSettings.settings;
+  const hasCustomSettings = manifestWithSettings.settings;
+
+  // Plugin has settings if it's enabled and has custom settings
+  const hasSettings = p.enabled && hasCustomSettings;
 
   return (
     <div className="flex flex-col gap-3 border-t py-3 first:border-t-0 first:pt-0">
@@ -290,7 +313,7 @@ function PluginRow({ p }: { p: PluginInfo }) {
           )}
         </div>
       </div>
-      {/* Plugin settings - only shown when plugin is enabled */}
+      {/* Settings accordion - only shown when plugin is enabled and has settings */}
       {hasSettings && (
         <div className="pl-1">
           <Accordion type="single" collapsible defaultValue="">
