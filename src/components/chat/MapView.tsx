@@ -41,6 +41,7 @@ export function MapView({ code }: { code: string }) {
     if (!parsed || !containerRef.current) return;
     let cancelled = false;
     let map: { remove: () => void } | undefined;
+    let ro: ResizeObserver | undefined;
     void (async () => {
       // Leaflet 1.9 ships only a CJS bundle (no "module"/"exports" field), so
       // Vite bundles it as a CommonJS module and exposes the namespace as the
@@ -55,8 +56,13 @@ export function MapView({ code }: { code: string }) {
       if (cancelled || !containerRef.current) return;
 
       const accent = resolveCssVarColor("--primary") || "#3b82f6";
-      const m = L.map(containerRef.current, { scrollWheelZoom: false });
+      const el = containerRef.current;
+      const m = L.map(el, { scrollWheelZoom: false });
       map = m;
+      // The card is user-resizable (CSS `resize-y`); Leaflet doesn't observe
+      // container size changes itself, so repaint it to fill the new height.
+      ro = new ResizeObserver(() => m.invalidateSize());
+      ro.observe(el);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution: "© OpenStreetMap contributors",
@@ -100,6 +106,7 @@ export function MapView({ code }: { code: string }) {
     })();
     return () => {
       cancelled = true;
+      ro?.disconnect();
       map?.remove();
     };
     // `resolved` is intentionally NOT a dependency: the dark-mode tile filter is
@@ -122,7 +129,7 @@ export function MapView({ code }: { code: string }) {
       role="application"
       aria-label={t("chat.mapLabel")}
       className={cn(
-        "border-border bg-background/60 my-2 h-80 w-full overflow-hidden rounded-md border",
+        "border-border bg-background/60 my-2 h-80 max-h-[80vh] min-h-48 w-full resize-y overflow-hidden rounded-md border",
         resolved === "dark" && "snak-map-dark",
       )}
     />
