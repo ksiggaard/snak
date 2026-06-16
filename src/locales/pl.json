@@ -134,6 +134,7 @@
     "chat.viewImage": "Pokaż obraz",
     "chat.viewDiagram": "Pokaż diagram",
     "chat.viewChart": "Pokaż wykres",
+    "chat.mapLabel": "Mapa",
     "chat.playVideo": "Odtwórz wideo",
     "chat.openOnYouTube": "Otwórz w YouTube",
     "chat.inlineVideoUnavailable": "Odtwarzanie w aplikacji wymaga gst-plugins-good — otwieram w przeglądarce.",

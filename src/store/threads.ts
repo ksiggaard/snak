@@ -61,6 +61,7 @@ import { buildProjectSystemText } from "@/lib/projects";
 import { buildSkillsSystemText } from "@/lib/skills";
 import { buildArtifactsSystemText } from "@/lib/artifacts";
 import { buildChartsSystemText } from "@/lib/charts";
+import { buildMapsSystemText } from "@/lib/maps";
 import { buildYouTubeSystemText } from "@/lib/youtube";
 import { hasRenderer } from "@/lib/plugins";
 import { selectRegistry, usePlugins } from "@/store/plugins";
@@ -377,6 +378,12 @@ async function loadSharedSystemBlocks(
   const artifactsSystemText = buildArtifactsSystemText(registry);
   if (artifactsSystemText)
     head.push({ role: "system", content: artifactsSystemText, images: [] });
+
+  // Maps auto-instruct (com.snak.maps): teach the model the ```map GeoJSON fence
+  // when the maps renderer is enabled (empty otherwise).
+  const mapsSystemText = buildMapsSystemText(registry);
+  if (mapsSystemText)
+    head.push({ role: "system", content: mapsSystemText, images: [] });
 
   // Global system context (T10): the custom system-prompt addendum + the
   // user's memory entries (applies to every thread/provider).
