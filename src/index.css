@@ -273,3 +273,22 @@ html.overlay #root {
 .snak-ghost-float {
   animation: snak-ghost-float 3.5s ease-in-out infinite;
 }
+
+/* Accordion animations */
+@keyframes accordion-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-accordion-content-height);
+  }
+}
+
+@keyframes accordion-up {
+  from {
+    height: var(--radix-accordion-content-height);
+  }
+  to {
+    height: 0;
+  }
+}

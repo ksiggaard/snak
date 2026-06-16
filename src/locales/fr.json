@@ -21,6 +21,7 @@
     "common.send": "Envoyer",
     "common.active": "Actif",
     "common.use": "Utiliser",
+    "common.settings": "Paramètres",
     "common.uninstall": "Désinstaller",
     "common.builtIn": "intégré",
     "common.byAuthor": "par {author}",

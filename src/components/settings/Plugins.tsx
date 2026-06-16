@@ -9,6 +9,12 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { usePlugins } from "@/store/plugins";
 import { confirmDialog } from "@/store/confirm";
 import { useKeys } from "@/store/keys";
@@ -17,6 +23,7 @@ import {
   PLUGIN_CATEGORIES,
   type PluginCategory,
   type PluginInfo,
+  type PluginManifest,
 } from "@/types/plugins";
 import { isKeylessProvider } from "@/lib/providers";
 import { deleteApiKey, setApiKey } from "@/lib/keys";
@@ -33,6 +40,11 @@ const CATEGORY_KEYS: Record<PluginCategory, MessageKey> = {
 };
 
 type Drafts = Partial<Record<Provider, string>>;
+
+// Extend PluginManifest to include optional settings
+interface PluginManifestWithSettings extends PluginManifest {
+  settings?: React.ReactNode;
+}
 
 function ProviderPluginRow({ p }: { p: PluginInfo }) {
   const t = useT();
@@ -55,6 +67,10 @@ function ProviderPluginRow({ p }: { p: PluginInfo }) {
 
   // Only show API key UI if this is a provider plugin with a valid provider id
   const showApiKey = p.manifest.category === "provider" && providerId && !isKeylessProvider(providerId);
+
+  // Check if plugin has settings defined
+  const manifestWithSettings = p.manifest as PluginManifestWithSettings;
+  const hasSettings = p.enabled && manifestWithSettings.settings;
 
   async function save(provider: Provider) {
     const key = (drafts[provider] ?? "").trim();
@@ -196,6 +212,21 @@ function ProviderPluginRow({ p }: { p: PluginInfo }) {
         </div>
       )}
       {error && <p className="text-destructive text-sm pl-1">{error}</p>}
+      {/* Plugin settings - only shown when plugin is enabled */}
+      {hasSettings && (
+        <div className="pl-1">
+          <Accordion type="single" collapsible defaultValue="">
+            <AccordionItem value="settings">
+              <AccordionTrigger className="py-2 text-xs font-medium">
+                {t("common.settings")}
+              </AccordionTrigger>
+              <AccordionContent>
+                {manifestWithSettings.settings}
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </div>
+      )}
     </div>
   );
 }
@@ -206,53 +237,74 @@ function PluginRow({ p }: { p: PluginInfo }) {
   const uninstall = usePlugins((s) => s.uninstall);
   const { id, name, version, description, author } = p.manifest;
 
+  // Check if plugin has settings defined
+  const manifestWithSettings = p.manifest as PluginManifestWithSettings;
+  const hasSettings = p.enabled && manifestWithSettings.settings;
+
   return (
-    <div className="flex items-start justify-between gap-3 border-t py-3 first:border-t-0 first:pt-0">
-      <div className="flex flex-col gap-0.5">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">{name}</span>
-          <span className="text-muted-foreground text-xs">v{version}</span>
-          {p.source === "builtin" && (
-            <span className="text-muted-foreground rounded border px-1 text-[10px] uppercase">
-              {t("common.builtIn")}
+    <div className="flex flex-col gap-3 border-t py-3 first:border-t-0 first:pt-0">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">{name}</span>
+            <span className="text-muted-foreground text-xs">v{version}</span>
+            {p.source === "builtin" && (
+              <span className="text-muted-foreground rounded border px-1 text-[10px] uppercase">
+                {t("common.builtIn")}
+              </span>
+            )}
+          </div>
+          {description && (
+            <span className="text-muted-foreground text-xs">{description}</span>
+          )}
+          {author && (
+            <span className="text-muted-foreground text-[11px]">
+              {t("common.byAuthor", { author })}
             </span>
           )}
         </div>
-        {description && (
-          <span className="text-muted-foreground text-xs">{description}</span>
-        )}
-        {author && (
-          <span className="text-muted-foreground text-[11px]">
-            {t("common.byAuthor", { author })}
-          </span>
-        )}
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        <Button
-          size="sm"
-          variant={p.enabled ? "default" : "outline"}
-          onClick={() => void setEnabled(id, !p.enabled)}
-        >
-          {p.enabled ? t("common.enabled") : t("common.disabled")}
-        </Button>
-        {p.source === "user" && (
+        <div className="flex shrink-0 items-center gap-2">
           <Button
             size="sm"
-            variant="outline"
-            onClick={() => {
-              void confirmDialog({
-                title: tNow("plugins.uninstallTitle", { name }),
-                confirmText: tNow("common.uninstall"),
-                destructive: true,
-              }).then((ok) => {
-                if (ok) void uninstall(id);
-              });
-            }}
+            variant={p.enabled ? "default" : "outline"}
+            onClick={() => void setEnabled(id, !p.enabled)}
           >
-            {t("common.uninstall")}
+            {p.enabled ? t("common.enabled") : t("common.disabled")}
           </Button>
-        )}
+          {p.source === "user" && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                void confirmDialog({
+                  title: tNow("plugins.uninstallTitle", { name }),
+                  confirmText: tNow("common.uninstall"),
+                  destructive: true,
+                }).then((ok) => {
+                  if (ok) void uninstall(id);
+                });
+              }}
+            >
+              {t("common.uninstall")}
+            </Button>
+          )}
+        </div>
       </div>
+      {/* Plugin settings - only shown when plugin is enabled */}
+      {hasSettings && (
+        <div className="pl-1">
+          <Accordion type="single" collapsible defaultValue="">
+            <AccordionItem value="settings">
+              <AccordionTrigger className="py-2 text-xs font-medium">
+                {t("common.settings")}
+              </AccordionTrigger>
+              <AccordionContent>
+                {manifestWithSettings.settings}
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </div>
+      )}
     </div>
   );
 }

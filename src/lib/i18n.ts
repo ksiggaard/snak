@@ -47,6 +47,7 @@ export const en = {
   "common.send": "Send",
   "common.active": "Active",
   "common.use": "Use",
+  "common.settings": "Settings",
   "common.uninstall": "Uninstall",
   "common.builtIn": "built-in",
   "common.byAuthor": "by {author}",

@@ -21,6 +21,7 @@
     "common.send": "Send",
     "common.active": "Aktiv",
     "common.use": "Brug",
+    "common.settings": "Indstillinger",
     "common.uninstall": "Afinstaller",
     "common.builtIn": "indbygget",
     "common.byAuthor": "af {author}",
