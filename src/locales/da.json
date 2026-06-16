@@ -134,6 +134,7 @@
     "chat.viewImage": "Vis billede",
     "chat.viewDiagram": "Vis diagram",
     "chat.viewChart": "Vis diagram",
+    "chat.mapLabel": "Kort",
     "chat.playVideo": "Afspil video",
     "chat.openOnYouTube": "Åbn på YouTube",
     "chat.inlineVideoUnavailable": "Indlejret afspilning kræver gst-plugins-good — åbner i din browser i stedet.",
