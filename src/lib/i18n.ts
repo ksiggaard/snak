@@ -399,13 +399,9 @@ export const en = {
 
   // --- Settings: section nav ------------------------------------------------------------
   "settings.nav.apiKeys": "API Keys",
-  "settings.nav.defaultModel": "Default Model",
   "settings.nav.models": "Models",
-  "settings.nav.contextWindows": "Context windows",
-  "settings.nav.ollama": "Local (Ollama)",
   "settings.nav.memory": "Memory",
-  "settings.nav.shortcut": "Shortcut",
-  "settings.nav.tray": "Close to Tray",
+  "settings.nav.behavior": "Behavior",
   "settings.nav.appearance": "Appearance",
   "settings.nav.language": "Language",
   "settings.nav.mcp": "MCP Servers",
@@ -465,6 +461,11 @@ export const en = {
   "contextWindows.addLabel": "Add a model window",
   "contextWindows.modelPlaceholder": "Select a model",
   "contextWindows.maxTokens": "Max tokens",
+
+  // --- Settings: Models (merged page) ----------------------------------------------------
+  "models.disabledDescription": "Model settings are only available when the plugin is enabled.",
+  "models.enablePlugin": "Enable the {pluginName} plugin to access these settings.",
+  "models.pluginName": "Models",
 
   // --- Settings: local Ollama provider (T37) ---------------------------------------------------------
   "ollama.title": "Local (Ollama)",

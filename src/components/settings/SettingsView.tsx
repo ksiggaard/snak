@@ -1,13 +1,9 @@
 import { useState, type ComponentType } from "react";
-import { DefaultModel } from "@/components/settings/DefaultModel";
 import { Models } from "@/components/settings/Models";
-import { ContextWindows } from "@/components/settings/ContextWindows";
-import { OllamaSettings } from "@/components/settings/OllamaSettings";
 import { Memory } from "@/components/settings/Memory";
 import { Bots } from "@/components/settings/Bots";
 import { QuickActions } from "@/components/settings/QuickActions";
-import { ShortcutSetting } from "@/components/settings/Shortcut";
-import { CloseToTraySetting } from "@/components/settings/CloseToTray";
+import { BehaviorSettings } from "@/components/settings/Behavior";
 import { Appearance } from "@/components/settings/Appearance";
 import { Language } from "@/components/settings/Language";
 import { McpServers } from "@/components/settings/McpServers";
@@ -29,17 +25,10 @@ interface Section {
 // and clipped — see the left-nav layout below.
 const SECTIONS: Section[] = [
   {
-    id: "default-model",
-    label: "settings.nav.defaultModel",
-    Component: DefaultModel,
+    id: "models",
+    label: "settings.nav.models",
+    Component: Models,
   },
-  { id: "models", label: "settings.nav.models", Component: Models },
-  {
-    id: "context-windows",
-    label: "settings.nav.contextWindows",
-    Component: ContextWindows,
-  },
-  { id: "ollama", label: "settings.nav.ollama", Component: OllamaSettings },
   { id: "memory", label: "settings.nav.memory", Component: Memory },
   { id: "bots", label: "settings.nav.bots", Component: Bots },
   {
@@ -47,12 +36,7 @@ const SECTIONS: Section[] = [
     label: "settings.nav.quickActions",
     Component: QuickActions,
   },
-  {
-    id: "shortcut",
-    label: "settings.nav.shortcut",
-    Component: ShortcutSetting,
-  },
-  { id: "tray", label: "settings.nav.tray", Component: CloseToTraySetting },
+  { id: "behavior", label: "settings.nav.behavior", Component: BehaviorSettings },
   { id: "appearance", label: "settings.nav.appearance", Component: Appearance },
   { id: "language", label: "settings.nav.language", Component: Language },
   { id: "mcp", label: "settings.nav.mcp", Component: McpServers },
