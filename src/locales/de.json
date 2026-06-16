@@ -580,6 +580,16 @@
     "advanced.captureReasoningLabel": "Modell-Denkprozess anzeigen",
     "advanced.captureReasoningHelp": "Erfasst den Denkprozess des Modells (erweitertes Nachdenken) und zeigt ihn in einem aufklappbaren Bereich unter jeder Antwort. Das kostet zusätzliche Tokens und Zeit, und nur einige Modelle/Anbieter geben ihn preis — Anthropic und Gemini schon; OpenAI/Mistral meist nicht.",
     "advanced.captureTraceLabel": "API-Anfrage/-Antwort-Trace anzeigen",
-    "advanced.captureTraceHelp": "Zeichnet die genaue Anfrage auf, die pro Runde an den Anbieter gesendet wird (große Bild-/Dokumentdaten ausgelassen), plus eine Antwortzusammenfassung, in einem Entwicklerbereich unter jeder Antwort. Zur Fehlersuche und Transparenz."
+    "advanced.captureTraceHelp": "Zeichnet die genaue Anfrage auf, die pro Runde an den Anbieter gesendet wird (große Bild-/Dokumentdaten ausgelassen), plus eine Antwortzusammenfassung, in einem Entwicklerbereich unter jeder Antwort. Zur Fehlersuche und Transparenz.",
+    "rail.manage": "Verwalten",
+    "manage.zoom": "Zoom",
+    "appearance.theme.title": "Design",
+    "appearance.theme.description": "Hell, dunkel oder dem System folgen.",
+    "appearance.theme.system": "System",
+    "appearance.theme.light": "Hell",
+    "appearance.theme.dark": "Dunkel",
+    "menu.zoomIn": "Vergrößern",
+    "menu.zoomOut": "Verkleinern",
+    "menu.resetZoom": "Zoom zurücksetzen"
   }
 }

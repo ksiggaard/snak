@@ -580,6 +580,16 @@
     "advanced.captureReasoningLabel": "Mostrar el razonamiento del modelo",
     "advanced.captureReasoningHelp": "Captura el razonamiento del modelo (pensamiento extendido) y lo muestra en un panel plegable bajo cada respuesta. Consume más tokens y tiempo, y solo algunos modelos/proveedores lo exponen: Anthropic y Gemini sí; OpenAI/Mistral normalmente no.",
     "advanced.captureTraceLabel": "Mostrar traza de solicitud/respuesta de API",
-    "advanced.captureTraceHelp": "Registra la solicitud exacta enviada al proveedor en cada ronda (con los datos grandes de imágenes/documentos omitidos), más un resumen de la respuesta, en un panel de desarrollador bajo cada respuesta. Para depuración y transparencia."
+    "advanced.captureTraceHelp": "Registra la solicitud exacta enviada al proveedor en cada ronda (con los datos grandes de imágenes/documentos omitidos), más un resumen de la respuesta, en un panel de desarrollador bajo cada respuesta. Para depuración y transparencia.",
+    "rail.manage": "Administrar",
+    "manage.zoom": "Zoom",
+    "appearance.theme.title": "Tema",
+    "appearance.theme.description": "Claro, oscuro o seguir el sistema.",
+    "appearance.theme.system": "Sistema",
+    "appearance.theme.light": "Claro",
+    "appearance.theme.dark": "Oscuro",
+    "menu.zoomIn": "Acercar",
+    "menu.zoomOut": "Alejar",
+    "menu.resetZoom": "Restablecer zoom"
   }
 }

@@ -580,6 +580,16 @@
     "advanced.captureReasoningLabel": "Vis modellens ræsonnement",
     "advanced.captureReasoningHelp": "Fang modellens ræsonnement (udvidet tænkning) og vis det i et sammenklappeligt panel under hvert svar. Det bruger flere tokens og mere tid, og kun nogle modeller/udbydere viser det — Anthropic og Gemini gør; OpenAI/Mistral gør det normalt ikke.",
     "advanced.captureTraceLabel": "Vis API-forespørgsel/-svar-spor",
-    "advanced.captureTraceHelp": "Optag den nøjagtige forespørgsel, der sendes til udbyderen hver runde (store billed-/dokumentdata udeladt), plus et svarresumé, i et udviklerpanel under hvert svar. Til fejlfinding og gennemsigtighed."
+    "advanced.captureTraceHelp": "Optag den nøjagtige forespørgsel, der sendes til udbyderen hver runde (store billed-/dokumentdata udeladt), plus et svarresumé, i et udviklerpanel under hvert svar. Til fejlfinding og gennemsigtighed.",
+    "rail.manage": "Administrér",
+    "manage.zoom": "Zoom",
+    "appearance.theme.title": "Tema",
+    "appearance.theme.description": "Lyst, mørkt eller følg systemet.",
+    "appearance.theme.system": "System",
+    "appearance.theme.light": "Lyst",
+    "appearance.theme.dark": "Mørkt",
+    "menu.zoomIn": "Zoom ind",
+    "menu.zoomOut": "Zoom ud",
+    "menu.resetZoom": "Nulstil zoom"
   }
 }
