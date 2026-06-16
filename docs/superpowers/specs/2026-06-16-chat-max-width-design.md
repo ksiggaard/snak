@@ -114,17 +114,21 @@ off cycle. Acceptable for v1.
 - The composer always follows the global setting; it has no per-reply toggle.
 - When the cap is off (`null`), `maxWidth` is `undefined` → full width, as today.
 
-### 6. i18n — `src/lib/i18n.ts` (English catalog only)
+### 6. i18n — `src/lib/i18n.ts` + bundled locale packs
 
-The `en` catalog is the source of truth; other locale packs (da/de/es/fr/pl)
-fall back to English automatically, so only these keys are added:
+The `en` catalog is the key source of truth. **Correction (found during
+implementation):** the bundled packs (`src/locales/{de,fr,pl,es,da}.json`) are
+NOT allowed to rely on English fallback — `src/lib/locales.test.ts` enforces
+that every bundled pack translates every catalog key (the fallback path is for
+*user* packs only). So these keys must be added to `en` **and** translated into
+all five bundled packs:
 
 - `chatWidth.title`: "Chat width"
 - `chatWidth.description`: "Cap how wide messages and the composer get on large
   windows, centering the conversation. Individual replies can still be expanded
   to full width."
 - `chatWidth.label`: "Limit width"
-- `chatWidth.widthLabel`: "Max width"
+- `chatWidth.maxWidth`: "Max width"
 - `chat.fullWidth`: "Full width"
 - `chat.exitFullWidth`: "Fit to column"
 
