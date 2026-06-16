@@ -21,6 +21,8 @@ describe("buildMapsSystemText", () => {
     expect(out).toContain("## Maps");
     expect(out).toContain("`map`");
     expect(out).toContain("snap");
+    // Real places must be located by address (geocoded), not guessed coordinates.
+    expect(out).toContain("properties.address");
   });
 
   it("matches the renderer language case-insensitively", () => {

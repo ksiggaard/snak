@@ -331,6 +331,7 @@ pub fn run() {
             commands::ollama::ollama_start,
             commands::ollama::ollama_unload,
             commands::routing::route_directions,
+            commands::geocode::geocode,
             set_close_to_tray,
             menu::set_menu_visible,
             menu::quit_app,

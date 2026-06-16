@@ -23,9 +23,16 @@ export function buildMapsSystemText(reg: HostRegistry): string {
       "features are paths: to snap a path to real roads set `properties.snap` " +
       'to "driving", "walking", or "cycling" with the route\'s waypoints as the ' +
       "line's coordinates; otherwise the line is drawn exactly as given. " +
-      "Polygon features are filled areas. Coordinates are [longitude, latitude] " +
-      "and the app fits the view to your data automatically. Use a map when " +
-      "geography (locations, directions, a trip plan) makes the answer clearer " +
-      "than text.",
+      "Polygon features are filled areas. Coordinates are [longitude, latitude].",
+    "IMPORTANT — locating real places: do NOT guess latitude/longitude for a " +
+      "real-world place or street address (guessed coordinates land the marker " +
+      "in the wrong spot). Instead set `properties.address` to the place name or " +
+      'full address (e.g. "Colosseum, Rome" or "1600 Pennsylvania Ave NW, ' +
+      'Washington DC") and set the feature\'s `geometry` to null — the app ' +
+      "geocodes the address to exact coordinates via OpenStreetMap. Use explicit " +
+      "`[longitude, latitude]` coordinates only for points you genuinely know or " +
+      "for abstract/non-map data.",
+    "The app fits the view to your data automatically. Use a map when geography " +
+      "(locations, directions, a trip plan) makes the answer clearer than text.",
   ].join("\n");
 }

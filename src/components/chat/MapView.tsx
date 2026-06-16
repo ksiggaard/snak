@@ -8,8 +8,10 @@ import {
   parseFeatureCollection,
   resolveProfile,
   type FeatureCollection,
+  type GeoFeature,
 } from "@/lib/geo";
 import { routeDirections } from "@/lib/routing";
+import { geocode } from "@/lib/geocode";
 
 /**
  * Renders a ```map (or ```geojson) fenced block as an interactive OpenStreetMap
@@ -52,7 +54,7 @@ export function MapView({ code }: { code: string }) {
       const L = (Lns as any).default as typeof Lns;
       if (cancelled || !containerRef.current) return;
 
-      const fc = await resolveRoutes(parsed);
+      const fc = await resolveFeatures(parsed);
       if (cancelled || !containerRef.current) return;
 
       const accent = resolveCssVarColor("--primary") || "#3b82f6";
@@ -137,16 +139,40 @@ export function MapView({ code }: { code: string }) {
 }
 
 /**
- * Replace the geometry of every routable LineString (one with a resolvable
- * `properties.snap`) with road-snapped coordinates from the routing command.
- * Non-routable features pass through untouched; a routing failure keeps the
- * original straight-line waypoints.
+ * Resolve a parsed FeatureCollection into one ready to draw:
+ *  1. Geocode features that name a place via `properties.address` (Nominatim),
+ *     replacing their geometry with the precise point — so the model can name
+ *     real addresses instead of guessing coordinates. Done first and serially
+ *     (the geocoder is rate-limited); a failed lookup keeps the original
+ *     geometry (which may be null, in which case Leaflet just skips it).
+ *  2. Snap routable LineStrings (those with a resolvable `properties.snap`) to
+ *     roads via the routing command; a routing failure keeps the straight-line
+ *     waypoints. Done in parallel.
  */
-async function resolveRoutes(
+async function resolveFeatures(
   fc: FeatureCollection,
 ): Promise<FeatureCollection> {
+  // 1) Geocode address-based points (serialized inside geocode() for fair-use).
+  const located: GeoFeature[] = [];
+  for (const f of fc.features) {
+    const address = (f.properties ?? {}).address;
+    if (typeof address === "string" && address.trim()) {
+      try {
+        const pt = await geocode(address);
+        if (pt) {
+          located.push({ ...f, geometry: { type: "Point", coordinates: pt } });
+          continue;
+        }
+      } catch {
+        // Geocoding failed — fall through and keep the model's own geometry.
+      }
+    }
+    located.push(f);
+  }
+
+  // 2) Snap routable LineStrings to roads.
   const features = await Promise.all(
-    fc.features.map(async (f) => {
+    located.map(async (f) => {
       const profile = resolveProfile((f.properties ?? {}).snap);
       const wp = profile ? lineWaypoints(f) : null;
       if (!profile || !wp) return f;
