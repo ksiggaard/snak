@@ -188,6 +188,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/021_artifacts.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 22,
+            description: "workspaces: rename projects→workspaces, project_files→workspace_files, threads.project_id→workspace_id",
+            sql: include_str!("../migrations/022_workspaces.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

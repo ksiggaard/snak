@@ -14,7 +14,7 @@ import { imageDataUrl, type MessageView } from "@/lib/messages";
 import { highlightSegments } from "@/lib/search";
 import { formatTokens } from "@/lib/usage";
 import { openLightbox } from "@/store/lightbox";
-import { useProjects } from "@/store/projects";
+import { useWorkspaces } from "@/store/workspaces";
 import { useSearch } from "@/store/search";
 import { useThreads } from "@/store/threads";
 import { useT } from "@/store/i18n";
@@ -207,15 +207,15 @@ export function ChatPanel({
   );
 }
 
-/** Chat management for the open thread: rename and move to a project. */
+/** Chat management for the open thread: rename and move to a workspace. */
 function ThreadSection({ threadId }: { threadId: string }) {
   const t = useT();
   const thread = useThreads((s) => s.threads.find((x) => x.id === threadId));
   const rename = useThreads((s) => s.rename);
-  const assignThreadProject = useThreads((s) => s.assignThreadProject);
-  const projects = useProjects((s) => s.projects);
-  const projectsInitialized = useProjects((s) => s.initialized);
-  const initProjects = useProjects((s) => s.init);
+  const assignThreadWorkspace = useThreads((s) => s.assignThreadWorkspace);
+  const workspaces = useWorkspaces((s) => s.workspaces);
+  const workspacesInitialized = useWorkspaces((s) => s.initialized);
+  const initWorkspaces = useWorkspaces((s) => s.init);
   const [title, setTitle] = useState(thread?.title ?? "");
   // Re-seed the local draft when switching threads (render-time adjustment).
   const [seededFor, setSeededFor] = useState(threadId);
@@ -225,8 +225,8 @@ function ThreadSection({ threadId }: { threadId: string }) {
   }
 
   useEffect(() => {
-    if (!projectsInitialized) void initProjects();
-  }, [projectsInitialized, initProjects]);
+    if (!workspacesInitialized) void initWorkspaces();
+  }, [workspacesInitialized, initWorkspaces]);
 
   if (!thread) return null;
 
@@ -251,22 +251,22 @@ function ThreadSection({ threadId }: { threadId: string }) {
           aria-label={t("panel.renamePlaceholder")}
           className="h-8 text-sm"
         />
-        {projects.length > 0 && (
+        {workspaces.length > 0 && (
           <label className="flex items-center justify-between gap-2">
             <span className="text-muted-foreground text-xs">
-              {t("panel.project")}
+              {t("panel.workspace")}
             </span>
             <NativeSelect
               className="h-8 w-40"
-              value={thread.project_id ?? ""}
+              value={thread.workspace_id ?? ""}
               onChange={(e) =>
-                void assignThreadProject(threadId, e.target.value || null)
+                void assignThreadWorkspace(threadId, e.target.value || null)
               }
             >
-              <option value="">{t("panel.noProject")}</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
+              <option value="">{t("panel.noWorkspace")}</option>
+              {workspaces.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
                 </option>
               ))}
             </NativeSelect>

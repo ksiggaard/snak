@@ -5,70 +5,73 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { QuickActionsEditor } from "@/components/settings/QuickActionsEditor";
-import { useProjects } from "@/store/projects";
+import { useWorkspaces } from "@/store/workspaces";
 import { t as tNow, useT, useTp } from "@/store/i18n";
 import { classifyFile, extractDocumentText } from "@/lib/documents";
-import { PROJECT_CONTEXT_CHAR_BUDGET, projectFilesSize } from "@/lib/projects";
+import {
+  WORKSPACE_CONTEXT_CHAR_BUDGET,
+  workspaceFilesSize,
+} from "@/lib/workspaces";
 import {
   parseQuickActions,
   serializeQuickActions,
   type QuickAction,
 } from "@/lib/quickActions";
 
-/** Max size (chars) for a single uploaded project file. */
+/** Max size (chars) for a single uploaded workspace file. */
 const MAX_FILE_CHARS = 200_000;
 
-export function ProjectView() {
+export function WorkspaceView() {
   const t = useT();
   const tp = useTp();
-  const openProjectId = useProjects((s) => s.openProjectId);
-  const projects = useProjects((s) => s.projects);
-  const files = useProjects((s) => s.openProjectFiles);
-  const rename = useProjects((s) => s.rename);
-  const setInstructions = useProjects((s) => s.setInstructions);
-  const setQuickActions = useProjects((s) => s.setQuickActions);
-  const addFile = useProjects((s) => s.addFile);
-  const removeFile = useProjects((s) => s.removeFile);
+  const openWorkspaceId = useWorkspaces((s) => s.openWorkspaceId);
+  const workspaces = useWorkspaces((s) => s.workspaces);
+  const files = useWorkspaces((s) => s.openWorkspaceFiles);
+  const rename = useWorkspaces((s) => s.rename);
+  const setInstructions = useWorkspaces((s) => s.setInstructions);
+  const setQuickActions = useWorkspaces((s) => s.setQuickActions);
+  const addFile = useWorkspaces((s) => s.addFile);
+  const removeFile = useWorkspaces((s) => s.removeFile);
 
-  const project = projects.find((p) => p.id === openProjectId);
+  const workspace = workspaces.find((w) => w.id === openWorkspaceId);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Local drafts so typing doesn't write to the DB on each keystroke; re-synced
-  // at render when the open project changes (render-time sync pattern, not an
+  // at render when the open workspace changes (render-time sync pattern, not an
   // effect — matches ModelPicker).
-  const [nameDraft, setNameDraft] = useState(project?.name ?? "");
-  const [instrDraft, setInstrDraft] = useState(project?.instructions ?? "");
+  const [nameDraft, setNameDraft] = useState(workspace?.name ?? "");
+  const [instrDraft, setInstrDraft] = useState(workspace?.instructions ?? "");
   const [qaDraft, setQaDraft] = useState<QuickAction[]>(() =>
-    parseQuickActions(project?.quick_actions),
+    parseQuickActions(workspace?.quick_actions),
   );
-  const [syncedId, setSyncedId] = useState(openProjectId);
-  if (openProjectId !== syncedId) {
-    setSyncedId(openProjectId);
-    setNameDraft(project?.name ?? "");
-    setInstrDraft(project?.instructions ?? "");
-    setQaDraft(parseQuickActions(project?.quick_actions));
+  const [syncedId, setSyncedId] = useState(openWorkspaceId);
+  if (openWorkspaceId !== syncedId) {
+    setSyncedId(openWorkspaceId);
+    setNameDraft(workspace?.name ?? "");
+    setInstrDraft(workspace?.instructions ?? "");
+    setQaDraft(parseQuickActions(workspace?.quick_actions));
     setError(null);
   }
 
-  if (!project) {
+  if (!workspace) {
     return (
       <div className="text-muted-foreground flex flex-1 items-center justify-center text-sm">
-        {t("project.notFound")}
+        {t("workspace.notFound")}
       </div>
     );
   }
 
-  const filesSize = projectFilesSize(files);
-  const overBudget = filesSize > PROJECT_CONTEXT_CHAR_BUDGET;
+  const filesSize = workspaceFilesSize(files);
+  const overBudget = filesSize > WORKSPACE_CONTEXT_CHAR_BUDGET;
   // Quick-actions override is dirty vs. what's stored (normalized through the
   // parser so "" and "[]" both compare equal to an empty draft).
   const qaDirty =
     serializeQuickActions(qaDraft) !==
-    serializeQuickActions(parseQuickActions(project.quick_actions));
+    serializeQuickActions(parseQuickActions(workspace.quick_actions));
 
   async function onPickFiles(list: FileList | null) {
-    if (!list || !project) return;
+    if (!list || !workspace) return;
     setError(null);
     for (const file of Array.from(list)) {
       // T39: binary documents (PDF/Office) are text-extracted in the backend
@@ -90,10 +93,10 @@ export function ProjectView() {
             : await file.text();
         const content =
           text.length > MAX_FILE_CHARS ? text.slice(0, MAX_FILE_CHARS) : text;
-        await addFile(project.id, file.name, content);
+        await addFile(workspace.id, file.name, content);
         if (text.length > MAX_FILE_CHARS) {
           setError(
-            tNow("project.truncated", {
+            tNow("workspace.truncated", {
               name: file.name,
               n: MAX_FILE_CHARS.toLocaleString(),
             }),
@@ -110,7 +113,7 @@ export function ProjectView() {
             }),
           );
         } else {
-          setError(tNow("project.readError", { name: file.name }));
+          setError(tNow("workspace.readError", { name: file.name }));
         }
       }
     }
@@ -120,49 +123,49 @@ export function ProjectView() {
   return (
     <div className="bg-card flex flex-1 flex-col gap-5 overflow-y-auto rounded-lg border p-5">
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="project-name">{t("project.name")}</Label>
+        <Label htmlFor="workspace-name">{t("workspace.name")}</Label>
         <Input
-          id="project-name"
+          id="workspace-name"
           value={nameDraft}
           onChange={(e) => setNameDraft(e.target.value)}
           onBlur={() => {
-            if (nameDraft.trim() && nameDraft !== project.name)
-              void rename(project.id, nameDraft);
+            if (nameDraft.trim() && nameDraft !== workspace.name)
+              void rename(workspace.id, nameDraft);
           }}
           className="max-w-md"
         />
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="project-instructions">
-          {t("project.instructions")}
+        <Label htmlFor="workspace-instructions">
+          {t("workspace.instructions")}
         </Label>
         <p className="text-muted-foreground text-xs">
-          {t("project.instructionsHint")}
+          {t("workspace.instructionsHint")}
         </p>
         <Textarea
-          id="project-instructions"
+          id="workspace-instructions"
           value={instrDraft}
           onChange={(e) => setInstrDraft(e.target.value)}
           onBlur={() => {
-            if (instrDraft !== project.instructions)
-              void setInstructions(project.id, instrDraft);
+            if (instrDraft !== workspace.instructions)
+              void setInstructions(workspace.id, instrDraft);
           }}
           rows={6}
-          placeholder={t("project.instructionsPlaceholder")}
+          placeholder={t("workspace.instructionsPlaceholder")}
         />
       </div>
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <Label>{t("project.files")}</Label>
+          <Label>{t("workspace.files")}</Label>
           <Button
             variant="outline"
             size="sm"
             onClick={() => fileInputRef.current?.click()}
           >
             <Upload className="size-4" />
-            {t("project.addFiles")}
+            {t("workspace.addFiles")}
           </Button>
           <input
             ref={fileInputRef}
@@ -179,17 +182,17 @@ export function ProjectView() {
               : "text-muted-foreground text-xs"
           }
         >
-          {tp("project.fileCount", files.length)} ·{" "}
-          {t("project.chars", {
+          {tp("workspace.fileCount", files.length)} ·{" "}
+          {t("workspace.chars", {
             used: filesSize.toLocaleString(),
-            budget: PROJECT_CONTEXT_CHAR_BUDGET.toLocaleString(),
+            budget: WORKSPACE_CONTEXT_CHAR_BUDGET.toLocaleString(),
           })}
-          {overBudget && ` ${t("project.overBudget")}`}
+          {overBudget && ` ${t("workspace.overBudget")}`}
         </p>
 
         {files.length === 0 ? (
           <p className="text-muted-foreground text-xs">
-            {t("project.noFiles")}
+            {t("workspace.noFiles")}
           </p>
         ) : (
           <ul className="flex flex-col gap-1">
@@ -205,7 +208,7 @@ export function ProjectView() {
                 </span>
                 <button
                   type="button"
-                  aria-label={t("project.removeFile", { name: f.name })}
+                  aria-label={t("workspace.removeFile", { name: f.name })}
                   onClick={() => void removeFile(f.id)}
                   className="text-muted-foreground hover:text-destructive shrink-0"
                 >
@@ -218,13 +221,13 @@ export function ProjectView() {
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label>{t("project.quickActions")}</Label>
+        <Label>{t("workspace.quickActions")}</Label>
         <p className="text-muted-foreground text-xs">
-          {t("project.quickActionsHint")}
+          {t("workspace.quickActionsHint")}
         </p>
         {qaDraft.length === 0 && (
           <p className="text-muted-foreground text-xs">
-            {t("project.quickActionsUsingGlobal")}
+            {t("workspace.quickActionsUsingGlobal")}
           </p>
         )}
         <QuickActionsEditor actions={qaDraft} onChange={setQaDraft} />
@@ -234,7 +237,7 @@ export function ProjectView() {
               size="sm"
               onClick={() =>
                 void setQuickActions(
-                  project.id,
+                  workspace.id,
                   qaDraft.length ? serializeQuickActions(qaDraft) : "",
                 )
               }

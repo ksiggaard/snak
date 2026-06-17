@@ -2543,8 +2543,9 @@ text animations, so the wait reads as lively rather than stalled.
 
 ## T58 — Rename projects → workspaces (full: DB + code + UI)
 
-- **Status:** todo
-- **Owner:** —
+- **Status:** done
+- **Owner:** Claude (T58)
+- **Notes:** 2026-06-17 — Migration 022 renames tables/columns; all code symbols, types, and i18n keys (EN + 5 locale packs) updated; full gate passes (build, lint, 623 tests, cargo build/clippy/fmt).
 - **Priority:** P2
 - **Layer:** Rust (migration) + Frontend (code symbols + UI + i18n)
 - **Depends on:** —

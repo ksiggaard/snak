@@ -9,7 +9,7 @@ import {
 
 /**
  * Global quick actions (the empty new-chat starters). Lazy-init store mirroring
- * `useProjects`/`useBots`: the list is loaded once from the `settings` table and
+ * `useWorkspaces`/`useBots`: the list is loaded once from the `settings` table and
  * saved back as JSON. A fresh install (no stored value) seeds the built-in
  * defaults so the empty screen is never blank. The Settings card and the empty
  * screen both read this store, so edits reflect live.
@@ -32,7 +32,8 @@ export const useQuickActions = create<QuickActionsState>((set, get) => ({
     // Absent value → defaults; a stored value parses tolerantly (an explicitly
     // emptied list stays empty — the user removed every action on purpose).
     set({
-      actions: stored === null ? DEFAULT_QUICK_ACTIONS : parseQuickActions(stored),
+      actions:
+        stored === null ? DEFAULT_QUICK_ACTIONS : parseQuickActions(stored),
       initialized: true,
     });
   },

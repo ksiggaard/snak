@@ -2,10 +2,14 @@ import { useEffect } from "react";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { DEFAULT_SHORTCUT, SHORTCUT_KEY, CLOSE_TO_TRAY_KEY } from "@/components/settings/Behavior";
+import {
+  DEFAULT_SHORTCUT,
+  SHORTCUT_KEY,
+  CLOSE_TO_TRAY_KEY,
+} from "@/components/settings/Behavior";
 import { SettingsView } from "@/components/settings/SettingsView";
 import { ChatView } from "@/components/chat/ChatView";
-import { ProjectView } from "@/components/projects/ProjectView";
+import { WorkspaceView } from "@/components/workspaces/WorkspaceView";
 import { BotView } from "@/components/bots/BotView";
 import { UsageView } from "@/components/usage/UsageView";
 import { SearchOverlay } from "@/components/search/SearchOverlay";
@@ -32,7 +36,7 @@ import {
   recentDestinations,
 } from "@/lib/quickDestinations";
 import { useThreads } from "@/store/threads";
-import { useProjects } from "@/store/projects";
+import { useWorkspaces } from "@/store/workspaces";
 import { useBots } from "@/store/bots";
 import { usePlugins } from "@/store/plugins";
 import { useI18n, useT } from "@/store/i18n";
@@ -52,7 +56,7 @@ import "@/store/appearance";
 function App() {
   const t = useT();
   const init = useThreads((s) => s.init);
-  const initProjects = useProjects((s) => s.init);
+  const initWorkspaces = useWorkspaces((s) => s.init);
   const initBots = useBots((s) => s.init);
   const loadPlugins = usePlugins((s) => s.load);
   const loadModels = useModels((s) => s.load);
@@ -61,7 +65,7 @@ function App() {
   const refreshOllama = useOllama((s) => s.refresh);
   const initConnectivity = useConnectivity((s) => s.init);
   const loadUserLanguagePacks = useI18n((s) => s.loadUserPacks);
-  const openProjectId = useProjects((s) => s.openProjectId);
+  const openWorkspaceId = useWorkspaces((s) => s.openWorkspaceId);
   const openBotId = useBots((s) => s.openBotId);
   const view = useView((s) => s.view);
   const sidebarOpen = useLayout((s) => s.sidebarOpen);
@@ -89,7 +93,7 @@ function App() {
 
   useEffect(() => {
     void init();
-    void initProjects();
+    void initWorkspaces();
     void initBots();
     void loadKeys();
     void loadPlugins();
@@ -110,7 +114,7 @@ function App() {
     useZoom.getState().setZoom(useZoom.getState().zoom);
   }, [
     init,
-    initProjects,
+    initWorkspaces,
     initBots,
     loadKeys,
     loadPlugins,
@@ -181,7 +185,7 @@ function App() {
 
   useEffect(() => {
     const unlisten = listen<QuickPayload>("quick-submit", (e) => {
-      useProjects.getState().close();
+      useWorkspaces.getState().close();
       useBots.getState().close();
       useView.getState().showChat();
       useLayout.getState().setCompactNav(0);
@@ -298,8 +302,8 @@ function App() {
                   ? view
                   : openBotId
                     ? `bot:${openBotId}`
-                    : openProjectId
-                      ? `project:${openProjectId}`
+                    : openWorkspaceId
+                      ? `workspace:${openWorkspaceId}`
                       : "chat"
               }
               className="animate-in fade-in-0 flex min-h-0 flex-1 flex-col duration-200"
@@ -310,8 +314,8 @@ function App() {
                 <UsageView />
               ) : openBotId ? (
                 <BotView />
-              ) : openProjectId ? (
-                <ProjectView />
+              ) : openWorkspaceId ? (
+                <WorkspaceView />
               ) : (
                 <ChatView />
               )}

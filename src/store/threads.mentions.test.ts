@@ -11,8 +11,8 @@ vi.mock("@/lib/db", () => ({
   addMessage: vi.fn(),
   addAttachment: vi.fn(async () => ({})),
   addUsage: vi.fn(async () => {}),
-  getProject: vi.fn(async () => null),
-  listProjectFiles: vi.fn(async () => []),
+  getWorkspace: vi.fn(async () => null),
+  listWorkspaceFiles: vi.fn(async () => []),
   listUserMemory: vi.fn(async () => []),
   getBot: vi.fn(async () => null),
   listBots: vi.fn(async () => []),
@@ -83,7 +83,7 @@ const thread = (over: Partial<Thread>): Thread => ({
   title: "A thread",
   provider: "anthropic",
   model: "m",
-  project_id: null,
+  workspace_id: null,
   favorite: 0,
   ephemeral: 0,
   archived: 0,
@@ -114,7 +114,7 @@ beforeEach(() => {
     threads: [thread({ id: "t1" })],
     currentThreadId: "t1",
     messages: [],
-    draftProjectId: null,
+    draftWorkspaceId: null,
     draftIncognito: false,
     draftBotId: null,
     defaultProvider: PROVIDERS[0].id,
@@ -151,7 +151,13 @@ beforeEach(() => {
               : null,
         variant_selected: 1,
       };
-      rows.push({ ...m, images: [], documents: [], toolCalls: [], subagents: [] });
+      rows.push({
+        ...m,
+        images: [],
+        documents: [],
+        toolCalls: [],
+        subagents: [],
+      });
       return m;
     },
   );

@@ -5,7 +5,7 @@ import { BotAvatar } from "@/components/bots/BotAvatar";
 import { useThreads } from "@/store/threads";
 import { useQuickActions } from "@/store/quickActions";
 import { useBots } from "@/store/bots";
-import { useProjects } from "@/store/projects";
+import { useWorkspaces } from "@/store/workspaces";
 import { resolveQuickActions, type QuickAction } from "@/lib/quickActions";
 import { parseStarters } from "@/lib/bots";
 import { useT } from "@/store/i18n";
@@ -38,37 +38,37 @@ export function EmptySuggestions({ bot }: { bot?: Bot | null }) {
   const botsInitialized = useBots((s) => s.initialized);
   const initBots = useBots((s) => s.init);
 
-  const projects = useProjects((s) => s.projects);
-  const projectsInitialized = useProjects((s) => s.initialized);
-  const initProjects = useProjects((s) => s.init);
+  const workspaces = useWorkspaces((s) => s.workspaces);
+  const workspacesInitialized = useWorkspaces((s) => s.initialized);
+  const initWorkspaces = useWorkspaces((s) => s.init);
 
   const send = useThreads((s) => s.send);
   const insertIntoComposer = useThreads((s) => s.insertIntoComposer);
   const startNewChatWithBot = useThreads((s) => s.startNewChatWithBot);
-  // The project the current draft / thread belongs to (for the override).
+  // The workspace the current draft / thread belongs to (for the override).
   const currentThreadId = useThreads((s) => s.currentThreadId);
   const threads = useThreads((s) => s.threads);
-  const draftProjectId = useThreads((s) => s.draftProjectId);
+  const draftWorkspaceId = useThreads((s) => s.draftWorkspaceId);
 
   useEffect(() => {
     if (!quickInitialized) void initQuick();
     if (!botsInitialized) void initBots();
-    if (!projectsInitialized) void initProjects();
+    if (!workspacesInitialized) void initWorkspaces();
   }, [
     quickInitialized,
     initQuick,
     botsInitialized,
     initBots,
-    projectsInitialized,
-    initProjects,
+    workspacesInitialized,
+    initWorkspaces,
   ]);
 
-  const projectId = currentThreadId
-    ? (threads.find((x) => x.id === currentThreadId)?.project_id ?? null)
-    : draftProjectId;
-  const projectJson =
-    projects.find((p) => p.id === projectId)?.quick_actions ?? null;
-  const actions = resolveQuickActions(globalActions, projectJson);
+  const workspaceId = currentThreadId
+    ? (threads.find((x) => x.id === currentThreadId)?.workspace_id ?? null)
+    : draftWorkspaceId;
+  const workspaceJson =
+    workspaces.find((w) => w.id === workspaceId)?.quick_actions ?? null;
+  const actions = resolveQuickActions(globalActions, workspaceJson);
 
   function runAction(action: QuickAction) {
     if (action.mode === "send") {

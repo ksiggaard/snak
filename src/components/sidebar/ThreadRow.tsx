@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/context-menu";
 import { BotAvatar } from "@/components/bots/BotAvatar";
 import { useBots } from "@/store/bots";
-import { useProjects } from "@/store/projects";
+import { useWorkspaces } from "@/store/workspaces";
 import { useThreads } from "@/store/threads";
 import { useModels } from "@/store/models";
 import { useAppearance } from "@/store/appearance";
@@ -43,7 +43,7 @@ interface ThreadRowProps {
 }
 
 /** One thread entry in the sidebar: select, double-click-to-rename, favorite
- *  star, and delete. Shared by the Chats and Projects panes. What the row
+ *  star, and delete. Shared by the Chats and Workspaces panes. What the row
  *  shows below the title follows the Appearance "Chat list" style (T35). */
 export function ThreadRow({
   thread,
@@ -57,16 +57,16 @@ export function ThreadRow({
   const remove = useThreads((s) => s.remove);
   const toggleFavorite = useThreads((s) => s.toggleFavorite);
   const setArchived = useThreads((s) => s.setArchived);
-  const assignThreadProject = useThreads((s) => s.assignThreadProject);
-  const projects = useProjects((s) => s.projects);
-  const projectsInitialized = useProjects((s) => s.initialized);
-  const initProjects = useProjects((s) => s.init);
+  const assignThreadWorkspace = useThreads((s) => s.assignThreadWorkspace);
+  const workspaces = useWorkspaces((s) => s.workspaces);
+  const workspacesInitialized = useWorkspaces((s) => s.initialized);
+  const initWorkspaces = useWorkspaces((s) => s.init);
 
-  // The move-to-project submenu needs the project list even when the
-  // Projects pane was never opened this session.
+  // The move-to-workspace submenu needs the workspace list even when the
+  // Workspaces pane was never opened this session.
   useEffect(() => {
-    if (!projectsInitialized) void initProjects();
-  }, [projectsInitialized, initProjects]);
+    if (!workspacesInitialized) void initWorkspaces();
+  }, [workspacesInitialized, initWorkspaces]);
   const bots = useBots((s) => s.bots);
   const botsInitialized = useBots((s) => s.initialized);
   const initBots = useBots((s) => s.init);
@@ -303,26 +303,26 @@ export function ThreadRow({
           <Star className={cn(fav && "fill-yellow-500 text-yellow-500")} />
           {fav ? t("sidebar.unfavorite") : t("sidebar.favorite")}
         </ContextMenuItem>
-        {projects.length > 0 && (
+        {workspaces.length > 0 && (
           <ContextMenuSub>
             <ContextMenuSubTrigger>
               <FolderInput />
-              {t("sidebar.moveToProject")}
+              {t("sidebar.moveToWorkspace")}
             </ContextMenuSubTrigger>
             <ContextMenuSubContent>
               <ContextMenuItem
-                disabled={thread.project_id === null}
-                onClick={() => void assignThreadProject(thread.id, null)}
+                disabled={thread.workspace_id === null}
+                onClick={() => void assignThreadWorkspace(thread.id, null)}
               >
-                {t("panel.noProject")}
+                {t("panel.noWorkspace")}
               </ContextMenuItem>
-              {projects.map((p) => (
+              {workspaces.map((w) => (
                 <ContextMenuItem
-                  key={p.id}
-                  disabled={thread.project_id === p.id}
-                  onClick={() => void assignThreadProject(thread.id, p.id)}
+                  key={w.id}
+                  disabled={thread.workspace_id === w.id}
+                  onClick={() => void assignThreadWorkspace(thread.id, w.id)}
                 >
-                  {p.name}
+                  {w.name}
                 </ContextMenuItem>
               ))}
             </ContextMenuSubContent>

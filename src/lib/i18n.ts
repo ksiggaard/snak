@@ -97,29 +97,29 @@ export const en = {
   "sidebar.newIncognitoChat": "New incognito chat",
   "sidebar.newIncognitoChatTitle":
     "New incognito chat — deleted when the app exits",
-  "sidebar.newProject": "New project",
+  "sidebar.newWorkspace": "New workspace",
   "sidebar.chats": "Chats",
-  "sidebar.projects": "Projects",
+  "sidebar.workspaces": "Workspaces",
   "sidebar.favorites": "Favorites",
   "sidebar.allChats": "All chats",
   "sidebar.archive": "Archive",
   "sidebar.archiveChat": "Close chat (move to Archive)",
   "sidebar.chatMenu": "Chat options",
-  "sidebar.moveToProject": "Move to project",
+  "sidebar.moveToWorkspace": "Move to workspace",
   "sidebar.clearArchive": "Clear archive",
   "sidebar.clearArchiveTitle": "Delete all {count} archived chats?",
   "sidebar.noConversations": "No conversations yet.",
-  "sidebar.noProjects": "No projects yet. Create one with “New project”.",
-  "sidebar.noChatsInProject": "No chats yet.",
-  "sidebar.expandProject": "Expand project",
-  "sidebar.collapseProject": "Collapse project",
-  "sidebar.openProject": "Open project",
-  "sidebar.newChatInProject": "New chat in project",
-  "sidebar.editProject": "Edit project",
-  "sidebar.deleteProject": "Delete project",
-  "sidebar.deleteProjectTitle": 'Delete project "{name}"?',
-  "sidebar.deleteProjectDescription":
-    "Its chats are kept (moved out of the project).",
+  "sidebar.noWorkspaces": "No workspaces yet. Create one with “New workspace”.",
+  "sidebar.noChatsInWorkspace": "No chats yet.",
+  "sidebar.expandWorkspace": "Expand workspace",
+  "sidebar.collapseWorkspace": "Collapse workspace",
+  "sidebar.openWorkspace": "Open workspace",
+  "sidebar.newChatInWorkspace": "New chat in workspace",
+  "sidebar.editWorkspace": "Edit workspace",
+  "sidebar.deleteWorkspace": "Delete workspace",
+  "sidebar.deleteWorkspaceTitle": 'Delete workspace "{name}"?',
+  "sidebar.deleteWorkspaceDescription":
+    "Its chats are kept (moved out of the workspace).",
   "sidebar.bots": "Personas",
   "sidebar.newBot": "New persona",
   "sidebar.noBots": "No personas yet. Create one to start chatting.",
@@ -244,8 +244,8 @@ export const en = {
   "panel.tokenSpend": "Token spend",
   "panel.chatSection": "This chat",
   "panel.renamePlaceholder": "Chat title",
-  "panel.project": "Project",
-  "panel.noProject": "No project",
+  "panel.workspace": "Workspace",
+  "panel.noWorkspace": "No workspace",
 
   // --- Composer -----------------------------------------------------------------
   "composer.placeholder":
@@ -472,8 +472,10 @@ export const en = {
   "contextWindows.maxTokens": "Max tokens",
 
   // --- Settings: Models (merged page) ----------------------------------------------------
-  "models.disabledDescription": "Model settings are only available when the plugin is enabled.",
-  "models.enablePlugin": "Enable the {pluginName} plugin to access these settings.",
+  "models.disabledDescription":
+    "Model settings are only available when the plugin is enabled.",
+  "models.enablePlugin":
+    "Enable the {pluginName} plugin to access these settings.",
   "models.pluginName": "Models",
 
   // --- Settings: local Ollama provider (T37) ---------------------------------------------------------
@@ -509,7 +511,7 @@ export const en = {
   // --- Settings: memory / system prompt --------------------------------------------------------------
   "memory.title": "System prompt & memory",
   "memory.description":
-    "Added to the system context of every chat, ahead of any project instructions (precedence: global → project → thread).",
+    "Added to the system context of every chat, ahead of any workspace instructions (precedence: global → workspace → thread).",
   "memory.addendumLabel": "System-prompt addendum",
   "memory.addendumPlaceholder":
     "e.g. Always respond in British English and prefer concise answers.",
@@ -699,29 +701,30 @@ export const en = {
   "plugins.noneInCategory": "No {category} installed.",
   "plugins.uninstallTitle": 'Uninstall "{name}"?',
 
-  // --- Project view ----------------------------------------------------------------------------------------------------------------------------------
-  "project.notFound": "Project not found.",
-  "project.name": "Project name",
-  "project.instructions": "Instructions",
-  "project.instructionsHint":
-    "Shared context added to every chat in this project.",
-  "project.instructionsPlaceholder":
+  // --- Workspace view ----------------------------------------------------------------------------------------------------------------------------------
+  "workspace.notFound": "Workspace not found.",
+  "workspace.name": "Workspace name",
+  "workspace.instructions": "Instructions",
+  "workspace.instructionsHint":
+    "Shared context added to every chat in this workspace.",
+  "workspace.instructionsPlaceholder":
     "e.g. You are helping with the Acme codebase. Prefer TypeScript…",
-  "project.files": "Files",
-  "project.addFiles": "Add files",
-  "project.fileCount.one": "{n} file",
-  "project.fileCount.other": "{n} files",
-  "project.chars": "{used} / {budget} chars",
-  "project.overBudget": "— over budget; excess is truncated when sending.",
-  "project.noFiles": "No files yet. Text files are added as reference context.",
-  "project.removeFile": "Remove {name}",
-  "project.truncated": '"{name}" was truncated to {n} characters.',
-  "project.readError": 'Couldn\'t read "{name}" as text.',
-  "project.quickActions": "Quick actions",
-  "project.quickActionsHint":
-    "Override the global quick actions for chats in this project. Leave empty to use the global ones.",
-  "project.quickActionsUsingGlobal":
-    "This project uses the global quick actions. Add one below to override them here.",
+  "workspace.files": "Files",
+  "workspace.addFiles": "Add files",
+  "workspace.fileCount.one": "{n} file",
+  "workspace.fileCount.other": "{n} files",
+  "workspace.chars": "{used} / {budget} chars",
+  "workspace.overBudget": "— over budget; excess is truncated when sending.",
+  "workspace.noFiles":
+    "No files yet. Text files are added as reference context.",
+  "workspace.removeFile": "Remove {name}",
+  "workspace.truncated": '"{name}" was truncated to {n} characters.',
+  "workspace.readError": 'Couldn\'t read "{name}" as text.',
+  "workspace.quickActions": "Quick actions",
+  "workspace.quickActionsHint":
+    "Override the global quick actions for chats in this workspace. Leave empty to use the global ones.",
+  "workspace.quickActionsUsingGlobal":
+    "This workspace uses the global quick actions. Add one below to override them here.",
 
   // --- Quick actions (empty-screen starters) ---------------------------------
   "quickActions.title": "Quick actions",

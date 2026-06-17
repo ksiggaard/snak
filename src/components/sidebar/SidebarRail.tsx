@@ -20,7 +20,7 @@ interface SidebarSection {
 // here; a future plugin "view" category would extend this list (see spec).
 const SECTIONS: SidebarSection[] = [
   { id: "chats", labelKey: "sidebar.chats", Icon: MessagesSquare },
-  { id: "projects", labelKey: "sidebar.projects", Icon: Folder },
+  { id: "projects", labelKey: "sidebar.workspaces", Icon: Folder },
   { id: "bots", labelKey: "sidebar.bots", Icon: Bot },
 ];
 

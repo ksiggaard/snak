@@ -17,8 +17,8 @@ vi.mock("@/lib/db", () => ({
   })),
   addAttachment: vi.fn(async () => ({})),
   addUsage: vi.fn(async () => {}),
-  getProject: vi.fn(async () => null),
-  listProjectFiles: vi.fn(async () => []),
+  getWorkspace: vi.fn(async () => null),
+  listWorkspaceFiles: vi.fn(async () => []),
   listUserMemory: vi.fn(async () => []),
   getBot: vi.fn(async () => null),
   listBots: vi.fn(async () => []),
@@ -56,7 +56,7 @@ import { useThreads } from "@/store/threads";
 import {
   createThread,
   getBot,
-  getProject,
+  getWorkspace,
   getSetting,
   listBotMemory,
 } from "@/lib/db";
@@ -90,7 +90,7 @@ const thread = (over: Partial<Thread>): Thread => ({
   title: "A thread",
   provider: "anthropic",
   model: "m",
-  project_id: null,
+  workspace_id: null,
   favorite: 0,
   ephemeral: 0,
   archived: 0,
@@ -107,7 +107,7 @@ beforeEach(() => {
     threads: [],
     currentThreadId: null,
     messages: [],
-    draftProjectId: null,
+    draftWorkspaceId: null,
     draftIncognito: false,
     draftBotId: null,
     defaultProvider: PROVIDERS[0].id,
@@ -122,7 +122,7 @@ beforeEach(() => {
       provider: Thread["provider"];
       model: string;
       title?: string;
-      projectId?: string | null;
+      workspaceId?: string | null;
       ephemeral?: boolean;
       botId?: string | null;
     }) =>
@@ -130,7 +130,7 @@ beforeEach(() => {
         id: "t-new",
         provider: input.provider,
         model: input.model,
-        project_id: input.projectId ?? null,
+        workspace_id: input.workspaceId ?? null,
         ephemeral: input.ephemeral ? 1 : 0,
         bot_id: input.botId ?? null,
       }),
@@ -179,11 +179,11 @@ describe("startNewChatWithBot (T38)", () => {
     expect(s.draftModel).toBe("mx");
   });
 
-  it("resets draftProjectId and draftIncognito", () => {
-    useThreads.setState({ draftProjectId: "p1", draftIncognito: true });
+  it("resets draftWorkspaceId and draftIncognito", () => {
+    useThreads.setState({ draftWorkspaceId: "p1", draftIncognito: true });
     useThreads.getState().startNewChatWithBot(bot({}));
     const s = useThreads.getState();
-    expect(s.draftProjectId).toBe(null);
+    expect(s.draftWorkspaceId).toBe(null);
     expect(s.draftIncognito).toBe(false);
     expect(s.currentThreadId).toBe(null);
   });
@@ -194,9 +194,9 @@ describe("startNewChatWithBot (T38)", () => {
     expect(useThreads.getState().draftBotId).toBe(null);
   });
 
-  it("startNewChatInProject() clears the draft bot", () => {
+  it("startNewChatInWorkspace() clears the draft bot", () => {
     useThreads.setState({ draftBotId: "b1" });
-    useThreads.getState().startNewChatInProject("p1");
+    useThreads.getState().startNewChatInWorkspace("p1");
     expect(useThreads.getState().draftBotId).toBe(null);
   });
 });
@@ -211,9 +211,9 @@ describe("send() with a bot (T38)", () => {
     expect(useThreads.getState().error).toBe(null);
   });
 
-  it("injects the bot system text between the global and project blocks", async () => {
+  it("injects the bot system text between the global and workspace blocks", async () => {
     useThreads.setState({
-      threads: [thread({ id: "t1", bot_id: "b1", project_id: "p1" })],
+      threads: [thread({ id: "t1", bot_id: "b1", workspace_id: "p1" })],
       currentThreadId: "t1",
     });
     vi.mocked(getBot).mockResolvedValue(bot({}));
@@ -227,10 +227,10 @@ describe("send() with a bot (T38)", () => {
         updated_at: "",
       },
     ]);
-    vi.mocked(getProject).mockResolvedValue({
+    vi.mocked(getWorkspace).mockResolvedValue({
       id: "p1",
       name: "Acme",
-      instructions: "Project rule.",
+      instructions: "Workspace rule.",
       quick_actions: "",
       created_at: "",
       updated_at: "",
@@ -249,7 +249,7 @@ describe("send() with a bot (T38)", () => {
     expect(systems[1].content).toContain("You are John");
     expect(systems[1].content).toContain("Challenge the architecture.");
     expect(systems[1].content).toContain("- Prefers TypeScript");
-    expect(systems[2].content).toContain("Project rule.");
+    expect(systems[2].content).toContain("Workspace rule.");
   });
 
   it("skips the bot block when the thread has no bot", async () => {

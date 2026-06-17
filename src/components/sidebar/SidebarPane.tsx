@@ -6,10 +6,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ChatsPane } from "./ChatsPane";
-import { ProjectsPane } from "./ProjectsPane";
+import { WorkspacesPane } from "./WorkspacesPane";
 import { BotsPane } from "./BotsPane";
 import { useThreads } from "@/store/threads";
-import { useProjects } from "@/store/projects";
+import { useWorkspaces } from "@/store/workspaces";
 import { useBots } from "@/store/bots";
 import { useSearch } from "@/store/search";
 import { useView } from "@/store/view";
@@ -17,15 +17,15 @@ import { useLayout } from "@/store/layout";
 import { useT } from "@/store/i18n";
 
 /** The list pane: a contextual header (section title + New action) over the
- *  active Chats / Projects / Personas list. Rendered inside the inline aside
+ *  active Chats / Workspaces / Personas list. Rendered inside the inline aside
  *  (wide) and inside the compact overlay Sheet. */
 export function SidebarPane() {
   const t = useT();
   const mode = useLayout((s) => s.sidebarMode);
   const startNewChat = useThreads((s) => s.startNewChat);
-  const createProject = useProjects((s) => s.create);
-  const openProject = useProjects((s) => s.open);
-  const closeProject = useProjects((s) => s.close);
+  const createWorkspace = useWorkspaces((s) => s.create);
+  const openWorkspace = useWorkspaces((s) => s.open);
+  const closeWorkspace = useWorkspaces((s) => s.close);
   const createBot = useBots((s) => s.create);
   const openBot = useBots((s) => s.open);
   const closeBot = useBots((s) => s.close);
@@ -35,23 +35,23 @@ export function SidebarPane() {
   const onNewChat = (opts?: { incognito?: boolean }) => {
     showChat();
     clearSearch();
-    closeProject();
+    closeWorkspace();
     closeBot();
     startNewChat(opts);
   };
 
-  const onNewProject = async () => {
+  const onNewWorkspace = async () => {
     showChat();
     clearSearch();
     closeBot();
-    const p = await createProject();
-    await openProject(p.id);
+    const w = await createWorkspace();
+    await openWorkspace(w.id);
   };
 
   const onNewBot = async () => {
     showChat();
     clearSearch();
-    closeProject();
+    closeWorkspace();
     const b = await createBot();
     openBot(b.id);
   };
@@ -60,7 +60,7 @@ export function SidebarPane() {
     mode === "chats"
       ? t("sidebar.chats")
       : mode === "projects"
-        ? t("sidebar.projects")
+        ? t("sidebar.workspaces")
         : t("sidebar.bots");
 
   return (
@@ -87,8 +87,8 @@ export function SidebarPane() {
             </>
           ) : mode === "projects" ? (
             <PaneAction
-              label={t("sidebar.newProject")}
-              onClick={() => void onNewProject()}
+              label={t("sidebar.newWorkspace")}
+              onClick={() => void onNewWorkspace()}
             >
               <FolderPlus className="size-4" />
             </PaneAction>
@@ -107,7 +107,7 @@ export function SidebarPane() {
         {mode === "chats" ? (
           <ChatsPane />
         ) : mode === "projects" ? (
-          <ProjectsPane />
+          <WorkspacesPane />
         ) : (
           <BotsPane />
         )}

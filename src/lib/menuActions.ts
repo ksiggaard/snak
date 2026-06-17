@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isMac } from "@/lib/titlebar";
 import { useThreads } from "@/store/threads";
-import { useProjects } from "@/store/projects";
+import { useWorkspaces } from "@/store/workspaces";
 import { useBots } from "@/store/bots";
 import { useSearch } from "@/store/search";
 import { useView } from "@/store/view";
@@ -76,7 +76,7 @@ export function runMenuAction(action: MenuAction): void {
       // Same sequence as the sidebar's New Chat button.
       useView.getState().showChat();
       useSearch.getState().clear();
-      useProjects.getState().close();
+      useWorkspaces.getState().close();
       useBots.getState().close();
       useThreads.getState().startNewChat();
       break;

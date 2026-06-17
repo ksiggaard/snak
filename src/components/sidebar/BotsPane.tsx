@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { useThreads } from "@/store/threads";
 import { useBots } from "@/store/bots";
-import { useProjects } from "@/store/projects";
+import { useWorkspaces } from "@/store/workspaces";
 import { useSearch } from "@/store/search";
 import { useView } from "@/store/view";
 import { useAppearance } from "@/store/appearance";
@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import type { Bot } from "@/types/db";
 
 /** Bots mode (T38): the bot list; opening one shows its editor view in the
- *  main pane and reveals its threads here. Mirrors ProjectsPane. */
+ *  main pane and reveals its threads here. Mirrors WorkspacesPane. */
 export function BotsPane() {
   const t = useT();
   const threads = useThreads((s) => s.threads);
@@ -29,7 +29,7 @@ export function BotsPane() {
   const openBot = useBots((s) => s.open);
   const closeBot = useBots((s) => s.close);
   const removeBot = useBots((s) => s.remove);
-  const closeProject = useProjects((s) => s.close);
+  const closeWorkspace = useWorkspaces((s) => s.close);
 
   const clearSearch = useSearch((s) => s.clear);
   const showChat = useView((s) => s.showChat);
@@ -40,24 +40,24 @@ export function BotsPane() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   // Opening a bot shows its editor pane (leave settings/usage); closing any
-  // open project keeps the bot/project views mutually exclusive.
+  // open workspace keeps the bot/workspace views mutually exclusive.
   const goBot = (id: string) => {
     showChat();
     clearSearch();
-    closeProject();
+    closeWorkspace();
     openBot(id);
   };
   const selectChat = (id: string) => {
     showChat();
     clearSearch();
-    closeProject();
+    closeWorkspace();
     closeBot();
     void selectThread(id);
   };
   const newChat = (bot: Bot) => {
     showChat();
     clearSearch();
-    closeProject();
+    closeWorkspace();
     closeBot();
     startNewChatWithBot(bot);
   };

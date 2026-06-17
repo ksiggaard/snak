@@ -7,9 +7,10 @@
  *   adds their own text (a pasted article, a draft message) before sending.
  * - `send` — fire the prompt as a message immediately.
  *
- * Actions live globally (a `settings` row, JSON) and a project may override the
- * global set with its own (the project's `quick_actions` JSON column). These
- * pure helpers are shared by the settings/project editors and the empty screen.
+ * Actions live globally (a `settings` row, JSON) and a workspace may override
+ * the global set with its own (the workspace's `quick_actions` JSON column).
+ * These pure helpers are shared by the settings/workspace editors and the empty
+ * screen.
  */
 
 export type QuickActionMode = "prefill" | "send";
@@ -62,7 +63,9 @@ function isMode(v: unknown): v is QuickActionMode {
  * and coerces a missing/invalid `mode` to `"prefill"`. An action with a blank
  * label *and* blank prompt is dropped (nothing to show).
  */
-export function parseQuickActions(json: string | null | undefined): QuickAction[] {
+export function parseQuickActions(
+  json: string | null | undefined,
+): QuickAction[] {
   if (!json) return [];
   let parsed: unknown;
   try {
@@ -94,15 +97,15 @@ export function serializeQuickActions(actions: QuickAction[]): string {
 }
 
 /**
- * Resolve the quick actions that apply to a chat: a project's own set, when it
- * defines a non-empty one, replaces the global list; otherwise the global list
- * applies. `projectJson` is the project's stored `quick_actions` column (null
- * for a project-less chat or a project that defines none).
+ * Resolve the quick actions that apply to a chat: a workspace's own set, when
+ * it defines a non-empty one, replaces the global list; otherwise the global
+ * list applies. `workspaceJson` is the workspace's stored `quick_actions`
+ * column (null for a workspace-less chat or a workspace that defines none).
  */
 export function resolveQuickActions(
   global: QuickAction[],
-  projectJson: string | null | undefined,
+  workspaceJson: string | null | undefined,
 ): QuickAction[] {
-  const projectActions = parseQuickActions(projectJson);
-  return projectActions.length > 0 ? projectActions : global;
+  const workspaceActions = parseQuickActions(workspaceJson);
+  return workspaceActions.length > 0 ? workspaceActions : global;
 }

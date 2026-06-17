@@ -7,11 +7,11 @@ import {
   deleteArchivedThreads,
   deleteThread,
   getBot,
-  getProject,
+  getWorkspace,
   getSetting,
   listBotMemory,
   listBots,
-  listProjectFiles,
+  listWorkspaceFiles,
   listThreads,
   listUserMemory,
   purgeEphemeralThreads,
@@ -21,7 +21,7 @@ import {
   setThreadArchived,
   setThreadDeepResearch,
   setThreadFavorite,
-  setThreadProject,
+  setThreadWorkspace,
   setThreadProviderModel,
   SYSTEM_PROMPT_ADDENDUM_KEY,
 } from "@/lib/db";
@@ -57,7 +57,7 @@ import { estimateTokens } from "@/lib/contextSize";
 import { buildBotSystemText, buildGroupChatSystemText } from "@/lib/bots";
 import { extractMentions } from "@/lib/mentions";
 import { runPersonaMemoryUpdate } from "@/lib/personaMemory";
-import { buildProjectSystemText } from "@/lib/projects";
+import { buildWorkspaceSystemText } from "@/lib/workspaces";
 import { buildSkillsSystemText } from "@/lib/skills";
 import { buildArtifactsSystemText } from "@/lib/artifacts";
 import { buildChartsSystemText } from "@/lib/charts";
@@ -169,8 +169,8 @@ interface ThreadsState {
   /** Provider/model new interactions start from (persisted default). */
   defaultProvider: Provider;
   defaultModel: string;
-  /** Project a new (draft) chat will be created in, or null for none. */
-  draftProjectId: string | null;
+  /** Workspace a new (draft) chat will be created in, or null for none. */
+  draftWorkspaceId: string | null;
   /** Incognito draft (T29): the first send creates the thread `ephemeral`. */
   draftIncognito: boolean;
   /** Deep research draft (T55): the first send creates the thread with deep
@@ -195,9 +195,9 @@ interface ThreadsState {
    * and when the stream ends. */
   awaitingModel: boolean;
   /** Estimated tokens of the assembled system context (skills, global/memory,
-   * persona, project) for the current thread/draft — the part of a request the
-   * ContextMeter can't see from `messages` alone. Recomputed when the thread,
-   * project, or persona changes (T53). */
+   * persona, workspace) for the current thread/draft — the part of a request
+   * the ContextMeter can't see from `messages` alone. Recomputed when the
+   * thread, workspace, or persona changes (T53). */
   systemTokens: number;
   /** A request to load text into the Composer (a quick action's `prefill`).
    * The Composer applies it via render-time sync, keyed by `nonce` so repeated
@@ -215,15 +215,15 @@ interface ThreadsState {
   selectThread: (id: string) => Promise<void>;
   /** Start a new draft chat; `incognito` makes it session-only (T29). */
   startNewChat: (opts?: { incognito?: boolean }) => void;
-  /** Start a new draft chat that will be created inside the given project. */
-  startNewChatInProject: (projectId: string) => void;
+  /** Start a new draft chat that will be created inside the given workspace. */
+  startNewChatInWorkspace: (workspaceId: string) => void;
   /** Start a new draft chat with a bot (T38). The draft seeds its provider/
    * model from the bot's default when set, else the app default. */
   startNewChatWithBot: (bot: Bot) => void;
-  /** Move an existing thread into a project (or null to remove it). */
-  assignThreadProject: (
+  /** Move an existing thread into a workspace (or null to remove it). */
+  assignThreadWorkspace: (
     threadId: string,
-    projectId: string | null,
+    workspaceId: string | null,
   ) => Promise<void>;
   /** Set provider+model for the current thread, or the draft if none. */
   setProviderModel: (provider: Provider, model: string) => Promise<void>;
@@ -239,7 +239,7 @@ interface ThreadsState {
   /** Persist the default provider+model for new interactions. */
   setDefaultModel: (provider: Provider, model: string) => Promise<void>;
   /** Recompute `systemTokens` for the current thread/draft (skills + global +
-   * persona + project blocks). Cheap DB/store reads; never throws. */
+   * persona + workspace blocks). Cheap DB/store reads; never throws. */
   refreshSystemTokens: () => Promise<void>;
   send: (
     content: string,
@@ -355,18 +355,19 @@ function friendlyError(e: unknown): string {
 
 /**
  * Load the system-context blocks shared by every reply of one send: skills
- * (T15) and the global addendum/memory (T10) in `head`, the project context
- * (T20) in `tail`. The persona block (T38/T43) is per-reply and slots between
- * them, so an assembled history reads [skills, global, (bot), project,
- * ...history] — the same precedence order the pre-T43 unshift sequence
- * produced: the bot is the assistant's *identity* and spans projects, while
- * the project context stays closest to the history it scopes. Each provider
- * concatenates consecutive role:"system" messages in array order
- * (Anthropic/Gemini join with "\n\n"; OpenAI/Mistral pass them through), so
- * this realizes the documented precedence without any provider/Rust changes.
+ * (T15) and the global addendum/memory (T10) in `head`, the workspace context
+ * (T20/T58) in `tail`. The persona block (T38/T43) is per-reply and slots
+ * between them, so an assembled history reads [skills, global, (bot),
+ * workspace, ...history] — the same precedence order the pre-T43 unshift
+ * sequence produced: the bot is the assistant's *identity* and spans
+ * workspaces, while the workspace context stays closest to the history it
+ * scopes. Each provider concatenates consecutive role:"system" messages in
+ * array order (Anthropic/Gemini join with "\n\n"; OpenAI/Mistral pass them
+ * through), so this realizes the documented precedence without any
+ * provider/Rust changes.
  */
 async function loadSharedSystemBlocks(
-  projectId: string | null,
+  workspaceId: string | null,
 ): Promise<{ head: ApiMessage[]; tail: ApiMessage[] }> {
   const head: ApiMessage[] = [];
   const tail: ApiMessage[] = [];
@@ -411,13 +412,13 @@ async function loadSharedSystemBlocks(
   if (globalSystemText)
     head.push({ role: "system", content: globalSystemText, images: [] });
 
-  // Project base context (T20): instructions + reference files, for threads
-  // that belong to a project.
-  if (projectId) {
-    const project = await getProject(projectId);
-    if (project) {
-      const files = await listProjectFiles(projectId);
-      const systemText = buildProjectSystemText(project, files);
+  // Workspace base context (T20/T58): instructions + reference files, for
+  // threads that belong to a workspace.
+  if (workspaceId) {
+    const workspace = await getWorkspace(workspaceId);
+    if (workspace) {
+      const files = await listWorkspaceFiles(workspaceId);
+      const systemText = buildWorkspaceSystemText(workspace, files);
       if (systemText)
         tail.push({ role: "system", content: systemText, images: [] });
     }
@@ -497,7 +498,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   draftModel: PROVIDERS[0].defaultModel,
   defaultProvider: PROVIDERS[0].id,
   defaultModel: PROVIDERS[0].defaultModel,
-  draftProjectId: null,
+  draftWorkspaceId: null,
   draftIncognito: false,
   draftDeepResearch: false,
   draftBotId: null,
@@ -570,7 +571,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       currentThreadId: null,
       messages: [],
       error: null,
-      draftProjectId: null,
+      draftWorkspaceId: null,
       draftIncognito: opts?.incognito ?? false,
       draftDeepResearch: false,
       draftBotId: null,
@@ -583,12 +584,12 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     get().focusComposer();
   },
 
-  startNewChatInProject: (projectId) => {
+  startNewChatInWorkspace: (workspaceId) => {
     set({
       currentThreadId: null,
       messages: [],
       error: null,
-      draftProjectId: projectId,
+      draftWorkspaceId: workspaceId,
       draftIncognito: false,
       draftDeepResearch: false,
       draftBotId: null,
@@ -610,7 +611,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       currentThreadId: null,
       messages: [],
       error: null,
-      draftProjectId: null,
+      draftWorkspaceId: null,
       draftIncognito: false,
       draftDeepResearch: false,
       draftBotId: bot.id,
@@ -622,8 +623,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     get().focusComposer();
   },
 
-  assignThreadProject: async (threadId, projectId) => {
-    await setThreadProject(threadId, projectId);
+  assignThreadWorkspace: async (threadId, workspaceId) => {
+    await setThreadWorkspace(threadId, workspaceId);
     await get().refreshThreads();
     void get().refreshSystemTokens();
   },
@@ -674,19 +675,19 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   refreshSystemTokens: async () => {
     try {
       const id = get().currentThreadId;
-      let projectId: string | null;
+      let workspaceId: string | null;
       let botId: string | null;
       if (id) {
         const thread = get().threads.find((x) => x.id === id);
-        projectId = thread?.project_id ?? null;
+        workspaceId = thread?.workspace_id ?? null;
         botId = thread?.bot_id ?? null;
       } else {
-        projectId = get().draftProjectId;
+        workspaceId = get().draftWorkspaceId;
         botId = get().draftBotId;
       }
       // Reuse the exact builders send() uses, so the estimate tracks the real
-      // request: skills + global/memory (head), persona (bot), project (tail).
-      const shared = await loadSharedSystemBlocks(projectId);
+      // request: skills + global/memory (head), persona (bot), workspace (tail).
+      const shared = await loadSharedSystemBlocks(workspaceId);
       const bot = botId ? await getBot(botId) : null;
       const botBlock = bot ? await botSystemBlock(bot) : null;
       const blocks = [
@@ -742,7 +743,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       let id = get().currentThreadId;
       let provider: Provider;
       let model: string;
-      let projectId: string | null;
+      let workspaceId: string | null;
       let botId: string | null;
       let ephemeral: boolean;
       let deepResearch: boolean;
@@ -750,7 +751,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       if (!id) {
         provider = get().draftProvider;
         model = get().draftModel;
-        projectId = get().draftProjectId;
+        workspaceId = get().draftWorkspaceId;
         botId = get().draftBotId;
         ephemeral = get().draftIncognito;
         deepResearch = get().draftDeepResearch;
@@ -763,14 +764,14 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             content || documents[0]?.name || t("thread.image"),
             t("thread.newChat"),
           ),
-          projectId,
+          workspaceId,
           ephemeral,
           botId,
         });
         id = thread.id;
         set({ currentThreadId: id });
         // Carry the draft's deep-research mode onto the new thread row (T55) so
-        // it persists like incognito/project do.
+        // it persists like incognito/workspace do.
         if (deepResearch) await setThreadDeepResearch(id, true);
         // Incognito threads never become last_thread_id (T29).
         if (!ephemeral) await setSetting(LAST_THREAD_KEY, id);
@@ -779,7 +780,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         const t = get().threads.find((x) => x.id === id)!;
         provider = t.provider;
         model = t.model;
-        projectId = t.project_id;
+        workspaceId = t.workspace_id;
         botId = t.bot_id;
         ephemeral = t.ephemeral !== 0;
         deepResearch = t.deep_research !== 0;
@@ -828,8 +829,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       const hasKey = (p: Provider) => isKeylessProvider(p) || keyed.has(p);
 
       // System context shared by every reply of this send (skills/global/
-      // project); the persona block is per-reply and slots in between.
-      const shared = await loadSharedSystemBlocks(projectId);
+      // workspace); the persona block is per-reply and slots in between.
+      const shared = await loadSharedSystemBlocks(workspaceId);
       const threadId = id; // non-null capture for the closures below
 
       /**
@@ -1151,7 +1152,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         provider: get().draftProvider,
         model: get().draftModel,
         title: deriveTitle(content, t("thread.newChat")),
-        projectId: get().draftProjectId,
+        workspaceId: get().draftWorkspaceId,
         ephemeral,
         botId: get().draftBotId,
       });
@@ -1188,7 +1189,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     const {
       provider,
       model,
-      project_id: projectId,
+      workspace_id: workspaceId,
       bot_id: threadBotId,
     } = thread;
 
@@ -1205,7 +1206,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       // own persona (an @-mention author wins over the thread persona) provides
       // the bot block; the history is everything BEFORE this reply's slot, so
       // the model answers the same prompt afresh.
-      const shared = await loadSharedSystemBlocks(projectId);
+      const shared = await loadSharedSystemBlocks(workspaceId);
       const attributeBotId = target.bot_id;
       const replyBot = attributeBotId
         ? await getBot(attributeBotId)
@@ -1452,7 +1453,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     const {
       provider,
       model,
-      project_id: projectId,
+      workspace_id: workspaceId,
       bot_id: threadBotId,
     } = thread;
 
@@ -1466,7 +1467,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     });
     try {
       // Build system context the same way a normal reply would.
-      const shared = await loadSharedSystemBlocks(projectId);
+      const shared = await loadSharedSystemBlocks(workspaceId);
       const attributeBotId = target.bot_id;
       const replyBot = attributeBotId
         ? await getBot(attributeBotId)

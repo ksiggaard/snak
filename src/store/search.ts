@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { searchHistory } from "@/lib/db";
 import { groupHitsByThread } from "@/lib/search";
-import { useProjects } from "@/store/projects";
+import { useWorkspaces } from "@/store/workspaces";
 import { useThreads } from "@/store/threads";
 import type { SearchHit, ThreadSearchGroup } from "@/types/db";
 
@@ -76,9 +76,9 @@ export const useSearch = create<SearchState>((set, get) => ({
 
   openHit: async (hit) => {
     // Reuse the existing threads-store action; never touches send/selectThread
-    // internals — just invokes the public action. Also close any open project
+    // internals — just invokes the public action. Also close any open workspace
     // pane so the main area returns to the chat view.
-    useProjects.getState().close();
+    useWorkspaces.getState().close();
     await useThreads.getState().selectThread(hit.thread_id);
     set({
       overlayOpen: false,

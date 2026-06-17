@@ -29,7 +29,7 @@ const thread = (over: Partial<Thread>): Thread => ({
   title: "A thread",
   provider: "anthropic",
   model: "m",
-  project_id: null,
+  workspace_id: null,
   favorite: 0,
   ephemeral: 0,
   archived: 0,
@@ -46,7 +46,7 @@ beforeEach(() => {
     threads: [],
     currentThreadId: null,
     messages: [],
-    draftProjectId: null,
+    draftWorkspaceId: null,
     draftIncognito: false,
     draftProvider: PROVIDERS[0].id,
     draftModel: PROVIDERS[0].defaultModel,
@@ -80,9 +80,9 @@ describe("incognito drafts in the threads store", () => {
     expect(useThreads.getState().draftIncognito).toBe(false);
   });
 
-  it("startNewChatInProject() resets the incognito flag", () => {
+  it("startNewChatInWorkspace() resets the incognito flag", () => {
     useThreads.setState({ draftIncognito: true });
-    useThreads.getState().startNewChatInProject("p1");
+    useThreads.getState().startNewChatInWorkspace("p1");
     expect(useThreads.getState().draftIncognito).toBe(false);
   });
 

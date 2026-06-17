@@ -11,8 +11,8 @@ export interface Thread {
   title: string;
   provider: Provider;
   model: string;
-  /** Project this thread belongs to, or null for a project-less thread. */
-  project_id: string | null;
+  /** Workspace this thread belongs to, or null for a workspace-less thread. */
+  workspace_id: string | null;
   /** 1 if pinned to the sidebar Favorites group, else 0 (T23). */
   favorite: number;
   /** 1 for an incognito (session-only) thread purged on next launch (T29). */
@@ -76,20 +76,20 @@ export interface BotMemory {
   updated_at: string;
 }
 
-export interface Project {
+export interface Workspace {
   id: string;
   name: string;
   instructions: string;
-  /** Project-specific quick actions (JSON array; migration 018). Empty string =
+  /** Workspace-specific quick actions (JSON array; migration 018). Empty string =
    * no override, so the global quick actions apply. See `lib/quickActions.ts`. */
   quick_actions: string;
   created_at: string;
   updated_at: string;
 }
 
-export interface ProjectFile {
+export interface WorkspaceFile {
   id: string;
-  project_id: string;
+  workspace_id: string;
   name: string;
   /** Decoded UTF-8 text content, injected into the system context. */
   content: string;

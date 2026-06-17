@@ -10,8 +10,8 @@ import type {
   Message,
   MessageKind,
   Model,
-  Project,
-  ProjectFile,
+  Workspace,
+  WorkspaceFile,
   Provider,
   Role,
   SearchHit,
@@ -44,8 +44,8 @@ export async function createThread(input: {
   provider: Provider;
   model: string;
   title?: string;
-  /** Optional project to create the thread inside. */
-  projectId?: string | null;
+  /** Optional workspace to create the thread inside. */
+  workspaceId?: string | null;
   /** Incognito (T29): session-only — purged on the next app launch. */
   ephemeral?: boolean;
   /** Bot (T38): the persona this thread belongs to, or null for none. */
@@ -54,14 +54,14 @@ export async function createThread(input: {
   const db = await getDb();
   const id = newId();
   await db.execute(
-    `INSERT INTO threads (id, title, provider, model, project_id, ephemeral, bot_id)
+    `INSERT INTO threads (id, title, provider, model, workspace_id, ephemeral, bot_id)
      VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     [
       id,
       input.title ?? "New chat",
       input.provider,
       input.model,
-      input.projectId ?? null,
+      input.workspaceId ?? null,
       input.ephemeral ? 1 : 0,
       input.botId ?? null,
     ],
@@ -108,16 +108,16 @@ export async function setThreadProviderModel(
   );
 }
 
-/** Assign (or clear, with null) the project a thread belongs to. */
-export async function setThreadProject(
+/** Assign (or clear, with null) the workspace a thread belongs to. */
+export async function setThreadWorkspace(
   id: string,
-  projectId: string | null,
+  workspaceId: string | null,
 ): Promise<void> {
   const db = await getDb();
   await db.execute(
-    `UPDATE threads SET project_id = $1, updated_at = datetime('now')
+    `UPDATE threads SET workspace_id = $1, updated_at = datetime('now')
      WHERE id = $2`,
-    [projectId, id],
+    [workspaceId, id],
   );
 }
 
@@ -614,125 +614,126 @@ export async function setQuickActions(json: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Projects (T20) — grouped threads with shared instructions + reference files
+// Workspaces (T20/T58) — grouped threads with shared instructions + reference files
 // ---------------------------------------------------------------------------
 
-export async function listProjects(): Promise<Project[]> {
+export async function listWorkspaces(): Promise<Workspace[]> {
   const db = await getDb();
-  return db.select<Project[]>(
-    `SELECT * FROM projects ORDER BY updated_at DESC, created_at DESC`,
+  return db.select<Workspace[]>(
+    `SELECT * FROM workspaces ORDER BY updated_at DESC, created_at DESC`,
   );
 }
 
-export async function getProject(id: string): Promise<Project | null> {
+export async function getWorkspace(id: string): Promise<Workspace | null> {
   const db = await getDb();
-  const rows = await db.select<Project[]>(
-    `SELECT * FROM projects WHERE id = $1`,
+  const rows = await db.select<Workspace[]>(
+    `SELECT * FROM workspaces WHERE id = $1`,
     [id],
   );
   return rows[0] ?? null;
 }
 
-export async function createProject(input: {
+export async function createWorkspace(input: {
   name?: string;
   instructions?: string;
-}): Promise<Project> {
+}): Promise<Workspace> {
   const db = await getDb();
   const id = newId();
   await db.execute(
-    `INSERT INTO projects (id, name, instructions) VALUES ($1, $2, $3)`,
-    [id, input.name ?? "New project", input.instructions ?? ""],
+    `INSERT INTO workspaces (id, name, instructions) VALUES ($1, $2, $3)`,
+    [id, input.name ?? "New workspace", input.instructions ?? ""],
   );
-  const project = await getProject(id);
-  if (!project) throw new Error("Failed to read back created project");
-  return project;
+  const workspace = await getWorkspace(id);
+  if (!workspace) throw new Error("Failed to read back created workspace");
+  return workspace;
 }
 
-export async function renameProject(id: string, name: string): Promise<void> {
+export async function renameWorkspace(id: string, name: string): Promise<void> {
   const db = await getDb();
   await db.execute(
-    `UPDATE projects SET name = $1, updated_at = datetime('now') WHERE id = $2`,
+    `UPDATE workspaces SET name = $1, updated_at = datetime('now') WHERE id = $2`,
     [name, id],
   );
 }
 
-export async function setProjectInstructions(
+export async function setWorkspaceInstructions(
   id: string,
   instructions: string,
 ): Promise<void> {
   const db = await getDb();
   await db.execute(
-    `UPDATE projects SET instructions = $1, updated_at = datetime('now')
+    `UPDATE workspaces SET instructions = $1, updated_at = datetime('now')
      WHERE id = $2`,
     [instructions, id],
   );
 }
 
-/** Persist a project's quick-actions override JSON (empty string = no override;
+/** Persist a workspace's quick-actions override JSON (empty string = no override;
  * the global quick actions then apply). Migration 018. */
-export async function setProjectQuickActions(
+export async function setWorkspaceQuickActions(
   id: string,
   quickActions: string,
 ): Promise<void> {
   const db = await getDb();
   await db.execute(
-    `UPDATE projects SET quick_actions = $1, updated_at = datetime('now')
+    `UPDATE workspaces SET quick_actions = $1, updated_at = datetime('now')
      WHERE id = $2`,
     [quickActions, id],
   );
 }
 
 /**
- * Delete a project. Its threads are **orphaned to no-project** (project_id set
- * to NULL), not deleted — chat history is preserved. Project files are removed
- * explicitly (we don't rely on FK ON DELETE CASCADE, mirroring deleteThread).
+ * Delete a workspace. Its threads are **orphaned to no-workspace** (workspace_id
+ * set to NULL), not deleted — chat history is preserved. Workspace files are
+ * removed explicitly (we don't rely on FK ON DELETE CASCADE, mirroring
+ * deleteThread).
  */
-export async function deleteProject(id: string): Promise<void> {
+export async function deleteWorkspace(id: string): Promise<void> {
   const db = await getDb();
   await db.execute(
-    `UPDATE threads SET project_id = NULL WHERE project_id = $1`,
+    `UPDATE threads SET workspace_id = NULL WHERE workspace_id = $1`,
     [id],
   );
-  await db.execute(`DELETE FROM project_files WHERE project_id = $1`, [id]);
-  await db.execute(`DELETE FROM projects WHERE id = $1`, [id]);
+  await db.execute(`DELETE FROM workspace_files WHERE workspace_id = $1`, [id]);
+  await db.execute(`DELETE FROM workspaces WHERE id = $1`, [id]);
 }
 
-export async function listProjectFiles(
-  projectId: string,
-): Promise<ProjectFile[]> {
+export async function listWorkspaceFiles(
+  workspaceId: string,
+): Promise<WorkspaceFile[]> {
   const db = await getDb();
-  return db.select<ProjectFile[]>(
-    `SELECT * FROM project_files WHERE project_id = $1 ORDER BY created_at ASC`,
-    [projectId],
+  return db.select<WorkspaceFile[]>(
+    `SELECT * FROM workspace_files WHERE workspace_id = $1 ORDER BY created_at ASC`,
+    [workspaceId],
   );
 }
 
-export async function addProjectFile(input: {
-  project_id: string;
+export async function addWorkspaceFile(input: {
+  workspace_id: string;
   name: string;
   content: string;
-}): Promise<ProjectFile> {
+}): Promise<WorkspaceFile> {
   const db = await getDb();
   const id = newId();
   await db.execute(
-    `INSERT INTO project_files (id, project_id, name, content)
+    `INSERT INTO workspace_files (id, workspace_id, name, content)
      VALUES ($1, $2, $3, $4)`,
-    [id, input.project_id, input.name, input.content],
+    [id, input.workspace_id, input.name, input.content],
   );
   await db.execute(
-    `UPDATE projects SET updated_at = datetime('now') WHERE id = $1`,
-    [input.project_id],
+    `UPDATE workspaces SET updated_at = datetime('now') WHERE id = $1`,
+    [input.workspace_id],
   );
-  const rows = await db.select<ProjectFile[]>(
-    `SELECT * FROM project_files WHERE id = $1`,
+  const rows = await db.select<WorkspaceFile[]>(
+    `SELECT * FROM workspace_files WHERE id = $1`,
     [id],
   );
   return rows[0];
 }
 
-export async function deleteProjectFile(id: string): Promise<void> {
+export async function deleteWorkspaceFile(id: string): Promise<void> {
   const db = await getDb();
-  await db.execute(`DELETE FROM project_files WHERE id = $1`, [id]);
+  await db.execute(`DELETE FROM workspace_files WHERE id = $1`, [id]);
 }
 
 // ---------------------------------------------------------------------------

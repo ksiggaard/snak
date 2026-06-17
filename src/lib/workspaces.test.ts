@@ -1,38 +1,38 @@
 import { describe, it, expect } from "vitest";
 import {
-  buildProjectSystemText,
-  projectFilesSize,
-  PROJECT_CONTEXT_CHAR_BUDGET,
-} from "@/lib/projects";
+  buildWorkspaceSystemText,
+  workspaceFilesSize,
+  WORKSPACE_CONTEXT_CHAR_BUDGET,
+} from "@/lib/workspaces";
 
-const project = (instructions: string, name = "Acme") => ({
+const workspace = (instructions: string, name = "Acme") => ({
   name,
   instructions,
 });
 
-describe("buildProjectSystemText", () => {
+describe("buildWorkspaceSystemText", () => {
   it("returns empty string when there are no instructions and no files", () => {
-    expect(buildProjectSystemText(project(""), [])).toBe("");
+    expect(buildWorkspaceSystemText(workspace(""), [])).toBe("");
   });
 
   it("includes instructions under a named header", () => {
-    const out = buildProjectSystemText(project("Be concise."), []);
-    expect(out).toBe("Project: Acme\n\nBe concise.");
+    const out = buildWorkspaceSystemText(workspace("Be concise."), []);
+    expect(out).toBe("Workspace: Acme\n\nBe concise.");
   });
 
-  it("falls back to a generic header when the project is unnamed", () => {
-    const out = buildProjectSystemText(project("Be concise.", "  "), []);
-    expect(out).toBe("Project context\n\nBe concise.");
+  it("falls back to a generic header when the workspace is unnamed", () => {
+    const out = buildWorkspaceSystemText(workspace("Be concise.", "  "), []);
+    expect(out).toBe("Workspace context\n\nBe concise.");
   });
 
   it("labels and orders files, with the reference-context intro", () => {
-    const out = buildProjectSystemText(project("Use the docs."), [
+    const out = buildWorkspaceSystemText(workspace("Use the docs."), [
       { name: "a.md", content: "Alpha" },
       { name: "b.md", content: "Beta" },
     ]);
-    expect(out).toContain("Project: Acme\n\nUse the docs.");
+    expect(out).toContain("Workspace: Acme\n\nUse the docs.");
     expect(out).toContain(
-      "The following project files are provided as reference context:",
+      "The following workspace files are provided as reference context:",
     );
     expect(out).toContain("--- a.md ---\nAlpha");
     expect(out).toContain("--- b.md ---\nBeta");
@@ -40,18 +40,18 @@ describe("buildProjectSystemText", () => {
   });
 
   it("includes files even when there are no instructions", () => {
-    const out = buildProjectSystemText(project(""), [
+    const out = buildWorkspaceSystemText(workspace(""), [
       { name: "a.md", content: "Alpha" },
     ]);
-    expect(out).toContain("Project: Acme");
+    expect(out).toContain("Workspace: Acme");
     expect(out).toContain("--- a.md ---\nAlpha");
     expect(out).not.toContain("\n\n\n");
   });
 
   it("truncates an overflowing file and notes dropped files", () => {
     const budget = 120;
-    const out = buildProjectSystemText(
-      project("Hi"),
+    const out = buildWorkspaceSystemText(
+      workspace("Hi"),
       [
         { name: "big.txt", content: "x".repeat(1000) },
         { name: "next.txt", content: "y".repeat(1000) },
@@ -66,10 +66,10 @@ describe("buildProjectSystemText", () => {
 
   it("drops whole files once the budget is already exhausted", () => {
     const intro =
-      "Project: Acme\n\nThe following project files are provided as reference context:";
+      "Workspace: Acme\n\nThe following workspace files are provided as reference context:";
     // Budget just past the first file so the second can't start.
     const first = { name: "a.txt", content: "a".repeat(40) };
-    const out = buildProjectSystemText(
+    const out = buildWorkspaceSystemText(
       { name: "Acme", instructions: "" },
       [first, { name: "b.txt", content: "b".repeat(40) }],
       intro.length + `\n\n--- a.txt ---\n${first.content}`.length,
@@ -80,14 +80,14 @@ describe("buildProjectSystemText", () => {
   });
 
   it("uses a sane default budget", () => {
-    expect(PROJECT_CONTEXT_CHAR_BUDGET).toBeGreaterThan(10_000);
+    expect(WORKSPACE_CONTEXT_CHAR_BUDGET).toBeGreaterThan(10_000);
   });
 });
 
-describe("projectFilesSize", () => {
+describe("workspaceFilesSize", () => {
   it("sums file content lengths", () => {
     expect(
-      projectFilesSize([
+      workspaceFilesSize([
         { content: "abc" },
         { content: "de" },
         { content: "" },
@@ -96,6 +96,6 @@ describe("projectFilesSize", () => {
   });
 
   it("is zero for no files", () => {
-    expect(projectFilesSize([])).toBe(0);
+    expect(workspaceFilesSize([])).toBe(0);
   });
 });

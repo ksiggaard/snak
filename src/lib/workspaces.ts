@@ -1,42 +1,42 @@
-import type { Project, ProjectFile } from "@/types/db";
+import type { Workspace, WorkspaceFile } from "@/types/db";
 
 /**
- * Maximum number of characters of assembled project context to inject into a
- * request. Guards against large project files blowing the context window.
+ * Maximum number of characters of assembled workspace context to inject into a
+ * request. Guards against large workspace files blowing the context window.
  * Files are included in order until this budget is reached; an overflowing file
  * is truncated and any remaining files are dropped with a note.
  *
  * 100k chars is a deliberately rough heuristic (~25-30k tokens) that leaves
  * ample room for history + the model's reply across all supported providers.
  */
-export const PROJECT_CONTEXT_CHAR_BUDGET = 100_000;
+export const WORKSPACE_CONTEXT_CHAR_BUDGET = 100_000;
 
 const TRUNCATION_MARKER = "\n…[truncated to fit the context budget]";
 
 /**
  * Build the system-context text injected for a thread that belongs to a
- * project: the project instructions followed by its reference files, each in a
- * labeled block. Phrased as *context* (not commands) and intended to be ordered
- * before the conversation history.
+ * workspace: the workspace instructions followed by its reference files, each
+ * in a labeled block. Phrased as *context* (not commands) and intended to be
+ * ordered before the conversation history.
  *
  * Returns an empty string when there is nothing to inject (no instructions and
  * no files) — callers should skip adding a system message in that case.
  *
  * Composability: T10 (global / per-thread system prompt) can prepend or append
- * its own text around this block to realize the global → project → thread
- * precedence; this function only owns the project layer.
+ * its own text around this block to realize the global → workspace → thread
+ * precedence; this function only owns the workspace layer.
  */
-export function buildProjectSystemText(
-  project: Pick<Project, "name" | "instructions">,
-  files: Pick<ProjectFile, "name" | "content">[],
-  charBudget: number = PROJECT_CONTEXT_CHAR_BUDGET,
+export function buildWorkspaceSystemText(
+  workspace: Pick<Workspace, "name" | "instructions">,
+  files: Pick<WorkspaceFile, "name" | "content">[],
+  charBudget: number = WORKSPACE_CONTEXT_CHAR_BUDGET,
 ): string {
   const sections: string[] = [];
 
-  const name = project.name.trim();
-  const instructions = project.instructions.trim();
+  const name = workspace.name.trim();
+  const instructions = workspace.instructions.trim();
 
-  const header = name ? `Project: ${name}` : "Project context";
+  const header = name ? `Workspace: ${name}` : "Workspace context";
   if (instructions) {
     sections.push(`${header}\n\n${instructions}`);
   } else if (files.length > 0) {
@@ -48,7 +48,7 @@ export function buildProjectSystemText(
   }
 
   const intro =
-    "The following project files are provided as reference context:";
+    "The following workspace files are provided as reference context:";
   let assembled = sections.join("\n\n");
   assembled = assembled ? `${assembled}\n\n${intro}` : intro;
 
@@ -81,9 +81,9 @@ export function buildProjectSystemText(
   return assembled;
 }
 
-/** Total character size of a project's files (for the size meter / warnings). */
-export function projectFilesSize(
-  files: Pick<ProjectFile, "content">[],
+/** Total character size of a workspace's files (for the size meter / warnings). */
+export function workspaceFilesSize(
+  files: Pick<WorkspaceFile, "content">[],
 ): number {
   return files.reduce((sum, f) => sum + f.content.length, 0);
 }

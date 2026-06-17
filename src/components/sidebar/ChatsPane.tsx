@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import { useThreads } from "@/store/threads";
 import { confirmDialog } from "@/store/confirm";
-import { useProjects } from "@/store/projects";
+import { useWorkspaces } from "@/store/workspaces";
 import { useBots } from "@/store/bots";
 import { useSearch } from "@/store/search";
 import { useView } from "@/store/view";
@@ -12,15 +12,15 @@ import { ThreadRow } from "./ThreadRow";
 import { useThreadSnippets } from "./useThreadSnippets";
 import { listStyleShowsSnippet } from "@/lib/appearance";
 
-/** Chats mode (T24): a flat list of all threads — project-less and in-project
- *  alike — with a Favorites group (T23) pinned on top. */
+/** Chats mode (T24): a flat list of all threads — workspace-less and
+ *  in-workspace alike — with a Favorites group (T23) pinned on top. */
 export function ChatsPane() {
   const t = useT();
   const threads = useThreads((s) => s.threads);
   const currentId = useThreads((s) => s.currentThreadId);
   const selectThread = useThreads((s) => s.selectThread);
   const clearArchive = useThreads((s) => s.clearArchive);
-  const closeProject = useProjects((s) => s.close);
+  const closeWorkspace = useWorkspaces((s) => s.close);
   const closeBot = useBots((s) => s.close);
   const clearSearch = useSearch((s) => s.clear);
   const showChat = useView((s) => s.showChat);
@@ -31,10 +31,10 @@ export function ChatsPane() {
   const [archiveOpen, setArchiveOpen] = useState(false);
 
   // Selecting a chat returns the main pane to the chat view (clear search,
-  // close any open project/bot editor, leave settings/usage).
+  // close any open workspace/bot editor, leave settings/usage).
   const select = (id: string) => {
     clearSearch();
-    closeProject();
+    closeWorkspace();
     closeBot();
     showChat();
     void selectThread(id);
