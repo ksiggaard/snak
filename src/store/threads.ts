@@ -39,6 +39,7 @@ import {
   applySubagentEvent,
   applyToolEvent,
   applyTraceEvent,
+  isModelOutput,
   loadThreadMessages,
   persistableSubagent,
   persistableToolCall,
@@ -797,7 +798,11 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       cancelling: false,
       pendingApproval: null,
       autoApproveSysTools: false,
-      awaitingModel: false,
+      // Show "Thinking…" from the moment we start until the model's first
+      // visible output. Cleared in onDelta by `isModelOutput`; not by the
+      // pre-request API-trace event, which would otherwise hide the loader
+      // through a slow first token (esp. local models' long prompt-eval).
+      awaitingModel: true,
       error: null,
     });
     try {
@@ -1052,7 +1057,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
               ...(event.toolDone || event.subagent
                 ? { awaitingModel: true }
                 : {}),
-              ...(event.text ? { awaitingModel: false } : {}),
+              ...(isModelOutput(event) ? { awaitingModel: false } : {}),
             };
           });
         };
@@ -1270,7 +1275,11 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       cancelling: false,
       pendingApproval: null,
       autoApproveSysTools: false,
-      awaitingModel: false,
+      // Show "Thinking…" from the moment we start until the model's first
+      // visible output. Cleared in onDelta by `isModelOutput`; not by the
+      // pre-request API-trace event, which would otherwise hide the loader
+      // through a slow first token (esp. local models' long prompt-eval).
+      awaitingModel: true,
       error: null,
     });
     try {
@@ -1413,7 +1422,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             ...(event.toolDone || event.subagent
               ? { awaitingModel: true }
               : {}),
-            ...(event.text ? { awaitingModel: false } : {}),
+            ...(isModelOutput(event) ? { awaitingModel: false } : {}),
           };
         });
       };
@@ -1538,7 +1547,11 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       cancelling: false,
       pendingApproval: null,
       autoApproveSysTools: false,
-      awaitingModel: false,
+      // Show "Thinking…" from the moment we start until the model's first
+      // visible output. Cleared in onDelta by `isModelOutput`; not by the
+      // pre-request API-trace event, which would otherwise hide the loader
+      // through a slow first token (esp. local models' long prompt-eval).
+      awaitingModel: true,
       error: null,
     });
     try {
@@ -1676,7 +1689,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             ...(event.toolDone || event.subagent
               ? { awaitingModel: true }
               : {}),
-            ...(event.text ? { awaitingModel: false } : {}),
+            ...(isModelOutput(event) ? { awaitingModel: false } : {}),
           };
         });
       };

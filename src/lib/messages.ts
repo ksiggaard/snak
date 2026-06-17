@@ -180,6 +180,21 @@ export function applyTraceEvent(
   apiTrace.push({ phase: tr.phase, round: tr.round, data: tr.data });
 }
 
+/**
+ * Whether a stream event is the model producing *visible* output — a text or
+ * reasoning chunk, or a tool call. This is the signal that the "Thinking…"
+ * loader should hand off to the growing reply (`awaitingModel` clears here).
+ *
+ * Crucially it excludes the pre-request events that arrive *before* the model
+ * has done anything: the API-trace `request` entry (emitted before the HTTP
+ * call) and approval prompts. Treating those as "the model responded" hid the
+ * loader during a slow first token — most visibly on local models, whose
+ * prompt-eval can take many seconds before the first text arrives.
+ */
+export function isModelOutput(event: StreamEvent): boolean {
+  return !!(event.text || event.reasoning || event.toolCall);
+}
+
 /** The JSON payload of a persisted `subagent` attachment (T55). */
 export function persistableSubagent(s: MessageSubagent): MessageSubagent {
   return {

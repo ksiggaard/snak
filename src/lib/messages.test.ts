@@ -5,6 +5,7 @@ import {
   applyToolEvent,
   applyTraceEvent,
   imageDataUrl,
+  isModelOutput,
   persistableSubagent,
   persistableToolCall,
   TOOL_ARGS_PERSIST_BUDGET,
@@ -283,5 +284,50 @@ describe("applyTraceEvent", () => {
     const trace: ApiTraceEntry[] = [];
     applyTraceEvent(ev({ text: "hi" }), trace);
     expect(trace).toHaveLength(0);
+  });
+});
+
+describe("isModelOutput", () => {
+  const ev = (e: Partial<StreamEvent>): StreamEvent => e;
+
+  it("is true for a text chunk", () => {
+    expect(isModelOutput(ev({ text: "The" }))).toBe(true);
+  });
+
+  it("is true for a reasoning chunk", () => {
+    expect(isModelOutput(ev({ reasoning: { text: "hmm" } }))).toBe(true);
+  });
+
+  it("is true for a tool call", () => {
+    expect(
+      isModelOutput(ev({ toolCall: { id: "1", name: "search" } })),
+    ).toBe(true);
+  });
+
+  it("is false for the pre-request API-trace event (the loader bug)", () => {
+    // The trace `request` entry arrives before the model has produced anything;
+    // treating it as output hid "Thinking…" during a slow first token.
+    expect(
+      isModelOutput(ev({ apiTrace: { phase: "request", round: 0, data: {} } })),
+    ).toBe(false);
+  });
+
+  it("is false for an approval request", () => {
+    expect(
+      isModelOutput(
+        ev({
+          approvalRequest: {
+            id: "1",
+            toolName: "sys",
+            summary: "Read file",
+            detail: "/etc/hosts",
+          },
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("is false for an empty text chunk", () => {
+    expect(isModelOutput(ev({ text: "" }))).toBe(false);
   });
 });

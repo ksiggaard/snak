@@ -25,13 +25,31 @@ use super::{
 /// Where the local Ollama daemon listens by default.
 pub(crate) const BASE_URL: &str = "http://localhost:11434";
 
-/// Context window (`num_ctx`) requested for every chat. Ollama's default is
-/// small (often 2k–4k) and silently truncates from the *front* when exceeded —
-/// which drops the system prompt and the user's question once a tool result is
-/// appended, leaving a small model to answer with a generic greeting. A roomier
-/// window keeps the question in context. Set via the native `/api/chat`
-/// endpoint's `options` (the OpenAI-compat `/v1` endpoint can't set it).
-const NUM_CTX: u64 = 8192;
+/// The context window (`num_ctx`) is sized to each request's prompt rather than
+/// fixed — see [`choose_num_ctx`]. Ollama's default is small (often 2k–4k) and
+/// silently truncates from the *front* when exceeded, dropping the system prompt
+/// and the user's question; worse, a prompt that *fills* `num_ctx` leaves no
+/// room for the reply, so the model emits a token or two and stops. A fixed
+/// window broke exactly that way once workspace files pushed the prompt past it.
+/// Set via the native `/api/chat` endpoint's `options` (the OpenAI-compat `/v1`
+/// endpoint can't set it).
+///
+/// Floor for `num_ctx`: never request less than the previous fixed window, so
+/// small chats behave exactly as before.
+const MIN_CTX: u64 = 8192;
+/// Ceiling for `num_ctx`: caps VRAM/RAM on very large prompts and stays within
+/// the trained window of common local models.
+const MAX_CTX: u64 = 32768;
+/// Tokens reserved on top of the estimated prompt so the model always has room
+/// to reply — the whole point of sizing the window to the prompt.
+const CTX_HEADROOM: u64 = 2048;
+/// Rough chars-per-token heuristic (matches the frontend's context readout),
+/// used only to pick a `num_ctx` bucket — it needn't be exact.
+const CHARS_PER_TOKEN: u64 = 4;
+/// Flat per-image token allowance: images aren't text (vision models encode each
+/// into a roughly fixed token count), so their base64 bytes must not be counted
+/// as prompt characters.
+const IMAGE_TOKENS_EST: u64 = 1024;
 
 /// Monotonic counter giving each streamed tool call a process-unique id. Native
 /// Ollama tool calls carry no id of their own; a per-response index would
@@ -66,15 +84,21 @@ async fn native_chat(
     channel: &Channel<StreamDelta>,
     cancel: &AtomicBool,
 ) -> anyhow::Result<ChatResponse> {
+    // Size the context window to the actual prompt (+ headroom for the reply)
+    // so workspace-sized prompts get room to answer. `openai_tools` is built
+    // once and reused for both the estimate and the request body.
+    let tools = openai_tools(req.tools);
+    let num_ctx = choose_num_ctx(req.messages, &tools);
+
     let mut body = json!({
         "model": req.model,
         "stream": true,
         "messages": build_native_messages(req.messages),
-        "options": { "num_ctx": NUM_CTX },
+        "options": { "num_ctx": num_ctx },
     });
     // Attach tools only when present — keeps the tool-less request minimal.
-    if !req.tools.is_empty() {
-        body["tools"] = Value::Array(openai_tools(req.tools));
+    if !tools.is_empty() {
+        body["tools"] = Value::Array(tools);
     }
     // Reasoning capture: ask the native API to stream the model's thinking in a
     // separate `message.thinking` field (thinking-capable local models only).
@@ -186,6 +210,47 @@ async fn native_chat(
         tool_calls,
         thinking_blocks: Vec::new(),
     })
+}
+
+/// Choose `num_ctx` for a request: enough to hold the estimated prompt plus
+/// generation headroom, rounded up to a power of two, clamped to
+/// `[MIN_CTX, MAX_CTX]`. Small chats stay at the floor (cheap, unchanged from
+/// before); workspace-sized prompts grow the window so the reply isn't squeezed
+/// out. Pure / unit-tested.
+fn choose_num_ctx(messages: &[ChatMessage], tools: &[Value]) -> u64 {
+    let needed = estimate_prompt_tokens(messages, tools).saturating_add(CTX_HEADROOM);
+    // Guard `next_power_of_two` against overflow on absurd inputs (it panics
+    // above 2^63); anything this large is capped at MAX_CTX anyway.
+    if needed >= MAX_CTX {
+        return MAX_CTX;
+    }
+    needed.next_power_of_two().clamp(MIN_CTX, MAX_CTX)
+}
+
+/// Roughly estimate a request's prompt size in tokens (~4 chars/token) over
+/// everything that goes on the wire: message content, tool-call names/arguments,
+/// tool results, the serialized tool definitions, plus a flat allowance per
+/// image. Image *bytes* are deliberately excluded — they ride in a separate
+/// `images` array, not as text, so counting their base64 would wildly overshoot.
+/// Pure / unit-tested.
+fn estimate_prompt_tokens(messages: &[ChatMessage], tools: &[Value]) -> u64 {
+    let mut chars: u64 = 0;
+    let mut images: u64 = 0;
+    for m in messages {
+        chars += m.content.len() as u64;
+        images += m.images.len() as u64;
+        for tc in &m.tool_calls {
+            chars += tc.name.len() as u64;
+            chars += tc.arguments.to_string().len() as u64;
+        }
+        for tr in &m.tool_results {
+            chars += tr.content.len() as u64;
+        }
+    }
+    for t in tools {
+        chars += t.to_string().len() as u64;
+    }
+    chars / CHARS_PER_TOKEN + images * IMAGE_TOKENS_EST
 }
 
 /// Build the native `/api/chat` `messages` array from our `ChatMessage`s,
@@ -446,6 +511,49 @@ mod tests {
         assert_eq!(out[0]["tool_name"], "a");
         assert_eq!(out[0]["content"], "r1");
         assert_eq!(out[1]["tool_name"], "b");
+    }
+
+    #[test]
+    fn num_ctx_floors_small_prompts_at_the_minimum() {
+        // A one-line question must keep the old window — small chats unchanged.
+        assert_eq!(choose_num_ctx(&[msg("user", "hi")], &[]), MIN_CTX);
+    }
+
+    #[test]
+    fn num_ctx_grows_past_the_old_window_for_workspace_sized_prompts() {
+        // ~11k tokens of content (44k chars) — the workspace case that broke a
+        // fixed 8192 window. Estimate 11000 + 2048 headroom = 13048 → 16384.
+        let big = "x".repeat(44_000);
+        let ctx = choose_num_ctx(&[msg("user", &big)], &[]);
+        assert!(ctx > MIN_CTX, "expected growth beyond {MIN_CTX}, got {ctx}");
+        assert_eq!(ctx, 16_384);
+    }
+
+    #[test]
+    fn num_ctx_is_capped_at_the_maximum() {
+        // ~250k tokens of content — far past any local model's window.
+        let huge = "x".repeat(1_000_000);
+        assert_eq!(choose_num_ctx(&[msg("user", &huge)], &[]), MAX_CTX);
+    }
+
+    #[test]
+    fn estimate_counts_a_flat_allowance_per_image_not_its_bytes() {
+        // Large base64 payload, empty text: it must count as one image
+        // allowance, not 100k/4 = 25k tokens of "text".
+        let mut m = msg("user", "");
+        m.images = vec![ImagePart {
+            media_type: "image/png".into(),
+            data: "A".repeat(100_000),
+        }];
+        assert_eq!(estimate_prompt_tokens(&[m], &[]), IMAGE_TOKENS_EST);
+    }
+
+    #[test]
+    fn estimate_includes_tool_definitions() {
+        let tools = vec![json!({ "type": "function", "function": { "name": "x" } })];
+        let with = estimate_prompt_tokens(&[msg("user", "hi")], &tools);
+        let without = estimate_prompt_tokens(&[msg("user", "hi")], &[]);
+        assert!(with > without, "tool defs should add to the estimate");
     }
 
     #[test]
