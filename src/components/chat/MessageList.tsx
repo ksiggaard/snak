@@ -864,6 +864,9 @@ function ChatMessage({
           // persist exactly once, when the reply is saved.
           messageId={realMessageId}
           threadId={realMessageId ? m.thread_id : null}
+          // Live streaming placeholder → defer flicker-prone renderers (Mermaid)
+          // until the reply completes.
+          streaming={m.id === STREAM_ID}
         />
       )
     ) : (

@@ -16,6 +16,7 @@ import rehypeHighlight from "rehype-highlight";
 import "@/components/chat/highlight-theme.css";
 import { CodeBlock } from "@/components/chat/CodeBlock";
 import { ArtifactContext } from "@/components/chat/artifactContext";
+import { StreamingContext } from "@/components/chat/streamingContext";
 import { YouTubeEmbed } from "@/components/chat/YouTubeEmbed";
 import { openExternal } from "@/lib/openExternal";
 import { hasRenderer } from "@/lib/plugins";
@@ -205,6 +206,7 @@ function MarkdownImpl({
   suppressedVideoIds,
   messageId,
   threadId,
+  streaming,
 }: {
   content: string;
   /** Video ids handled by the gallery above (see SuppressedVideosContext). */
@@ -213,6 +215,10 @@ function MarkdownImpl({
    * artifact. Null/absent while a reply is still streaming (no real id yet). */
   messageId?: string | null;
   threadId?: string | null;
+  /** True while this content is the live streaming reply. Gates renderers like
+   * `Mermaid` that would flicker on partial source (see StreamingContext).
+   * Omitted/false everywhere else (loaded history, canvas preview, summaries). */
+  streaming?: boolean;
 }) {
   // Idempotent ordinal assignment per artifact block (keyed by the card's
   // useId), so multiple artifacts in one message get stable, reproducible
@@ -237,21 +243,23 @@ function MarkdownImpl({
 
   return (
     <div className="text-sm break-words">
-      <ArtifactContext.Provider value={artifactCtx}>
-        <SuppressedVideosContext.Provider
-          value={suppressedVideoIds ?? EMPTY_SET}
-        >
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            rehypePlugins={[
-              [rehypeHighlight, { detect: true, ignoreMissing: true }],
-            ]}
-            components={components}
+      <StreamingContext.Provider value={streaming ?? false}>
+        <ArtifactContext.Provider value={artifactCtx}>
+          <SuppressedVideosContext.Provider
+            value={suppressedVideoIds ?? EMPTY_SET}
           >
-            {content}
-          </ReactMarkdown>
-        </SuppressedVideosContext.Provider>
-      </ArtifactContext.Provider>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[
+                [rehypeHighlight, { detect: true, ignoreMissing: true }],
+              ]}
+              components={components}
+            >
+              {content}
+            </ReactMarkdown>
+          </SuppressedVideosContext.Provider>
+        </ArtifactContext.Provider>
+      </StreamingContext.Provider>
     </div>
   );
 }

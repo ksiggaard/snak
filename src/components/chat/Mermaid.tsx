@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import { resolveCssVarColor, resolveTheme } from "@/lib/theme";
+import { useStreaming } from "@/components/chat/streamingContext";
 import { openLightboxSvg } from "@/store/lightbox";
 import { useTheme } from "@/store/theme";
 import { useT } from "@/store/i18n";
@@ -12,11 +13,14 @@ import { useT } from "@/store/i18n";
  *
  * - **Lazy:** mermaid is a large dependency, dynamically imported so it stays
  *   out of the main bundle until a diagram actually renders.
- * - **Streaming-safe:** the source grows token-by-token during a stream, so it
- *   is incomplete/invalid most of the time. `mermaid.parse(..., { suppressErrors })`
- *   gates rendering — invalid source never throws; we fall back to showing the
- *   raw text (which also doubles as the live "source so far" view) until it
- *   parses, then swap in the rendered SVG.
+ * - **Streaming-safe:** the source grows token-by-token during a stream, and a
+ *   partial diagram parses-and-renders at many intermediate points as it grows,
+ *   which flickers badly (the block oscillates between raw text and ever-changing
+ *   partial SVGs). So while the reply is still streaming (`useStreaming()`) we
+ *   show ONLY the raw source — the live "source so far" view — and never render.
+ *   Once the stream completes we parse once and, if valid, swap in the SVG; an
+ *   invalid final diagram stays as raw source. Result: the diagram appears once,
+ *   fully formed, with no mid-stream flicker.
  * - **Theming:** re-renders with mermaid's dark/default theme to match the
  *   app's resolved light/dark mode.
  * - **Safety:** mermaid renders with `securityLevel: "strict"` (its built-in
@@ -30,11 +34,18 @@ export function Mermaid({ code }: { code: string }) {
   // useId is unique per instance but not a valid CSS id on its own (":r0:");
   // mermaid.render needs a DOM-id-safe string, so strip non-alphanumerics.
   const renderId = `mermaid-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
+  // While the reply streams, the source is incomplete — defer rendering until
+  // it finishes so partial diagrams never paint (no flicker).
+  const streaming = useStreaming();
   // null = show the raw source (initial paint, streaming, or a parse failure);
   // a string = the rendered SVG markup.
   const [svg, setSvg] = useState<string | null>(null);
 
   useEffect(() => {
+    // Don't attempt to render mid-stream — leave `svg` null (the fresh streaming
+    // mount starts null) so the raw "source so far" shows; the render guard below
+    // also hides any svg while streaming. We parse+render once the stream ends.
+    if (streaming) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -60,9 +71,9 @@ export function Mermaid({ code }: { code: string }) {
     return () => {
       cancelled = true;
     };
-  }, [code, resolved, renderId]);
+  }, [code, resolved, renderId, streaming]);
 
-  if (svg) {
+  if (svg && !streaming) {
     return (
       <button
         type="button"
