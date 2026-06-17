@@ -569,6 +569,9 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       draftModel: get().defaultModel,
     });
     void get().refreshSystemTokens();
+    // Move focus to the Composer so the user can start typing immediately,
+    // reusing the same seam as the Cmd/Ctrl+L shortcut (T64).
+    get().focusComposer();
   },
 
   startNewChatInProject: (projectId) => {
@@ -584,6 +587,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       draftModel: get().defaultModel,
     });
     void get().refreshSystemTokens();
+    // Move focus to the Composer so the user can start typing immediately (T64).
+    get().focusComposer();
   },
 
   startNewChatWithBot: (bot) => {
@@ -604,6 +609,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       draftModel: hasDefault ? bot.default_model! : get().defaultModel,
     });
     void get().refreshSystemTokens();
+    // Move focus to the Composer so the user can start typing immediately (T64).
+    get().focusComposer();
   },
 
   assignThreadProject: async (threadId, projectId) => {

@@ -2663,8 +2663,8 @@ current inline detail pane), and the workspace settings move to **their own page
 
 ## T64 — Focus the chat input when creating a new chat
 
-- **Status:** todo
-- **Owner:** —
+- **Status:** done
+- **Owner:** Claude (T64)
 - **Priority:** P3
 - **Layer:** Frontend
 - **Depends on:** —
@@ -2678,3 +2678,11 @@ input so the user can start typing immediately.
 - Covers the sidebar new-chat action and any other new-chat entry points.
 - Reuse the existing composer-focus seam added by the Cmd/Ctrl+L shortcut rather than adding
   a parallel mechanism.
+
+**Notes:**
+- 2026-06-17 (Claude, T64): Called `get().focusComposer()` at the end of all three
+  new-chat actions — `startNewChat`, `startNewChatInProject`, and `startNewChatWithBot` —
+  in `src/store/threads.ts`. Reuses the existing `composerFocus` nonce seam (introduced for
+  Cmd/Ctrl+L) that the Composer already watches via a `useEffect`; no new focus path added.
+  Covers the sidebar new-chat button and all other entry points. Verified: `npm run build` ✓,
+  `npm run lint` ✓, `npm test` (609 pass, 2 pre-existing locale failures on the branch) ✓.
