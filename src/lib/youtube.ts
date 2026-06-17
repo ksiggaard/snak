@@ -5,7 +5,11 @@
 // Parsing is a pure function so it can be unit-tested in isolation; the player
 // component (`src/components/chat/YouTubeEmbed.tsx`) and the link detection in
 // `Markdown.tsx` consume it.
+//
+// Also exports the transcript-fetch wrapper (T60) and the workspace markdown
+// assembler used by WorkspaceView.
 
+import { invoke } from "@tauri-apps/api/core";
 import { hasRenderer, type HostRegistry } from "@/lib/plugins";
 
 export interface YouTubeRef {
@@ -195,4 +199,76 @@ export function buildYouTubeSystemText(reg: HostRegistry): string {
       "available. Do not invent video URLs — only link videos you are confident " +
       "exist.",
   ].join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// T60 — YouTube transcript fetch + workspace markdown assembly
+// ---------------------------------------------------------------------------
+
+/** Result returned by the `fetch_youtube_transcript` Rust command. */
+export interface YoutubeTranscriptResult {
+  title: string;
+  transcript: string;
+  no_captions: boolean;
+}
+
+/**
+ * Fetch the closed-caption transcript of a YouTube video via the Rust command
+ * `fetch_youtube_transcript`. Returns `{ title, transcript, no_captions }`.
+ * Throws a user-readable string on network / parse errors.
+ */
+export function fetchYoutubeTranscript(
+  url: string,
+): Promise<YoutubeTranscriptResult> {
+  return invoke<YoutubeTranscriptResult>("fetch_youtube_transcript", { url });
+}
+
+/**
+ * System prompt used when summarizing a YouTube transcript. Kept here as a
+ * named constant so it is easy to iterate on without touching component code.
+ */
+export const YOUTUBE_SUMMARY_SYSTEM_PROMPT =
+  "You are a helpful assistant. The user will provide you with the timestamped " +
+  "transcript of a YouTube video. Write a clear, well-structured summary in " +
+  "Markdown covering the main points, key takeaways, and any important details. " +
+  "Use headers and bullet points where they aid readability. Preserve noteworthy " +
+  "timestamps (e.g. [mm:ss]) inline when they help the reader navigate the video.";
+
+/**
+ * Assemble the workspace markdown file for a YouTube video, following the T59
+ * front-matter convention:
+ *
+ *   <!-- source: {url} -->
+ *   <!-- fetched: YYYY-MM-DD -->
+ *
+ *   # {title}
+ *
+ *   {summary}
+ *
+ * Pure — no side effects — so it is unit-testable.
+ */
+export function buildYoutubeMarkdown(
+  url: string,
+  title: string,
+  summary: string,
+  date: string,
+): string {
+  const heading = title.trim() || "YouTube video";
+  return (
+    `<!-- source: ${url} -->\n` +
+    `<!-- fetched: ${date} -->\n\n` +
+    `# ${heading}\n\n` +
+    summary.trim()
+  );
+}
+
+/**
+ * Derive a safe workspace filename for a YouTube video. Uses the video title
+ * (sanitised) — the same logic used for web URLs in WorkspaceView.
+ */
+export function youtubeFileName(title: string, url: string): string {
+  const hostname = url.replace(/^https?:\/\//, "").split(/[/?]/)[0] ?? "video";
+  const baseName = title.trim() || hostname;
+  const safe = baseName.replace(/[/\\:*?"<>|]/g, "-").slice(0, 80);
+  return `${safe}.md`;
 }

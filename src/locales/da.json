@@ -508,6 +508,8 @@
     "workspace.urlError": "Kunne ikke hente URL: {error}",
     "workspace.urlInvalid": "Ugyldig URL: {error}",
     "workspace.sourceUrl": "Kilde: {url}",
+    "workspace.youtubeNoCaptions": "Denne video har ingen tilgængelige undertekster — resuméet kan ikke genereres.",
+    "workspace.youtubeSummarizeError": "Kunne ikke opsummere videoen: {error}",
     "bots.title": "Personaer",
     "bots.description": "Personaer med deres egen personlighed, avatar og hukommelse. Start en chat med en fra Personaer-fanen i sidepanelet.",
     "bots.empty": "Ingen personaer endnu.",

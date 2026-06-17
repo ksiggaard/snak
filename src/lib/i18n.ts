@@ -726,6 +726,10 @@ export const en = {
   "workspace.urlError": "Couldn't fetch URL: {error}",
   "workspace.urlInvalid": "Invalid URL: {error}",
   "workspace.sourceUrl": "Source: {url}",
+  "workspace.youtubeNoCaptions":
+    "This video has no closed captions available — the summary can't be generated.",
+  "workspace.youtubeSummarizeError":
+    "Couldn't summarize the video: {error}",
   "workspace.quickActions": "Quick actions",
   "workspace.quickActionsHint":
     "Override the global quick actions for chats in this workspace. Leave empty to use the global ones.",

@@ -520,6 +520,8 @@
     "workspace.urlError": "Nie udało się pobrać URL: {error}",
     "workspace.urlInvalid": "Nieprawidłowy URL: {error}",
     "workspace.sourceUrl": "Źródło: {url}",
+    "workspace.youtubeNoCaptions": "Ten film nie ma dostępnych napisów — podsumowanie nie może zostać wygenerowane.",
+    "workspace.youtubeSummarizeError": "Nie udało się podsumować filmiku: {error}",
     "bots.title": "Persony",
     "bots.description": "Persony z własną osobowością, awatarem i pamięcią. Rozpocznij czat z personą z karty Persony w pasku bocznym.",
     "bots.empty": "Nie ma jeszcze person.",

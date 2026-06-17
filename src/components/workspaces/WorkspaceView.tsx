@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { QuickActionsEditor } from "@/components/settings/QuickActionsEditor";
 import { useWorkspaces } from "@/store/workspaces";
+import { useThreads } from "@/store/threads";
 import { t as tNow, useT, useTp } from "@/store/i18n";
 import { classifyFile, extractDocumentText } from "@/lib/documents";
 import {
@@ -13,6 +14,15 @@ import {
   workspaceFilesSize,
 } from "@/lib/workspaces";
 import { fetchUrlAsMarkdown, validateUrl } from "@/lib/url";
+import {
+  parseYouTubeUrl,
+  fetchYoutubeTranscript,
+  buildYoutubeMarkdown,
+  youtubeFileName,
+  YOUTUBE_SUMMARY_SYSTEM_PROMPT,
+} from "@/lib/youtube";
+import { loadServers, BUILTIN_YOUTUBE_SERVER } from "@/lib/mcp";
+import { chatStream } from "@/lib/chat";
 import {
   parseQuickActions,
   serializeQuickActions,
@@ -34,11 +44,15 @@ export function WorkspaceView() {
   const addFile = useWorkspaces((s) => s.addFile);
   const removeFile = useWorkspaces((s) => s.removeFile);
 
+  // Default provider/model — used for the YouTube summary (T60).
+  const defaultProvider = useThreads((s) => s.defaultProvider);
+  const defaultModel = useThreads((s) => s.defaultModel);
+
   const workspace = workspaces.find((w) => w.id === openWorkspaceId);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // URL ingestion state (T59).
+  // URL ingestion state (T59 / T60).
   const [urlDraft, setUrlDraft] = useState("");
   const [urlFetching, setUrlFetching] = useState(false);
 
@@ -137,9 +151,27 @@ export function WorkspaceView() {
     setError(null);
     setUrlFetching(true);
     try {
+      // T60: detect YouTube URLs and route to the summarize path when the
+      // built-in youtube server is enabled; otherwise fall through to T59.
+      const ytRef = parseYouTubeUrl(urlTrimmed);
+      if (ytRef) {
+        const servers = await loadServers();
+        const youtubeEnabled = servers.some(
+          (s) => s.id === BUILTIN_YOUTUBE_SERVER.id && s.enabled,
+        );
+        if (youtubeEnabled) {
+          await addYoutubeFile(urlTrimmed);
+          setUrlDraft("");
+          return;
+        }
+        // YouTube server disabled — fall through to generic fetch.
+      }
+
+      // T59: generic URL → markdown.
       const { title, markdown } = await fetchUrlAsMarkdown(urlTrimmed);
       // Derive a filename: use the page title (sanitised) or hostname.
-      const hostname = urlTrimmed.replace(/^https?:\/\//, "").split(/[/?]/)[0] ?? "page";
+      const hostname =
+        urlTrimmed.replace(/^https?:\/\//, "").split(/[/?]/)[0] ?? "page";
       const baseName = title.trim() || hostname;
       const safeName = baseName.replace(/[/\\:*?"<>|]/g, "-").slice(0, 80);
       const name = `${safeName}.md`;
@@ -154,6 +186,62 @@ export function WorkspaceView() {
     } finally {
       setUrlFetching(false);
     }
+  }
+
+  /**
+   * T60 YouTube path: fetch transcript → summarize via LLM → store as an
+   * editable markdown workspace file. Throws on network/API errors so the
+   * caller can surface them via `setError`.
+   */
+  async function addYoutubeFile(url: string) {
+    if (!workspace) return;
+
+    // Step 1: fetch the transcript via the Rust command (reuses mcp/youtube.rs).
+    const result = await fetchYoutubeTranscript(url);
+    if (result.no_captions) {
+      setError(tNow("workspace.youtubeNoCaptions"));
+      return;
+    }
+
+    // Step 2: summarize the transcript using the default provider/model.
+    // chatStream requires a threadId — we use a sentinel value since this call
+    // is intentionally not persisted to any thread.
+    const SUMMARIZE_THREAD_ID = "__youtube_summarize__";
+    const summary = await chatStream(
+      defaultProvider,
+      defaultModel,
+      [
+        {
+          role: "system",
+          content: YOUTUBE_SUMMARY_SYSTEM_PROMPT,
+        },
+        {
+          role: "user",
+          content: result.transcript,
+        },
+      ],
+      () => {
+        // No streaming UI for this background call; we just collect the
+        // final result from the resolved promise.
+      },
+      SUMMARIZE_THREAD_ID,
+    )
+      .then((r) => r.content)
+      .catch((err: unknown) => {
+        // Surface provider errors clearly (e.g. missing API key).
+        throw new Error(
+          tNow("workspace.youtubeSummarizeError", {
+            error: err instanceof Error ? err.message : String(err),
+          }),
+          { cause: err },
+        );
+      });
+
+    // Step 3: assemble the markdown with T59 front-matter and store the file.
+    const today = new Date().toISOString().slice(0, 10);
+    const markdown = buildYoutubeMarkdown(url, result.title, summary, today);
+    const name = youtubeFileName(result.title, url);
+    await addFile(workspace.id, name, markdown, url);
   }
 
   return (

@@ -508,6 +508,8 @@
     "workspace.urlError": "No se pudo obtener la URL: {error}",
     "workspace.urlInvalid": "URL no válida: {error}",
     "workspace.sourceUrl": "Fuente: {url}",
+    "workspace.youtubeNoCaptions": "Este vídeo no tiene subtítulos disponibles — no se puede generar el resumen.",
+    "workspace.youtubeSummarizeError": "No se pudo resumir el vídeo: {error}",
     "bots.title": "Personas",
     "bots.description": "Personas con su propia personalidad, avatar y memoria. Inicia un chat con una desde la pestaña Personas de la barra lateral.",
     "bots.empty": "Todavía no hay personas.",

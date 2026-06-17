@@ -331,6 +331,7 @@ pub fn run() {
             commands::terminal::open_in_terminal,
             commands::documents::extract_document_text,
             commands::url::fetch_url_as_markdown,
+            commands::url::fetch_youtube_transcript,
             commands::files::save_image,
             commands::artifacts::export_artifact_zip,
             commands::artifacts::open_artifact_in_browser,

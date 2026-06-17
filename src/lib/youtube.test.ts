@@ -1,11 +1,14 @@
 import { describe, it, expect } from "vitest";
 import {
   buildYouTubeSystemText,
+  buildYoutubeMarkdown,
+  youtubeFileName,
   embeddedYouTubeIds,
   mediaLabelOffsets,
   parseYouTubeUrl,
   partitionVideoThumbs,
   youTubeEmbedSrc,
+  YOUTUBE_SUMMARY_SYSTEM_PROMPT,
 } from "@/lib/youtube";
 import type { HostRegistry } from "@/lib/plugins";
 
@@ -181,5 +184,71 @@ describe("buildYouTubeSystemText", () => {
     const out = buildYouTubeSystemText(registry(["youtube"]));
     expect(out).toContain("## YouTube videos");
     expect(out).toContain("own line");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T60 — buildYoutubeMarkdown, youtubeFileName, YOUTUBE_SUMMARY_SYSTEM_PROMPT
+// ---------------------------------------------------------------------------
+
+describe("buildYoutubeMarkdown", () => {
+  const url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+  const title = "Rick Astley - Never Gonna Give You Up";
+  const summary = "## Overview\n\nA classic pop anthem.";
+  const date = "2026-06-17";
+
+  it("includes the T59 source + fetched front-matter comments", () => {
+    const md = buildYoutubeMarkdown(url, title, summary, date);
+    expect(md).toContain(`<!-- source: ${url} -->`);
+    expect(md).toContain(`<!-- fetched: ${date} -->`);
+  });
+
+  it("includes a level-1 heading with the video title", () => {
+    const md = buildYoutubeMarkdown(url, title, summary, date);
+    expect(md).toContain(`# ${title}`);
+  });
+
+  it("includes the summary body", () => {
+    const md = buildYoutubeMarkdown(url, title, summary, date);
+    expect(md).toContain("A classic pop anthem.");
+  });
+
+  it("falls back to 'YouTube video' when title is empty", () => {
+    const md = buildYoutubeMarkdown(url, "", summary, date);
+    expect(md).toContain("# YouTube video");
+  });
+
+  it("produces the comments before the heading", () => {
+    const md = buildYoutubeMarkdown(url, title, summary, date);
+    const commentEnd = md.indexOf("-->\n\n#");
+    expect(commentEnd).toBeGreaterThan(0);
+  });
+});
+
+describe("youtubeFileName", () => {
+  it("sanitises the title into a .md filename", () => {
+    const name = youtubeFileName("Rick Astley: Never Gonna Give You Up", "https://youtu.be/dQw4w9WgXcQ");
+    expect(name).toMatch(/\.md$/);
+    expect(name).not.toContain(":");
+  });
+
+  it("falls back to the hostname when title is empty", () => {
+    const name = youtubeFileName("", "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    expect(name).toMatch(/\.md$/);
+    expect(name.length).toBeGreaterThan(3);
+  });
+
+  it("truncates very long titles", () => {
+    const longTitle = "A".repeat(200);
+    const name = youtubeFileName(longTitle, "https://youtu.be/dQw4w9WgXcQ");
+    // Base name capped at 80 + ".md" = 83
+    expect(name.length).toBeLessThanOrEqual(83);
+  });
+});
+
+describe("YOUTUBE_SUMMARY_SYSTEM_PROMPT", () => {
+  it("is a non-empty string", () => {
+    expect(typeof YOUTUBE_SUMMARY_SYSTEM_PROMPT).toBe("string");
+    expect(YOUTUBE_SUMMARY_SYSTEM_PROMPT.length).toBeGreaterThan(20);
   });
 });

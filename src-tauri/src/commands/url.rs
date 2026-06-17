@@ -1,7 +1,11 @@
-//! Workspace URL ingestion (T59).
+//! Workspace URL ingestion (T59) and YouTube transcript fetch (T60).
 //!
-//! Fetches a URL and converts the HTML to condensed, structure-preserving
-//! markdown so it can be stored as an editable `workspace_files` row.
+//! - `fetch_url_as_markdown`: fetches a URL and converts the HTML to condensed,
+//!   structure-preserving markdown so it can be stored as an editable
+//!   `workspace_files` row.
+//! - `fetch_youtube_transcript`: reuses the existing `mcp::youtube` caption-fetch
+//!   path to retrieve `{ title, transcript }` for a YouTube URL so the frontend
+//!   can summarize it and store it as an editable workspace file.
 //!
 //! ## HTML → Markdown approach
 //!
@@ -28,6 +32,8 @@
 
 use anyhow::Context;
 use serde::Serialize;
+
+use crate::mcp::youtube as yt;
 
 /// Maximum characters of markdown we hand back. Matches the workspace and
 /// document char budget (`WORKSPACE_CONTEXT_CHAR_BUDGET` = 100 000).
@@ -622,6 +628,179 @@ pub fn validate_url(url: &str) -> Result<(), String> {
         return Err("URL must have a non-empty host".into());
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// YouTube transcript fetch (T60)
+// ---------------------------------------------------------------------------
+
+/// The result returned to the frontend for a YouTube transcript fetch.
+#[derive(Serialize)]
+pub struct YoutubeTranscriptResult {
+    /// Video title extracted from the InnerTube player response (may be empty
+    /// for very old / unlisted videos).
+    pub title: String,
+    /// Timestamped transcript lines (`[mm:ss] text`), capped at 20 000 chars
+    /// by the underlying `mcp::youtube::format_transcript`. Empty when the
+    /// video has no closed captions (the command returns `Ok` with an empty
+    /// string and the `no_captions` flag set so the frontend can show a clear
+    /// message instead of crashing).
+    pub transcript: String,
+    /// True when the video exists but has no closed captions. The transcript
+    /// field will be empty in this case.
+    pub no_captions: bool,
+}
+
+/// Fetch the closed-caption transcript of a YouTube video, reusing the
+/// `mcp::youtube` caption-fetch path. Returns `{ title, transcript,
+/// no_captions }`. Errors are user-readable strings (shown in the UI).
+///
+/// The command returns `Ok` even when there are no captions (with `no_captions:
+/// true` and an empty transcript) so the frontend can distinguish "no captions
+/// available" from a genuine network/parse error.
+#[tauri::command]
+pub async fn fetch_youtube_transcript(url: String) -> Result<YoutubeTranscriptResult, String> {
+    validate_url(&url)?;
+
+    let client = reqwest::Client::builder()
+        .user_agent("snak/0.1 (+workspace youtube-import)")
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("failed to build HTTP client: {e}"))?;
+
+    let video_id = yt::parse_video_id(&url)
+        .ok_or_else(|| "could not find a YouTube video id in this URL".to_string())?;
+
+    // Fetch the player response directly (mirrors the `transcript` fn in
+    // mcp/youtube.rs, but we need the title too and want to return a typed
+    // struct rather than a formatted string).
+    use serde_json::json;
+
+    // InnerTube player request (ANDROID client — no pot token needed).
+    let innertube_key = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
+    let player_url = format!("https://www.youtube.com/youtubei/v1/player?key={innertube_key}");
+    let body = json!({
+        "context": {
+            "client": {
+                "clientName": "ANDROID",
+                "clientVersion": "20.10.38"
+            }
+        },
+        "videoId": video_id
+    });
+
+    let player = client
+        .post(&player_url)
+        .header("content-type", "application/json")
+        .header("accept-language", "en-US")
+        .header("user-agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36")
+        .json(&body)
+        .send()
+        .await
+        .context("YouTube player request failed")
+        .map_err(|e| e.to_string())?
+        .json::<serde_json::Value>()
+        .await
+        .context("reading YouTube player response")
+        .map_err(|e| e.to_string())?;
+
+    // If InnerTube returns no caption tracks, try scraping the watch page.
+    let player = if !has_caption_tracks_value(&player) {
+        fetch_watch_player_value(&client, &video_id)
+            .await
+            .unwrap_or(player)
+    } else {
+        player
+    };
+
+    let title = player
+        .pointer("/videoDetails/title")
+        .and_then(|t| t.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let tracks = caption_tracks_value(&player);
+    let track = match yt::select_track(&tracks, None) {
+        Some(t) => t.clone(),
+        None => {
+            return Ok(YoutubeTranscriptResult {
+                title,
+                transcript: String::new(),
+                no_captions: true,
+            });
+        }
+    };
+
+    let base_url = track
+        .get("baseUrl")
+        .and_then(|u| u.as_str())
+        .ok_or_else(|| "caption track has no URL".to_string())?
+        .replace("&amp;", "&")
+        .replace("&fmt=srv3", "");
+
+    let xml = client
+        .get(&base_url)
+        .header("user-agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36")
+        .send()
+        .await
+        .context("caption track request failed")
+        .map_err(|e| e.to_string())?
+        .text()
+        .await
+        .context("reading caption track")
+        .map_err(|e| e.to_string())?;
+
+    let entries = yt::parse_timedtext(&xml);
+    if entries.is_empty() {
+        return Ok(YoutubeTranscriptResult {
+            title,
+            transcript: String::new(),
+            no_captions: true,
+        });
+    }
+
+    let transcript = yt::format_transcript(&title, &video_id, &entries);
+    Ok(YoutubeTranscriptResult {
+        title,
+        transcript,
+        no_captions: false,
+    })
+}
+
+/// Extract caption tracks array from a player JSON value.
+fn caption_tracks_value(player: &serde_json::Value) -> Vec<serde_json::Value> {
+    player
+        .pointer("/captions/playerCaptionsTracklistRenderer/captionTracks")
+        .and_then(|t| t.as_array())
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn has_caption_tracks_value(player: &serde_json::Value) -> bool {
+    !caption_tracks_value(player).is_empty()
+}
+
+/// Fallback: scrape `ytInitialPlayerResponse` from the watch page.
+async fn fetch_watch_player_value(
+    client: &reqwest::Client,
+    video_id: &str,
+) -> Option<serde_json::Value> {
+    let resp = client
+        .get(format!("https://www.youtube.com/watch?v={video_id}"))
+        .header(
+            "user-agent",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+        )
+        .header("cookie", "CONSENT=YES+1")
+        .header("accept-language", "en-US,en;q=0.9")
+        .send()
+        .await
+        .ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let body = resp.text().await.ok()?;
+    yt::extract_json_after(&body, "ytInitialPlayerResponse")
 }
 
 // ---------------------------------------------------------------------------
