@@ -237,6 +237,24 @@ html.overlay #root {
   }
 }
 
+/* Loading message fade-in (T57): each new phrase fades in from slightly below.
+   The .no-animations / prefers-reduced-motion rules above collapse this to ~0,
+   so it is automatically skipped when animations are off or the user prefers
+   reduced motion — the text is still swapped, just without the motion. */
+@keyframes snak-loading-message-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.snak-loading-message {
+  animation: snak-loading-message-in 0.35s ease-out both;
+}
+
 /* Thinking indicator: three dots pulsing in sequence (delays set per dot). */
 @keyframes snak-thinking-dot {
   0%,

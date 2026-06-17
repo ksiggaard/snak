@@ -40,7 +40,7 @@ import { STREAM_ID, useThreads } from "@/store/threads";
 import { openLightbox } from "@/store/lightbox";
 import { useSearch } from "@/store/search";
 import { useAppearance } from "@/store/appearance";
-import { timeLabels, useIntlLocale, useT } from "@/store/i18n";
+import { timeLabels, useIntlLocale, useT, type MessageKey } from "@/store/i18n";
 import {
   CHAT_CONTAINER_CLASSES,
   styleClasses,
@@ -49,6 +49,10 @@ import {
 import { formatDuration, parseDbTime, relativeTime } from "@/lib/time";
 import { imageLabel } from "@/lib/imageLabels";
 import { hasRenderer } from "@/lib/plugins";
+import {
+  LOADING_MESSAGE_KEYS,
+  pickLoadingMessage,
+} from "@/lib/loadingMessages";
 import {
   embeddedYouTubeIds,
   mediaLabelOffsets,
@@ -1079,6 +1083,7 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
   // How messages render (T34): default / bubbles / compact / document.
   const chatStyle = useAppearance((s) => s.chatStyle);
   const chatMaxWidth = useAppearance((s) => s.chatMaxWidth);
+  const animations = useAppearance((s) => s.animations);
   // Session-only set of reply ids expanded to full width. Not persisted —
   // resets on restart, mirroring other per-session chat UI state.
   const [wideIds, setWideIds] = useState<Set<string>>(() => new Set());
@@ -1102,6 +1107,21 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
     const t = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(t);
   }, []);
+
+  // T57 — rotating loading messages. The interval fires every 2.2 s while
+  // `pending` is true, bumping a counter that selects the next phrase.
+  // setState is only called from the timer callback (not synchronously in the
+  // effect body), so the react-hooks/set-state-in-effect rule is satisfied.
+  const [loadingTick, setLoadingTick] = useState(0);
+  useEffect(() => {
+    if (!pending) return;
+    const id = setInterval(() => setLoadingTick((n) => n + 1), 2200);
+    return () => clearInterval(id);
+  }, [pending]);
+  const loadingKey = pickLoadingMessage(
+    loadingTick,
+    LOADING_MESSAGE_KEYS,
+  ) as MessageKey;
 
   // When a search-result / chat-panel jump targets a message, scroll to +
   // flash it instead of the bottom. Consuming the target re-runs this effect
@@ -1238,7 +1258,17 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
           style={{ maxWidth: chatMaxWidth ?? undefined }}
         >
           <div className="text-muted-foreground flex items-center gap-1.5 text-sm">
-            <span>{t("chat.thinking")}</span>
+            {/* T57 — rotating loading phrase. The key prop forces a DOM remount
+                on each tick so the CSS fade-in plays again. When animations are
+                off (T46) or the OS prefers reduced-motion, the CSS global
+                kill-switch collapses the animation to ~0ms — the text still
+                rotates but without the motion, which is appropriate. */}
+            <span
+              key={animations ? loadingKey : undefined}
+              className={animations ? "snak-loading-message" : undefined}
+            >
+              {t(loadingKey)}
+            </span>
             {/* Three dots pulsing in sequence (T46). Static when animations
                 are off — the kill-switch zeroes the animation. */}
             <span aria-hidden className="flex gap-0.5">

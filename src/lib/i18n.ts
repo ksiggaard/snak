@@ -149,6 +149,13 @@ export const en = {
   // --- Chat view / message list -----------------------------------------------
   "chat.empty": "Send a message to start the conversation.",
   "chat.thinking": "Thinking…",
+  // T57 — rotating loading-message pool (cycles while pending before first token)
+  "chat.loading.0": "Thinking…",
+  "chat.loading.1": "On it…",
+  "chat.loading.2": "Let me check…",
+  "chat.loading.3": "Putting it together…",
+  "chat.loading.4": "Almost there…",
+  "chat.loading.5": "Working on it…",
   "chat.waitingApproval": "Waiting for your approval…",
   "chat.approvalTitle": "Allow this system access?",
   "chat.approvalExplain":
