@@ -9,7 +9,7 @@ import {
 } from "@/components/settings/Behavior";
 import { SettingsView } from "@/components/settings/SettingsView";
 import { ChatView } from "@/components/chat/ChatView";
-import { WorkspaceView } from "@/components/workspaces/WorkspaceView";
+import { WorkspacePage } from "@/components/workspaces/WorkspacePage";
 import { BotView } from "@/components/bots/BotView";
 import { UsageView } from "@/components/usage/UsageView";
 import { SearchOverlay } from "@/components/search/SearchOverlay";
@@ -315,7 +315,7 @@ function App() {
               ) : openBotId ? (
                 <BotView />
               ) : openWorkspaceId ? (
-                <WorkspaceView />
+                <WorkspacePage />
               ) : (
                 <ChatView />
               )}

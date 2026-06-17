@@ -755,6 +755,30 @@ export const en = {
   "workspace.memoryAddPlaceholder": "e.g. This workspace uses the Acme v2 API",
   "workspace.memoryRemove": "Remove memory entry",
 
+  // --- Workspace dashboard (T63) -------------------------------------------
+  "workspace.dashboard": "Dashboard",
+  "workspace.settingsPage": "Settings",
+  "workspace.backToDashboard": "Back to dashboard",
+  "workspace.openSettings": "Workspace settings",
+  "workspace.stats": "Overview",
+  "workspace.statsChats": "{n} chats",
+  "workspace.statsFiles": "{n} files",
+  "workspace.statsUrls": "{n} URLs",
+  "workspace.statsMemories": "{n} memories",
+  "workspace.recentMemories": "Recent memories",
+  "workspace.urlsSection": "URLs",
+  "workspace.filesSection": "Files",
+  "workspace.chatsSection": "Chats",
+  "workspace.noChats": "No chats yet.",
+  "workspace.noUrls": "No URLs ingested yet.",
+  "workspace.profileImage": "Profile image",
+  "workspace.coverImage": "Cover image",
+  "workspace.changeProfileImage": "Change profile image",
+  "workspace.changeCoverImage": "Change cover image",
+  "workspace.removeProfileImage": "Remove profile image",
+  "workspace.removeCoverImage": "Remove cover image",
+  "workspace.totalFileSize": "{size} chars total",
+
   // --- Quick actions (empty-screen starters) ---------------------------------
   "quickActions.title": "Quick actions",
   "quickActions.description":

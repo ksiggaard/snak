@@ -89,6 +89,10 @@ export interface Workspace {
   quick_actions: string;
   /** 1 = inject workspace memory into the system context (default ON, T62). */
   memory_enabled: number;
+  /** Profile image for the workspace dashboard (base64 JPEG, no data: prefix); null = no image. */
+  profile_image: string | null;
+  /** Cover/banner image for the workspace dashboard (base64 JPEG); null = no image. */
+  cover_image: string | null;
   created_at: string;
   updated_at: string;
 }

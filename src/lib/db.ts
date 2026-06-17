@@ -823,6 +823,19 @@ export async function setWorkspaceMemoryEnabled(
   );
 }
 
+/** Set the profile and/or cover images for a workspace (T63). Pass null to clear. */
+export async function setWorkspaceImages(
+  id: string,
+  profileImage: string | null,
+  coverImage: string | null,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE workspaces SET profile_image = $1, cover_image = $2, updated_at = datetime('now') WHERE id = $3`,
+    [profileImage, coverImage, id],
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Usage (T16) — per-response token usage, additive
 // ---------------------------------------------------------------------------

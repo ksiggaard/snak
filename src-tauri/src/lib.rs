@@ -212,6 +212,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/025_workspace_memory.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 26,
+            description: "workspace profile and cover images (T63)",
+            sql: include_str!("../migrations/026_workspace_images.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

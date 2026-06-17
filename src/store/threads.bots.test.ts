@@ -235,6 +235,8 @@ describe("send() with a bot (T38)", () => {
       instructions: "Workspace rule.",
       quick_actions: "",
       memory_enabled: 1,
+      profile_image: null,
+      cover_image: null,
       created_at: "",
       updated_at: "",
     });

@@ -10,6 +10,7 @@ import {
   listWorkspaceMemory,
   listWorkspaces,
   renameWorkspace,
+  setWorkspaceImages,
   setWorkspaceInstructions,
   setWorkspaceMemoryEnabled,
   setWorkspaceQuickActions,
@@ -26,6 +27,8 @@ interface WorkspacesState {
   openWorkspaceFiles: WorkspaceFile[];
   /** Memory entries for the currently open workspace. */
   openWorkspaceMemory: WorkspaceMemory[];
+  /** Which sub-view is shown for the open workspace (T63). */
+  openWorkspaceView: "dashboard" | "settings";
   initialized: boolean;
 
   init: () => Promise<void>;
@@ -40,6 +43,14 @@ interface WorkspacesState {
   open: (id: string) => Promise<void>;
   /** Close the workspace detail view. */
   close: () => void;
+  /** Switch between dashboard and settings sub-views (T63). */
+  setWorkspaceView: (view: "dashboard" | "settings") => void;
+  /** Update the profile and/or cover image for a workspace (T63). */
+  setImages: (
+    id: string,
+    profileImage: string | null,
+    coverImage: string | null,
+  ) => Promise<void>;
   addFile: (
     workspaceId: string,
     name: string,
@@ -62,6 +73,7 @@ export const useWorkspaces = create<WorkspacesState>((set, get) => ({
   openWorkspaceId: null,
   openWorkspaceFiles: [],
   openWorkspaceMemory: [],
+  openWorkspaceView: "dashboard",
   initialized: false,
 
   init: async () => {
@@ -109,11 +121,28 @@ export const useWorkspaces = create<WorkspacesState>((set, get) => ({
       listWorkspaceFiles(id),
       listWorkspaceMemory(id),
     ]);
-    set({ openWorkspaceId: id, openWorkspaceFiles: files, openWorkspaceMemory: memory });
+    set({
+      openWorkspaceId: id,
+      openWorkspaceFiles: files,
+      openWorkspaceMemory: memory,
+      openWorkspaceView: "dashboard",
+    });
   },
 
   close: () => {
-    set({ openWorkspaceId: null, openWorkspaceFiles: [], openWorkspaceMemory: [] });
+    set({
+      openWorkspaceId: null,
+      openWorkspaceFiles: [],
+      openWorkspaceMemory: [],
+      openWorkspaceView: "dashboard",
+    });
+  },
+
+  setWorkspaceView: (view) => set({ openWorkspaceView: view }),
+
+  setImages: async (id, profileImage, coverImage) => {
+    await setWorkspaceImages(id, profileImage, coverImage);
+    await get().refresh();
   },
 
   addFile: async (workspaceId, name, content, sourceUrl) => {
