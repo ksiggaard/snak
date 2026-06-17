@@ -743,7 +743,6 @@ export const en = {
   "workspace.fileSelectorAll": "All files included",
   "workspace.fileSelectorSome": "{n} / {total} files included",
   "workspace.fileSelectorNone": "No files included",
-  "workspace.fileSelectorNoFiles": "No files in this workspace.",
 
   // --- Workspace memory (T62) -----------------------------------------------
   "workspace.memory": "Workspace memory",

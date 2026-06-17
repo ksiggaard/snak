@@ -586,7 +586,6 @@
     "workspace.fileSelectorAll": "Wszystkie pliki dołączone",
     "workspace.fileSelectorSome": "{n} / {total} pliki dołączone",
     "workspace.fileSelectorNone": "Brak dołączonych plików",
-    "workspace.fileSelectorNoFiles": "Brak plików w tym obszarze roboczym.",
     "workspace.memory": "Pamięć obszaru roboczego",
     "workspace.memoryHint": "Fakty wstrzykiwane do każdego czatu w tym obszarze roboczym, oprócz pamięci globalnej.",
     "workspace.memoryEnabled": "Wstrzykuj do czatów",

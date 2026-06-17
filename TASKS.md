@@ -2773,7 +2773,7 @@ current inline detail pane), and the workspace settings move to **their own page
   memories), and four sections — Chats (click opens the thread), Files, URLs, Recent
   memories (top 5 by updated_at). Decision: `WorkspaceView.tsx` kept intact as dead code;
   new components are `WorkspacePage.tsx`, `WorkspaceDashboard.tsx`, `WorkspaceSettings.tsx`.
-  23 new i18n keys added to `en` catalog and all 5 locale packs (de, fr, pl, es, da).
+  22 new i18n keys added to `en` catalog and all 5 locale packs (de, fr, pl, es, da).
   Gate: `npm run build` ✓ (0 type errors), `npm run lint` ✓, `npm test` ✓ (656 pass),
   `cargo build` ✓, `cargo clippy` ✓ (1 pre-existing warning), `cargo fmt --check` ✓.
 

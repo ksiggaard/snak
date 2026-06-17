@@ -3,6 +3,8 @@ import {
   buildWorkspaceSystemText,
   filterWorkspaceFiles,
   workspaceFilesSize,
+  splitWorkspaceFiles,
+  recentMemories,
   WORKSPACE_CONTEXT_CHAR_BUDGET,
 } from "@/lib/workspaces";
 
@@ -149,5 +151,100 @@ describe("workspaceFilesSize", () => {
 
   it("is zero for no files", () => {
     expect(workspaceFilesSize([])).toBe(0);
+  });
+});
+
+// --------------------------------------------------------------------------
+// splitWorkspaceFiles
+// --------------------------------------------------------------------------
+
+describe("splitWorkspaceFiles", () => {
+  it("separates uploaded files (null source_url) from URL files", () => {
+    const files = [
+      { id: "a", source_url: null },
+      { id: "b", source_url: "https://example.com" },
+      { id: "c", source_url: null },
+    ];
+    const { uploaded, urls } = splitWorkspaceFiles(files);
+    expect(uploaded.map((f) => f.id)).toEqual(["a", "c"]);
+    expect(urls.map((f) => f.id)).toEqual(["b"]);
+  });
+
+  it("returns all as uploaded when no file has a source_url", () => {
+    const files = [
+      { id: "a", source_url: null },
+      { id: "b", source_url: null },
+    ];
+    const { uploaded, urls } = splitWorkspaceFiles(files);
+    expect(uploaded).toHaveLength(2);
+    expect(urls).toHaveLength(0);
+  });
+
+  it("returns all as urls when every file has a source_url", () => {
+    const files = [
+      { id: "a", source_url: "https://a.com" },
+      { id: "b", source_url: "https://b.com" },
+    ];
+    const { uploaded, urls } = splitWorkspaceFiles(files);
+    expect(uploaded).toHaveLength(0);
+    expect(urls).toHaveLength(2);
+  });
+
+  it("returns empty arrays for an empty list", () => {
+    const { uploaded, urls } = splitWorkspaceFiles([]);
+    expect(uploaded).toHaveLength(0);
+    expect(urls).toHaveLength(0);
+  });
+});
+
+// --------------------------------------------------------------------------
+// recentMemories
+// --------------------------------------------------------------------------
+
+function mem(id: string, updated_at: string, content = "") {
+  return { id, workspace_id: "ws", content, created_at: "2024-01-01", updated_at };
+}
+
+describe("recentMemories", () => {
+  it("returns entries sorted by updated_at descending", () => {
+    const entries = [
+      mem("a", "2024-01-01 10:00:00"),
+      mem("b", "2024-01-03 10:00:00"),
+      mem("c", "2024-01-02 10:00:00"),
+    ];
+    const result = recentMemories(entries, 10);
+    expect(result.map((m) => m.id)).toEqual(["b", "c", "a"]);
+  });
+
+  it("caps the result at n entries", () => {
+    const entries = [
+      mem("a", "2024-01-04"),
+      mem("b", "2024-01-03"),
+      mem("c", "2024-01-02"),
+      mem("d", "2024-01-01"),
+    ];
+    const result = recentMemories(entries, 2);
+    expect(result).toHaveLength(2);
+    expect(result.map((m) => m.id)).toEqual(["a", "b"]);
+  });
+
+  it("returns all entries when fewer than n are present", () => {
+    const entries = [mem("a", "2024-01-02"), mem("b", "2024-01-01")];
+    const result = recentMemories(entries, 10);
+    expect(result).toHaveLength(2);
+  });
+
+  it("does not mutate the original array", () => {
+    const entries = [
+      mem("a", "2024-01-01"),
+      mem("b", "2024-01-03"),
+    ];
+    const original = [...entries];
+    recentMemories(entries, 5);
+    expect(entries).toEqual(original);
+  });
+
+  it("returns empty array for empty input", () => {
+    expect(recentMemories([], 5)).toHaveLength(0);
   });
 });

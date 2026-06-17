@@ -574,7 +574,6 @@
     "workspace.fileSelectorAll": "Alle Dateien enthalten",
     "workspace.fileSelectorSome": "{n} / {total} Dateien enthalten",
     "workspace.fileSelectorNone": "Keine Dateien enthalten",
-    "workspace.fileSelectorNoFiles": "Keine Dateien in diesem Arbeitsbereich.",
     "workspace.memory": "Arbeitsbereich-Speicher",
     "workspace.memoryHint": "Fakten, die in jeden Chat in diesem Arbeitsbereich eingefügt werden, zusätzlich zum globalen Speicher.",
     "workspace.memoryEnabled": "In Chats einbinden",

@@ -574,7 +574,6 @@
     "workspace.fileSelectorAll": "Alle filer inkluderet",
     "workspace.fileSelectorSome": "{n} / {total} filer inkluderet",
     "workspace.fileSelectorNone": "Ingen filer inkluderet",
-    "workspace.fileSelectorNoFiles": "Ingen filer i dette arbejdsområde.",
     "workspace.memory": "Arbejdsområde-hukommelse",
     "workspace.memoryHint": "Fakta der injiceres i alle chats i dette arbejdsområde, ud over den globale hukommelse.",
     "workspace.memoryEnabled": "Injicér i chats",

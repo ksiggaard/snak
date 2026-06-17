@@ -574,7 +574,6 @@
     "workspace.fileSelectorAll": "Tous les fichiers inclus",
     "workspace.fileSelectorSome": "{n} / {total} fichiers inclus",
     "workspace.fileSelectorNone": "Aucun fichier inclus",
-    "workspace.fileSelectorNoFiles": "Aucun fichier dans cet espace de travail.",
     "workspace.memory": "Mémoire de l'espace de travail",
     "workspace.memoryHint": "Faits injectés dans chaque conversation de cet espace de travail, en plus de la mémoire globale.",
     "workspace.memoryEnabled": "Injecter dans les conversations",

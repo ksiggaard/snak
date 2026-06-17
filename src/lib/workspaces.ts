@@ -1,4 +1,4 @@
-import type { Workspace, WorkspaceFile } from "@/types/db";
+import type { Workspace, WorkspaceFile, WorkspaceMemory } from "@/types/db";
 
 /**
  * Maximum number of characters of assembled workspace context to inject into a
@@ -86,6 +86,48 @@ export function workspaceFilesSize(
   files: Pick<WorkspaceFile, "content">[],
 ): number {
   return files.reduce((sum, f) => sum + f.content.length, 0);
+}
+
+/**
+ * Split a workspace's file list into uploaded files (no `source_url`) and
+ * URL-ingested files (has a `source_url`).
+ *
+ * This is the canonical split used by the dashboard to render the Files and
+ * URLs sections; extracting it here keeps the component free of ad-hoc
+ * filtering and makes the logic unit-testable.
+ */
+export function splitWorkspaceFiles<T extends { source_url: string | null }>(
+  files: T[],
+): { uploaded: T[]; urls: T[] } {
+  const uploaded: T[] = [];
+  const urls: T[] = [];
+  for (const f of files) {
+    if (f.source_url) {
+      urls.push(f);
+    } else {
+      uploaded.push(f);
+    }
+  }
+  return { uploaded, urls };
+}
+
+/**
+ * Return the `n` most-recently updated memory entries, sorted by `updated_at`
+ * descending. The original array is not mutated.
+ *
+ * @param memory  Full list of memory entries for the workspace.
+ * @param n       Maximum number of entries to return.
+ */
+export function recentMemories<T extends Pick<WorkspaceMemory, "updated_at">>(
+  memory: T[],
+  n: number,
+): T[] {
+  return [...memory]
+    .sort(
+      (a, b) =>
+        new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+    )
+    .slice(0, n);
 }
 
 /**

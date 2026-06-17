@@ -5,7 +5,7 @@ import { useWorkspaces } from "@/store/workspaces";
 import { useThreads } from "@/store/threads";
 import { useT } from "@/store/i18n";
 import { prepareImage } from "@/lib/image";
-import { setWorkspaceImages } from "@/lib/db";
+import { splitWorkspaceFiles, recentMemories, workspaceFilesSize } from "@/lib/workspaces";
 import { useView } from "@/store/view";
 import { useLayout } from "@/store/layout";
 
@@ -18,7 +18,7 @@ export function WorkspaceDashboard() {
   const files = useWorkspaces((s) => s.openWorkspaceFiles);
   const memory = useWorkspaces((s) => s.openWorkspaceMemory);
   const setWorkspaceView = useWorkspaces((s) => s.setWorkspaceView);
-  const refresh = useWorkspaces((s) => s.refresh);
+  const setImages = useWorkspaces((s) => s.setImages);
   const threads = useThreads((s) => s.threads);
   const selectThread = useThreads((s) => s.selectThread);
   const closeWorkspace = useWorkspaces((s) => s.close);
@@ -40,21 +40,15 @@ export function WorkspaceDashboard() {
   const workspaceThreads = threads.filter(
     (th) => th.workspace_id === workspace.id,
   );
-  const uploadedFiles = files.filter((f) => !f.source_url);
-  const urlFiles = files.filter((f) => !!f.source_url);
-  const recentMemories = [...memory]
-    .sort(
-      (a, b) =>
-        new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
-    )
-    .slice(0, RECENT_MEMORIES_COUNT);
+  const { uploaded: uploadedFiles, urls: urlFiles } = splitWorkspaceFiles(files);
+  const topMemories = recentMemories(memory, RECENT_MEMORIES_COUNT);
+  const totalChars = workspaceFilesSize(files);
 
   async function onPickProfileImage(list: FileList | null) {
     if (!list || list.length === 0 || !workspace) return;
     const file = list[0]!;
     const prepared = await prepareImage(file);
-    await setWorkspaceImages(workspace.id, prepared.base64, workspace.cover_image);
-    await refresh();
+    await setImages(workspace.id, prepared.base64, workspace.cover_image);
     if (profileInputRef.current) profileInputRef.current.value = "";
   }
 
@@ -62,27 +56,24 @@ export function WorkspaceDashboard() {
     if (!list || list.length === 0 || !workspace) return;
     const file = list[0]!;
     const prepared = await prepareImage(file);
-    await setWorkspaceImages(workspace.id, workspace.profile_image, prepared.base64);
-    await refresh();
+    await setImages(workspace.id, workspace.profile_image, prepared.base64);
     if (coverInputRef.current) coverInputRef.current.value = "";
   }
 
   async function onRemoveProfileImage() {
     if (!workspace) return;
-    await setWorkspaceImages(workspace.id, null, workspace.cover_image);
-    await refresh();
+    await setImages(workspace.id, null, workspace.cover_image);
   }
 
   async function onRemoveCoverImage() {
     if (!workspace) return;
-    await setWorkspaceImages(workspace.id, workspace.profile_image, null);
-    await refresh();
+    await setImages(workspace.id, workspace.profile_image, null);
   }
 
   const initial = workspace.name.slice(0, 2).toUpperCase();
 
   return (
-    <div className="bg-card flex flex-1 flex-col overflow-y-auto rounded-lg border">
+    <div aria-label={t("workspace.dashboard")} className="bg-card flex flex-1 flex-col overflow-y-auto rounded-lg border">
       {/* Cover image banner */}
       <div className="relative h-32 shrink-0 overflow-hidden rounded-t-lg">
         {workspace.cover_image ? (
@@ -142,7 +133,7 @@ export function WorkspaceDashboard() {
             type="button"
             onClick={() => profileInputRef.current?.click()}
             className="bg-background/70 hover:bg-background/90 absolute bottom-0 right-0 rounded-full p-0.5"
-            aria-label={t("workspace.changeProfileImage")}
+            aria-label={t("workspace.profileImage")}
             title={t("workspace.changeProfileImage")}
           >
             <Settings2 className="size-3" />
@@ -172,6 +163,7 @@ export function WorkspaceDashboard() {
           <Button
             variant="outline"
             size="sm"
+            aria-label={t("workspace.openSettings")}
             onClick={() => setWorkspaceView("settings")}
           >
             <Settings2 className="size-4" />
@@ -202,6 +194,12 @@ export function WorkspaceDashboard() {
             <span className="text-muted-foreground">🧠</span>
             <span>{t("workspace.statsMemories", { n: memory.length })}</span>
           </div>
+          {totalChars > 0 && (
+            <div className="flex items-center gap-1.5 text-sm">
+              <span className="text-muted-foreground">∑</span>
+              <span>{t("workspace.totalFileSize", { size: totalChars.toLocaleString() })}</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -255,11 +253,13 @@ export function WorkspaceDashboard() {
       )}
 
       {/* URLs */}
-      {urlFiles.length > 0 && (
-        <div className="border-t px-5 py-3">
-          <p className="text-muted-foreground mb-2 text-xs font-medium uppercase tracking-wide">
-            {t("workspace.urlsSection")}
-          </p>
+      <div className="border-t px-5 py-3">
+        <p className="text-muted-foreground mb-2 text-xs font-medium uppercase tracking-wide">
+          {t("workspace.urlsSection")}
+        </p>
+        {urlFiles.length === 0 ? (
+          <p className="text-muted-foreground text-sm">{t("workspace.noUrls")}</p>
+        ) : (
           <ul className="flex flex-col gap-1">
             {urlFiles.map((f) => (
               <li key={f.id} className="flex items-center gap-2 text-sm">
@@ -278,17 +278,17 @@ export function WorkspaceDashboard() {
               </li>
             ))}
           </ul>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Recent memories */}
-      {recentMemories.length > 0 && (
+      {topMemories.length > 0 && (
         <div className="border-t px-5 py-3">
           <p className="text-muted-foreground mb-2 text-xs font-medium uppercase tracking-wide">
             {t("workspace.recentMemories")}
           </p>
           <ul className="flex flex-col gap-1">
-            {recentMemories.map((m) => (
+            {topMemories.map((m) => (
               <li key={m.id} className="text-muted-foreground text-sm">
                 <span className="line-clamp-2">{m.content}</span>
               </li>
