@@ -93,6 +93,8 @@ export interface WorkspaceFile {
   name: string;
   /** Decoded UTF-8 text content, injected into the system context. */
   content: string;
+  /** Source URL for URL-ingested files (T59); null for uploaded files. */
+  source_url: string | null;
   created_at: string;
 }
 

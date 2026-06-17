@@ -712,13 +712,15 @@ export async function addWorkspaceFile(input: {
   workspace_id: string;
   name: string;
   content: string;
+  /** Source URL for URL-ingested files (T59); omit or null for uploaded files. */
+  source_url?: string | null;
 }): Promise<WorkspaceFile> {
   const db = await getDb();
   const id = newId();
   await db.execute(
-    `INSERT INTO workspace_files (id, workspace_id, name, content)
-     VALUES ($1, $2, $3, $4)`,
-    [id, input.workspace_id, input.name, input.content],
+    `INSERT INTO workspace_files (id, workspace_id, name, content, source_url)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [id, input.workspace_id, input.name, input.content, input.source_url ?? null],
   );
   await db.execute(
     `UPDATE workspaces SET updated_at = datetime('now') WHERE id = $1`,

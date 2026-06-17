@@ -37,6 +37,7 @@ interface WorkspacesState {
     workspaceId: string,
     name: string,
     content: string,
+    sourceUrl?: string | null,
   ) => Promise<void>;
   removeFile: (fileId: string) => Promise<void>;
 }
@@ -96,8 +97,13 @@ export const useWorkspaces = create<WorkspacesState>((set, get) => ({
     set({ openWorkspaceId: null, openWorkspaceFiles: [] });
   },
 
-  addFile: async (workspaceId, name, content) => {
-    await addWorkspaceFile({ workspace_id: workspaceId, name, content });
+  addFile: async (workspaceId, name, content, sourceUrl) => {
+    await addWorkspaceFile({
+      workspace_id: workspaceId,
+      name,
+      content,
+      source_url: sourceUrl ?? null,
+    });
     if (get().openWorkspaceId === workspaceId) {
       set({ openWorkspaceFiles: await listWorkspaceFiles(workspaceId) });
     }

@@ -194,6 +194,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/022_workspaces.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 23,
+            description: "workspace_files.source_url: nullable provenance URL for URL-ingested files (T59)",
+            sql: include_str!("../migrations/023_workspace_file_source_url.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -324,6 +330,7 @@ pub fn run() {
             commands::quick::set_quick_height,
             commands::terminal::open_in_terminal,
             commands::documents::extract_document_text,
+            commands::url::fetch_url_as_markdown,
             commands::files::save_image,
             commands::artifacts::export_artifact_zip,
             commands::artifacts::open_artifact_in_browser,

@@ -11,3 +11,4 @@ pub mod ollama;
 pub mod quick;
 pub mod routing;
 pub mod terminal;
+pub mod url;

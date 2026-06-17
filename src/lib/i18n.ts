@@ -720,6 +720,12 @@ export const en = {
   "workspace.removeFile": "Remove {name}",
   "workspace.truncated": '"{name}" was truncated to {n} characters.',
   "workspace.readError": 'Couldn\'t read "{name}" as text.',
+  "workspace.addUrl": "Add URL",
+  "workspace.urlPlaceholder": "https://example.com",
+  "workspace.urlFetching": "Fetching…",
+  "workspace.urlError": "Couldn't fetch URL: {error}",
+  "workspace.urlInvalid": "Invalid URL: {error}",
+  "workspace.sourceUrl": "Source: {url}",
   "workspace.quickActions": "Quick actions",
   "workspace.quickActionsHint":
     "Override the global quick actions for chats in this workspace. Leave empty to use the global ones.",
