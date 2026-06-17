@@ -233,7 +233,6 @@ export function WorkspaceView() {
           tNow("workspace.youtubeSummarizeError", {
             error: err instanceof Error ? err.message : String(err),
           }),
-          { cause: err },
         );
       });
 
