@@ -2465,3 +2465,216 @@ raw search dumps. The UI shows each subagent being dispatched and its progress.
   (not ollama — local, and it would delay the friendly "daemon down" error). New i18n
   (`advanced.*`, `common.default`) in the catalog + five packs. Verified: `cargo build`/
   `clippy`/`fmt`/`test` (132); `npm run build`/`lint`/`test` (552).
+
+---
+
+## T56 — Request sources: back claims with rated web sources
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P2
+- **Layer:** Frontend (button + store action + rendering); reuses the existing Rust web tools
+- **Depends on:** T13 (MCP + built-in web server, tool-call loop), T52 (search_web), the
+  variations feature (`regenerate`)
+
+(IDEAS 1.) Add a **Request sources** button beside the variations controls of an assistant
+reply. Clicking it re-asks the model to back up the claims in that reply with web sources:
+it adds per-claim **footnotes**, rates the **credibility of each source URL**, and includes
+supporting **quotes**. When a claim has no findable source, the model says it can't confirm
+that claim rather than inventing one. The web infrastructure already exists (`search_web` +
+`fetch_url` tools, `ToolSource[]` tracking) — this is a new button + store action +
+rendering, not new network code.
+
+**Acceptance criteria:**
+- A **Request sources** button rendered next to `VariationControls` in the assistant footer
+  (the `trailing` slot of `AssistantMeta`, `src/components/chat/MessageList.tsx`).
+- Clicking runs a new store action (mirroring `regenerate()` / `applyRegenSteer()` in
+  `src/store/threads.ts` + `src/lib/variations.ts`) that re-prompts the model to verify its
+  prior reply against the web using the existing `search_web` / `fetch_url` tools.
+- The result renders footnotes mapping claims → sources; each web source shows a credibility
+  rating and a supporting quote; reuse the existing `ToolSource[]` / tool-activity surface.
+- Claims with no source are explicitly flagged as unconfirmable.
+- The no-tools invariant and per-provider behavior are unchanged.
+
+---
+
+## T57 — Animated loading messages while the model spins up
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P3
+- **Layer:** Frontend
+- **Depends on:** — (T46 if a UI-animations toggle should gate it)
+
+(IDEAS 2.) Models are sometimes slow to start replying. During that pre-first-token gap,
+replace the static "Thinking…" with a rotating pool of loading messages rendered with fancy
+text animations, so the wait reads as lively rather than stalled.
+
+**Acceptance criteria:**
+- During the existing `pending` window (`src/components/chat/ChatView.tsx:163`), cycle
+  through a set of loading messages instead of a single fixed string.
+- Messages animate via CSS — reuse `tw-animate-css` + the keyframes in `src/index.css`;
+  **no new JS animation dependency**.
+- The first streamed token hands control back to the growing assistant bubble exactly as
+  today.
+- Honors reduced-motion / the T46 UI-animations toggle where applicable.
+
+---
+
+## T58 — Rename projects → workspaces (full: DB + code + UI)
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P2
+- **Layer:** Rust (migration) + Frontend (code symbols + UI + i18n)
+- **Depends on:** —
+
+(IDEAS 3a.) Rename the "projects" feature to "workspaces" end-to-end — the database, the
+code symbols, and every user-facing string. This is the foundation the rest of the
+workspace work (T59–T62) builds on.
+
+**Acceptance criteria:**
+- New migration `022_*.sql` renaming `projects` → `workspaces`, `project_files` →
+  `workspace_files`, and `threads.project_id` → `threads.workspace_id` (carry the
+  `quick_actions` column), via `ALTER TABLE … RENAME`. Never edit a shipped migration;
+  register it in `migrations()` in `src-tauri/src/lib.rs`.
+- Code symbols renamed: `store/projects.ts` → `store/workspaces.ts`, `lib/projects.ts`,
+  `components/projects/*`, `ProjectsPane`, the `Project*` types (`src/types/db.ts`), and the
+  `db.ts` helpers (`listProjects`, `createProject`, …).
+- All user-facing strings and i18n keys say "workspace" across **all five language packs**.
+- Existing data and thread associations survive the migration.
+- Full gate green (`npm run build` / `lint` / `test`, `cargo build` / `clippy` / `fmt`).
+
+---
+
+## T59 — Workspace URL sources → condensed editable markdown
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P2
+- **Layer:** Rust (fetch + HTML→markdown) + Frontend (workspace UI)
+- **Depends on:** T58
+
+(IDEAS 3b.) Let a workspace accept **URLs** as content sources. Adding a URL fetches the
+page and converts it to a condensed **markdown** file stored in the workspace, editable like
+any other workspace file, with the source URL recorded. Broadens the "multiple file formats"
+support already started by T39 (documents).
+
+**Acceptance criteria:**
+- An add-URL affordance in the workspace view; on add, the Rust side fetches the URL and
+  converts HTML → condensed markdown (reuse/extend the readable-text path behind
+  `fetch_url`; add an HTML→markdown step — no such converter exists yet).
+- Stored as a `workspace_files` row with the source URL recorded, editable in the file UI
+  exactly like an uploaded file.
+- Char budgeting consistent with `DOCUMENT_CHAR_BUDGET` / `projectFilesSize` handling.
+
+---
+
+## T60 — YouTube URL → summary markdown file
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P3
+- **Layer:** Rust (reuse caption fetch + new summarize) + Frontend
+- **Depends on:** T58, T59, the built-in YouTube MCP server (`youtube`)
+
+(IDEAS 3c.) When YouTube is enabled, adding a YouTube URL to a workspace creates an editable
+markdown file containing an LLM **summary of the video built from its captions**, with the
+source URL in a front-matter/meta section. Caption access already exists and must be
+**reused**, not rebuilt: `youtube_transcript` in `src-tauri/src/mcp/youtube.rs` fetches a
+video's closed-caption track (InnerTube `/youtubei/v1/player`, falling back to scraping
+`ytInitialPlayerResponse`) and parses the timedtext XML. **Only the summarize step is new.**
+
+**Acceptance criteria:**
+- Gated on the built-in `youtube` MCP server being enabled — so the feature can be turned
+  off (when disabled, adding a YouTube URL falls back to the generic URL ingestion from T59).
+- Adding a YouTube URL reuses the existing `youtube_transcript` caption-fetch path to get the
+  transcript, summarizes it via the model, and stores an editable markdown file (front-matter:
+  URL + summary).
+- Videos without captions degrade gracefully (clear message, no crash), mirroring
+  `youtube_transcript`'s existing "no captions available" handling.
+
+---
+
+## T61 — Per-chat workspace file selection
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P2
+- **Layer:** Frontend (+ store/DB for persistence)
+- **Depends on:** T58
+
+(IDEAS 3d.) When opening or creating a chat in a workspace, let the user choose which
+workspace files are relevant to that chat — **all selected by default**. Only the selected
+files are injected into the chat's system context.
+
+**Acceptance criteria:**
+- A per-chat file selector that defaults to all-selected.
+- System-context injection (`buildWorkspaceSystemText` + `loadSharedSystemBlocks` in
+  `src/store/threads.ts`) honors the selection rather than always injecting every file.
+- The selection persists per thread.
+
+---
+
+## T62 — Per-workspace isolated, toggleable memory
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P3
+- **Layer:** Rust (migration) + Frontend
+- **Depends on:** T58, the memory feature (migration 005)
+
+(IDEAS 3e.) Give each workspace its own **isolated memory**, separate from the global memory
+(migration 005), editable in the workspace UI and **toggleable on/off per workspace**.
+
+**Acceptance criteria:**
+- Per-workspace memory storage (new migration: a `workspace_id`-scoped memory table or
+  column), editable in the workspace UI.
+- A per-workspace enable/disable toggle for injecting that memory.
+- When in a workspace with it enabled, the workspace memory composes into the system context
+  (the `src/lib/systemContext.ts` seam); global memory behavior outside workspaces is
+  unchanged.
+
+---
+
+## T63 — Workspace dashboard, profile/cover images, dedicated settings page
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P2
+- **Layer:** Frontend + Rust (migration for the images) 
+- **Depends on:** T58; surfaces data from T59 (URLs) and T62 (memories)
+
+(IDEAS 3f.) Make a workspace a first-class destination. A workspace gets its own **profile
+image** and **cover image**. Clicking a workspace opens a **dashboard** (rather than the
+current inline detail pane), and the workspace settings move to **their own page**.
+
+**Acceptance criteria:**
+- Each workspace has a profile image and a cover image (stored alongside the workspace —
+  new migration for the columns/blobs; reuse the existing image-handling seams in
+  `src/lib/image.ts` / the `attachments` model where it fits).
+- Clicking a workspace opens a **dashboard** view listing its **chats, files, URLs, and
+  recent memories**, plus **stats** (e.g. counts / recent activity).
+- The workspace settings panel (formerly the inline `ProjectView` detail pane) becomes its
+  own page/route, reachable from the dashboard.
+- Existing workspaces without images render with a sensible placeholder.
+
+---
+
+## T64 — Focus the chat input when creating a new chat
+
+- **Status:** todo
+- **Owner:** —
+- **Priority:** P3
+- **Layer:** Frontend
+- **Depends on:** —
+
+(IDEAS 4.) When a new chat is created, automatically move keyboard focus to the composer
+input so the user can start typing immediately.
+
+**Acceptance criteria:**
+- Triggering "New chat" (`startNewChat` in `src/store/threads.ts`) focuses the `Composer`
+  textarea.
+- Covers the sidebar new-chat action and any other new-chat entry points.
+- Reuse the existing composer-focus seam added by the Cmd/Ctrl+L shortcut rather than adding
+  a parallel mechanism.
