@@ -12,6 +12,7 @@ import {
   listBotMemory,
   listBots,
   listWorkspaceFiles,
+  listWorkspaceMemory,
   setThreadWorkspaceFilesExcluded,
   listThreads,
   listUserMemory,
@@ -67,7 +68,10 @@ import { buildYouTubeSystemText } from "@/lib/youtube";
 import { hasRenderer } from "@/lib/plugins";
 import { selectRegistry, usePlugins } from "@/store/plugins";
 import { useKeys } from "@/store/keys";
-import { buildGlobalSystemText } from "@/lib/systemContext";
+import {
+  buildGlobalSystemText,
+  buildWorkspaceMemoryText,
+} from "@/lib/systemContext";
 import { mcpCloseThreadSessions } from "@/lib/mcp";
 import { t } from "@/store/i18n";
 import { isKeylessProvider, PROVIDERS } from "@/lib/providers";
@@ -447,6 +451,15 @@ async function loadSharedSystemBlocks(
       const systemText = buildWorkspaceSystemText(workspace, files);
       if (systemText)
         tail.push({ role: "system", content: systemText, images: [] });
+
+      // T62: workspace memory — injected in addition to the global memory
+      // block, only when the workspace has memory_enabled = 1.
+      if (workspace.memory_enabled) {
+        const wsMemory = await listWorkspaceMemory(workspaceId);
+        const wsMemoryText = buildWorkspaceMemoryText(wsMemory);
+        if (wsMemoryText)
+          tail.push({ role: "system", content: wsMemoryText, images: [] });
+      }
     }
   }
   return { head, tail };

@@ -13,6 +13,7 @@ vi.mock("@/lib/db", () => ({
   addUsage: vi.fn(async () => {}),
   getWorkspace: vi.fn(async () => null),
   listWorkspaceFiles: vi.fn(async () => []),
+  listWorkspaceMemory: vi.fn(async () => []),
   listUserMemory: vi.fn(async () => []),
   getBot: vi.fn(async () => null),
   listBots: vi.fn(async () => []),

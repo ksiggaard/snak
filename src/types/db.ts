@@ -87,6 +87,17 @@ export interface Workspace {
   /** Workspace-specific quick actions (JSON array; migration 018). Empty string =
    * no override, so the global quick actions apply. See `lib/quickActions.ts`. */
   quick_actions: string;
+  /** 1 = inject workspace memory into the system context (default ON, T62). */
+  memory_enabled: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** One free-text memory row for a workspace (T62, migration 025). */
+export interface WorkspaceMemory {
+  id: string;
+  workspace_id: string;
+  content: string;
   created_at: string;
   updated_at: string;
 }

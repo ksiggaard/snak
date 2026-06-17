@@ -206,6 +206,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/024_workspace_files_excluded.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 25,
+            description: "workspace_memory: per-workspace memory table + workspaces.memory_enabled toggle (T62)",
+            sql: include_str!("../migrations/025_workspace_memory.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

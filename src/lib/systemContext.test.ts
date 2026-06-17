@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { buildGlobalSystemText } from "@/lib/systemContext";
+import {
+  buildGlobalSystemText,
+  buildWorkspaceMemoryText,
+} from "@/lib/systemContext";
 import { buildWorkspaceSystemText } from "@/lib/workspaces";
 
 const mem = (...contents: string[]) => contents.map((content) => ({ content }));
@@ -82,5 +85,47 @@ describe("system-context precedence (global → workspace → thread)", () => {
     if (globalText) history.unshift({ role: "system", content: globalText });
 
     expect(history.map((m) => m.role)).toEqual(["user"]);
+  });
+});
+
+describe("buildWorkspaceMemoryText (T62)", () => {
+  const wsMem = (...contents: string[]) =>
+    contents.map((content) => ({ content, workspace_id: "ws1" }));
+
+  it("returns empty string when there are no entries", () => {
+    expect(buildWorkspaceMemoryText([])).toBe("");
+  });
+
+  it("returns empty string when all entries are blank/whitespace", () => {
+    expect(buildWorkspaceMemoryText(wsMem("  ", "", "   "))).toBe("");
+  });
+
+  it("formats a single entry as a labeled bulleted block", () => {
+    expect(buildWorkspaceMemoryText(wsMem("Uses Acme v2 API"))).toBe(
+      "Memory for this workspace:\n- Uses Acme v2 API",
+    );
+  });
+
+  it("formats multiple entries as a labeled bulleted list", () => {
+    expect(
+      buildWorkspaceMemoryText(wsMem("Uses Acme v2 API", "Prefer TypeScript")),
+    ).toBe(
+      "Memory for this workspace:\n- Uses Acme v2 API\n- Prefer TypeScript",
+    );
+  });
+
+  it("trims individual entries and skips blank ones", () => {
+    expect(
+      buildWorkspaceMemoryText(wsMem("  trimmed  ", "   ", "also kept")),
+    ).toBe("Memory for this workspace:\n- trimmed\n- also kept");
+  });
+
+  it("uses a different heading than global memory", () => {
+    const wsText = buildWorkspaceMemoryText(wsMem("workspace fact"));
+    const globalText = buildGlobalSystemText("", mem("user fact"));
+    expect(wsText).toContain("Memory for this workspace:");
+    expect(globalText).toContain("Memory about the user:");
+    expect(wsText).not.toContain("Memory about the user:");
+    expect(globalText).not.toContain("Memory for this workspace:");
   });
 });

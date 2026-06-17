@@ -745,6 +745,16 @@ export const en = {
   "workspace.fileSelectorNone": "No files included",
   "workspace.fileSelectorNoFiles": "No files in this workspace.",
 
+  // --- Workspace memory (T62) -----------------------------------------------
+  "workspace.memory": "Workspace memory",
+  "workspace.memoryHint":
+    "Facts injected into every chat in this workspace, in addition to global memory.",
+  "workspace.memoryEnabled": "Inject into chats",
+  "workspace.memoryNoEntries":
+    "No memory entries yet. Add facts the model should always know in this workspace.",
+  "workspace.memoryAddPlaceholder": "e.g. This workspace uses the Acme v2 API",
+  "workspace.memoryRemove": "Remove memory entry",
+
   // --- Quick actions (empty-screen starters) ---------------------------------
   "quickActions.title": "Quick actions",
   "quickActions.description":

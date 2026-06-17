@@ -12,6 +12,7 @@ import type {
   Model,
   Workspace,
   WorkspaceFile,
+  WorkspaceMemory,
   Provider,
   Role,
   SearchHit,
@@ -711,6 +712,10 @@ export async function deleteWorkspace(id: string): Promise<void> {
     [id],
   );
   await db.execute(`DELETE FROM workspace_files WHERE workspace_id = $1`, [id]);
+  await db.execute(
+    `DELETE FROM workspace_memory WHERE workspace_id = $1`,
+    [id],
+  );
   await db.execute(`DELETE FROM workspaces WHERE id = $1`, [id]);
 }
 
@@ -752,6 +757,70 @@ export async function addWorkspaceFile(input: {
 export async function deleteWorkspaceFile(id: string): Promise<void> {
   const db = await getDb();
   await db.execute(`DELETE FROM workspace_files WHERE id = $1`, [id]);
+}
+
+// ---------------------------------------------------------------------------
+// Workspace memory (T62, migration 025) — per-workspace memory entries,
+// mirroring user_memory (005) but scoped to a workspace. Injected into the
+// system context when the workspace's memory_enabled flag is 1.
+// ---------------------------------------------------------------------------
+
+/** All memory rows for a workspace, oldest first (the order they're injected). */
+export async function listWorkspaceMemory(
+  workspaceId: string,
+): Promise<WorkspaceMemory[]> {
+  const db = await getDb();
+  return db.select<WorkspaceMemory[]>(
+    `SELECT * FROM workspace_memory WHERE workspace_id = $1 ORDER BY created_at ASC`,
+    [workspaceId],
+  );
+}
+
+export async function addWorkspaceMemory(
+  workspaceId: string,
+  content: string,
+): Promise<WorkspaceMemory> {
+  const db = await getDb();
+  const id = newId();
+  await db.execute(
+    `INSERT INTO workspace_memory (id, workspace_id, content) VALUES ($1, $2, $3)`,
+    [id, workspaceId, content],
+  );
+  const rows = await db.select<WorkspaceMemory[]>(
+    `SELECT * FROM workspace_memory WHERE id = $1`,
+    [id],
+  );
+  return rows[0];
+}
+
+export async function updateWorkspaceMemory(
+  id: string,
+  content: string,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE workspace_memory SET content = $1, updated_at = datetime('now')
+     WHERE id = $2`,
+    [content, id],
+  );
+}
+
+export async function deleteWorkspaceMemory(id: string): Promise<void> {
+  const db = await getDb();
+  await db.execute(`DELETE FROM workspace_memory WHERE id = $1`, [id]);
+}
+
+/** Toggle workspace memory injection on/off (persists memory_enabled column). */
+export async function setWorkspaceMemoryEnabled(
+  id: string,
+  enabled: boolean,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE workspaces SET memory_enabled = $1, updated_at = datetime('now')
+     WHERE id = $2`,
+    [enabled ? 1 : 0, id],
+  );
 }
 
 // ---------------------------------------------------------------------------

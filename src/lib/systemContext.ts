@@ -1,4 +1,4 @@
-import type { UserMemory } from "@/types/db";
+import type { UserMemory, WorkspaceMemory } from "@/types/db";
 
 /**
  * T10 system-context composition.
@@ -50,4 +50,25 @@ export function buildGlobalSystemText(
   }
 
   return sections.join("\n\n");
+}
+
+/**
+ * T62: Build the workspace memory system text from the workspace's memory
+ * entries. Returns an empty string when there are no non-empty entries —
+ * callers should skip adding a system message in that case.
+ *
+ * Formatted as a "Memory for this workspace:" bulleted list, parallel to the
+ * "Memory about the user:" block in `buildGlobalSystemText`.
+ */
+export function buildWorkspaceMemoryText(
+  memory: Pick<WorkspaceMemory, "content">[],
+): string {
+  const memoryLines = memory
+    .map((m) => m.content.trim())
+    .filter((c) => c.length > 0)
+    .map((c) => `- ${c}`);
+
+  if (memoryLines.length === 0) return "";
+
+  return ["Memory for this workspace:", ...memoryLines].join("\n");
 }

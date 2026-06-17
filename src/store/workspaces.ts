@@ -1,17 +1,22 @@
 import { create } from "zustand";
 import {
   addWorkspaceFile,
+  addWorkspaceMemory,
   createWorkspace,
   deleteWorkspace,
   deleteWorkspaceFile,
+  deleteWorkspaceMemory,
   listWorkspaceFiles,
+  listWorkspaceMemory,
   listWorkspaces,
   renameWorkspace,
   setWorkspaceInstructions,
+  setWorkspaceMemoryEnabled,
   setWorkspaceQuickActions,
+  updateWorkspaceMemory,
 } from "@/lib/db";
 import { useThreads } from "@/store/threads";
-import type { Workspace, WorkspaceFile } from "@/types/db";
+import type { Workspace, WorkspaceFile, WorkspaceMemory } from "@/types/db";
 
 interface WorkspacesState {
   workspaces: Workspace[];
@@ -19,6 +24,8 @@ interface WorkspacesState {
   openWorkspaceId: string | null;
   /** Files for the currently open workspace. */
   openWorkspaceFiles: WorkspaceFile[];
+  /** Memory entries for the currently open workspace. */
+  openWorkspaceMemory: WorkspaceMemory[];
   initialized: boolean;
 
   init: () => Promise<void>;
@@ -29,7 +36,7 @@ interface WorkspacesState {
   /** Persist a workspace's quick-actions override JSON (empty = use global). */
   setQuickActions: (id: string, quickActions: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
-  /** Open a workspace's detail view (loads its files). */
+  /** Open a workspace's detail view (loads its files and memory). */
   open: (id: string) => Promise<void>;
   /** Close the workspace detail view. */
   close: () => void;
@@ -40,12 +47,21 @@ interface WorkspacesState {
     sourceUrl?: string | null,
   ) => Promise<void>;
   removeFile: (fileId: string) => Promise<void>;
+  /** Add a memory entry to the open workspace. */
+  addMemory: (workspaceId: string, content: string) => Promise<void>;
+  /** Update a memory entry in place (content change). */
+  updateMemory: (id: string, content: string) => Promise<void>;
+  /** Remove a memory entry from the open workspace. */
+  removeMemory: (id: string) => Promise<void>;
+  /** Toggle the memory_enabled flag for a workspace. */
+  setMemoryEnabled: (id: string, enabled: boolean) => Promise<void>;
 }
 
 export const useWorkspaces = create<WorkspacesState>((set, get) => ({
   workspaces: [],
   openWorkspaceId: null,
   openWorkspaceFiles: [],
+  openWorkspaceMemory: [],
   initialized: false,
 
   init: async () => {
@@ -81,7 +97,7 @@ export const useWorkspaces = create<WorkspacesState>((set, get) => ({
   remove: async (id) => {
     await deleteWorkspace(id);
     if (get().openWorkspaceId === id) {
-      set({ openWorkspaceId: null, openWorkspaceFiles: [] });
+      set({ openWorkspaceId: null, openWorkspaceFiles: [], openWorkspaceMemory: [] });
     }
     await get().refresh();
     // Threads were orphaned to no-workspace — reflect that in the thread list.
@@ -89,12 +105,15 @@ export const useWorkspaces = create<WorkspacesState>((set, get) => ({
   },
 
   open: async (id) => {
-    const files = await listWorkspaceFiles(id);
-    set({ openWorkspaceId: id, openWorkspaceFiles: files });
+    const [files, memory] = await Promise.all([
+      listWorkspaceFiles(id),
+      listWorkspaceMemory(id),
+    ]);
+    set({ openWorkspaceId: id, openWorkspaceFiles: files, openWorkspaceMemory: memory });
   },
 
   close: () => {
-    set({ openWorkspaceId: null, openWorkspaceFiles: [] });
+    set({ openWorkspaceId: null, openWorkspaceFiles: [], openWorkspaceMemory: [] });
   },
 
   addFile: async (workspaceId, name, content, sourceUrl) => {
@@ -116,5 +135,33 @@ export const useWorkspaces = create<WorkspacesState>((set, get) => ({
     if (openId) {
       set({ openWorkspaceFiles: await listWorkspaceFiles(openId) });
     }
+  },
+
+  addMemory: async (workspaceId, content) => {
+    await addWorkspaceMemory(workspaceId, content);
+    if (get().openWorkspaceId === workspaceId) {
+      set({ openWorkspaceMemory: await listWorkspaceMemory(workspaceId) });
+    }
+  },
+
+  updateMemory: async (id, content) => {
+    await updateWorkspaceMemory(id, content);
+    const openId = get().openWorkspaceId;
+    if (openId) {
+      set({ openWorkspaceMemory: await listWorkspaceMemory(openId) });
+    }
+  },
+
+  removeMemory: async (id) => {
+    await deleteWorkspaceMemory(id);
+    const openId = get().openWorkspaceId;
+    if (openId) {
+      set({ openWorkspaceMemory: await listWorkspaceMemory(openId) });
+    }
+  },
+
+  setMemoryEnabled: async (id, enabled) => {
+    await setWorkspaceMemoryEnabled(id, enabled);
+    await get().refresh();
   },
 }));

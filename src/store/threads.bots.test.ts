@@ -19,6 +19,7 @@ vi.mock("@/lib/db", () => ({
   addUsage: vi.fn(async () => {}),
   getWorkspace: vi.fn(async () => null),
   listWorkspaceFiles: vi.fn(async () => []),
+  listWorkspaceMemory: vi.fn(async () => []),
   listUserMemory: vi.fn(async () => []),
   getBot: vi.fn(async () => null),
   listBots: vi.fn(async () => []),
@@ -233,6 +234,7 @@ describe("send() with a bot (T38)", () => {
       name: "Acme",
       instructions: "Workspace rule.",
       quick_actions: "",
+      memory_enabled: 1,
       created_at: "",
       updated_at: "",
     });

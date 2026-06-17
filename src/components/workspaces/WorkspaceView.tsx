@@ -3,6 +3,7 @@ import { FileText, Globe, Loader2, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { QuickActionsEditor } from "@/components/settings/QuickActionsEditor";
 import { useWorkspaces } from "@/store/workspaces";
@@ -38,11 +39,16 @@ export function WorkspaceView() {
   const openWorkspaceId = useWorkspaces((s) => s.openWorkspaceId);
   const workspaces = useWorkspaces((s) => s.workspaces);
   const files = useWorkspaces((s) => s.openWorkspaceFiles);
+  const memory = useWorkspaces((s) => s.openWorkspaceMemory);
   const rename = useWorkspaces((s) => s.rename);
   const setInstructions = useWorkspaces((s) => s.setInstructions);
   const setQuickActions = useWorkspaces((s) => s.setQuickActions);
   const addFile = useWorkspaces((s) => s.addFile);
   const removeFile = useWorkspaces((s) => s.removeFile);
+  const addMemory = useWorkspaces((s) => s.addMemory);
+  const updateMemory = useWorkspaces((s) => s.updateMemory);
+  const removeMemory = useWorkspaces((s) => s.removeMemory);
+  const setMemoryEnabled = useWorkspaces((s) => s.setMemoryEnabled);
 
   // Default provider/model — used for the YouTube summary (T60).
   const defaultProvider = useThreads((s) => s.defaultProvider);
@@ -55,6 +61,10 @@ export function WorkspaceView() {
   // URL ingestion state (T59 / T60).
   const [urlDraft, setUrlDraft] = useState("");
   const [urlFetching, setUrlFetching] = useState(false);
+
+  // Workspace memory (T62): new entry draft + busy flag.
+  const [newMemory, setNewMemory] = useState("");
+  const [memoryBusy, setMemoryBusy] = useState(false);
 
   // Local drafts so typing doesn't write to the DB on each keystroke; re-synced
   // at render when the open workspace changes (render-time sync pattern, not an
@@ -72,6 +82,7 @@ export function WorkspaceView() {
     setQaDraft(parseQuickActions(workspace?.quick_actions));
     setError(null);
     setUrlDraft("");
+    setNewMemory("");
   }
 
   if (!workspace) {
@@ -420,6 +431,89 @@ export function WorkspaceView() {
             </Button>
           </div>
         )}
+      </div>
+
+      {/* Workspace memory (T62) */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <Label>{t("workspace.memory")}</Label>
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground text-xs">
+              {workspace.memory_enabled ? t("common.on") : t("common.off")}
+            </span>
+            <Switch
+              checked={workspace.memory_enabled === 1}
+              onCheckedChange={(checked) =>
+                void setMemoryEnabled(workspace.id, checked)
+              }
+              aria-label={t("workspace.memoryEnabled")}
+            />
+          </div>
+        </div>
+        <p className="text-muted-foreground text-xs">
+          {t("workspace.memoryHint")}
+        </p>
+
+        {memory.length === 0 ? (
+          <p className="text-muted-foreground text-xs">
+            {t("workspace.memoryNoEntries")}
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {memory.map((m) => (
+              <li key={m.id} className="flex gap-2">
+                <Textarea
+                  rows={2}
+                  defaultValue={m.content}
+                  disabled={memoryBusy}
+                  onBlur={(e) => {
+                    const val = e.target.value.trim();
+                    if (val && val !== m.content)
+                      void updateMemory(m.id, val);
+                  }}
+                  className="text-sm"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  aria-label={t("workspace.memoryRemove")}
+                  onClick={() => void removeMemory(m.id)}
+                  disabled={memoryBusy}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="flex gap-2">
+          <Textarea
+            rows={2}
+            placeholder={t("workspace.memoryAddPlaceholder")}
+            value={newMemory}
+            disabled={memoryBusy}
+            onChange={(e) => setNewMemory(e.target.value)}
+            className="text-sm"
+          />
+          <Button
+            size="sm"
+            onClick={async () => {
+              const content = newMemory.trim();
+              if (!content || !workspace) return;
+              setMemoryBusy(true);
+              try {
+                await addMemory(workspace.id, content);
+                setNewMemory("");
+              } finally {
+                setMemoryBusy(false);
+              }
+            }}
+            disabled={memoryBusy || newMemory.trim().length === 0}
+          >
+            {t("common.add")}
+          </Button>
+        </div>
       </div>
 
       {error && <p className="text-destructive text-sm">{error}</p>}
