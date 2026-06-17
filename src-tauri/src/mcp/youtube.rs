@@ -39,10 +39,11 @@ const MAX_TRANSCRIPT_LEN: usize = 20_000;
 
 /// A desktop browser UA + consent cookie avoids YouTube's EU consent interstitial
 /// when scraping HTML pages.
-const DESKTOP_UA: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) \
+pub(crate) const DESKTOP_UA: &str =
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) \
      Chrome/124.0 Safari/537.36";
 /// Public InnerTube API key (embedded in every youtube.com page; not a secret).
-const INNERTUBE_KEY: &str = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
+pub(crate) const INNERTUBE_KEY: &str = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
 
 /// The tools this built-in server advertises.
 pub fn tools() -> Vec<ToolDef> {
@@ -312,7 +313,10 @@ async fn transcript(client: &reqwest::Client, args: &Value) -> anyhow::Result<St
 }
 
 /// Build the InnerTube player request and return its parsed JSON, or `None`.
-async fn fetch_player_response(client: &reqwest::Client, video_id: &str) -> Option<Value> {
+pub(crate) async fn fetch_player_response(
+    client: &reqwest::Client,
+    video_id: &str,
+) -> Option<Value> {
     let url = format!("https://www.youtube.com/youtubei/v1/player?key={INNERTUBE_KEY}");
     // The ANDROID client returns caption `baseUrl`s that work without a
     // proof-of-origin (`pot`) token — the WEB client's no longer do (it returns
@@ -343,7 +347,10 @@ async fn fetch_player_response(client: &reqwest::Client, video_id: &str) -> Opti
 }
 
 /// Fallback: scrape `ytInitialPlayerResponse` from the watch page.
-async fn fetch_watch_player_response(client: &reqwest::Client, video_id: &str) -> Option<Value> {
+pub(crate) async fn fetch_watch_player_response(
+    client: &reqwest::Client,
+    video_id: &str,
+) -> Option<Value> {
     let resp = client
         .get(format!("https://www.youtube.com/watch?v={video_id}"))
         .header("user-agent", DESKTOP_UA)
@@ -359,7 +366,7 @@ async fn fetch_watch_player_response(client: &reqwest::Client, video_id: &str) -
     extract_json_after(&body, "ytInitialPlayerResponse")
 }
 
-fn caption_tracks(player: &Value) -> Vec<Value> {
+pub(crate) fn caption_tracks(player: &Value) -> Vec<Value> {
     player
         .pointer("/captions/playerCaptionsTracklistRenderer/captionTracks")
         .and_then(|t| t.as_array())
@@ -367,7 +374,7 @@ fn caption_tracks(player: &Value) -> Vec<Value> {
         .unwrap_or_default()
 }
 
-fn has_caption_tracks(player: &Value) -> bool {
+pub(crate) fn has_caption_tracks(player: &Value) -> bool {
     !caption_tracks(player).is_empty()
 }
 

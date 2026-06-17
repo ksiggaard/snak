@@ -671,46 +671,13 @@ pub async fn fetch_youtube_transcript(url: String) -> Result<YoutubeTranscriptRe
     let video_id = yt::parse_video_id(&url)
         .ok_or_else(|| "could not find a YouTube video id in this URL".to_string())?;
 
-    // Fetch the player response directly (mirrors the `transcript` fn in
-    // mcp/youtube.rs, but we need the title too and want to return a typed
-    // struct rather than a formatted string).
-    use serde_json::json;
-
-    // InnerTube player request (ANDROID client — no pot token needed).
-    let innertube_key = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
-    let player_url = format!("https://www.youtube.com/youtubei/v1/player?key={innertube_key}");
-    let body = json!({
-        "context": {
-            "client": {
-                "clientName": "ANDROID",
-                "clientVersion": "20.10.38"
-            }
-        },
-        "videoId": video_id
-    });
-
-    let player = client
-        .post(&player_url)
-        .header("content-type", "application/json")
-        .header("accept-language", "en-US")
-        .header("user-agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36")
-        .json(&body)
-        .send()
-        .await
-        .context("YouTube player request failed")
-        .map_err(|e| e.to_string())?
-        .json::<serde_json::Value>()
-        .await
-        .context("reading YouTube player response")
-        .map_err(|e| e.to_string())?;
-
-    // If InnerTube returns no caption tracks, try scraping the watch page.
-    let player = if !has_caption_tracks_value(&player) {
-        fetch_watch_player_value(&client, &video_id)
+    // Prefer InnerTube (no consent wall); fall back to scraping the watch page.
+    // Mirrors the two-step orchestration in `mcp::youtube::transcript`.
+    let player = match yt::fetch_player_response(&client, &video_id).await {
+        Some(p) if yt::has_caption_tracks(&p) => p,
+        _ => yt::fetch_watch_player_response(&client, &video_id)
             .await
-            .unwrap_or(player)
-    } else {
-        player
+            .ok_or_else(|| format!("could not load video data for {video_id}"))?,
     };
 
     let title = player
@@ -719,7 +686,7 @@ pub async fn fetch_youtube_transcript(url: String) -> Result<YoutubeTranscriptRe
         .unwrap_or("")
         .to_string();
 
-    let tracks = caption_tracks_value(&player);
+    let tracks = yt::caption_tracks(&player);
     let track = match yt::select_track(&tracks, None) {
         Some(t) => t.clone(),
         None => {
@@ -740,7 +707,7 @@ pub async fn fetch_youtube_transcript(url: String) -> Result<YoutubeTranscriptRe
 
     let xml = client
         .get(&base_url)
-        .header("user-agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36")
+        .header("user-agent", yt::DESKTOP_UA)
         .send()
         .await
         .context("caption track request failed")
@@ -765,42 +732,6 @@ pub async fn fetch_youtube_transcript(url: String) -> Result<YoutubeTranscriptRe
         transcript,
         no_captions: false,
     })
-}
-
-/// Extract caption tracks array from a player JSON value.
-fn caption_tracks_value(player: &serde_json::Value) -> Vec<serde_json::Value> {
-    player
-        .pointer("/captions/playerCaptionsTracklistRenderer/captionTracks")
-        .and_then(|t| t.as_array())
-        .cloned()
-        .unwrap_or_default()
-}
-
-fn has_caption_tracks_value(player: &serde_json::Value) -> bool {
-    !caption_tracks_value(player).is_empty()
-}
-
-/// Fallback: scrape `ytInitialPlayerResponse` from the watch page.
-async fn fetch_watch_player_value(
-    client: &reqwest::Client,
-    video_id: &str,
-) -> Option<serde_json::Value> {
-    let resp = client
-        .get(format!("https://www.youtube.com/watch?v={video_id}"))
-        .header(
-            "user-agent",
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-        )
-        .header("cookie", "CONSENT=YES+1")
-        .header("accept-language", "en-US,en;q=0.9")
-        .send()
-        .await
-        .ok()?;
-    if !resp.status().is_success() {
-        return None;
-    }
-    let body = resp.text().await.ok()?;
-    yt::extract_json_after(&body, "ytInitialPlayerResponse")
 }
 
 // ---------------------------------------------------------------------------
