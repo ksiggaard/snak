@@ -87,3 +87,24 @@ export function workspaceFilesSize(
 ): number {
   return files.reduce((sum, f) => sum + f.content.length, 0);
 }
+
+/**
+ * Filter a list of workspace files by removing those whose id is in the
+ * `excludedIds` set.
+ *
+ * The "store excluded" model (T61): only de-selected ids are stored — NULL or
+ * an empty array means nothing is excluded (all files included). A file added
+ * to the workspace later is automatically included because its id is not in the
+ * stored excluded set.
+ *
+ * @param files     The full list of workspace files.
+ * @param excludedIds  Ids to exclude; null/undefined/[] → include all.
+ */
+export function filterWorkspaceFiles<T extends { id: string }>(
+  files: T[],
+  excludedIds: string[] | null | undefined,
+): T[] {
+  if (!excludedIds || excludedIds.length === 0) return files;
+  const excluded = new Set(excludedIds);
+  return files.filter((f) => !excluded.has(f.id));
+}

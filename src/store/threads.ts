@@ -12,6 +12,7 @@ import {
   listBotMemory,
   listBots,
   listWorkspaceFiles,
+  setThreadWorkspaceFilesExcluded,
   listThreads,
   listUserMemory,
   purgeEphemeralThreads,
@@ -57,7 +58,7 @@ import { estimateTokens } from "@/lib/contextSize";
 import { buildBotSystemText, buildGroupChatSystemText } from "@/lib/bots";
 import { extractMentions } from "@/lib/mentions";
 import { runPersonaMemoryUpdate } from "@/lib/personaMemory";
-import { buildWorkspaceSystemText } from "@/lib/workspaces";
+import { buildWorkspaceSystemText, filterWorkspaceFiles } from "@/lib/workspaces";
 import { buildSkillsSystemText } from "@/lib/skills";
 import { buildArtifactsSystemText } from "@/lib/artifacts";
 import { buildChartsSystemText } from "@/lib/charts";
@@ -171,6 +172,10 @@ interface ThreadsState {
   defaultModel: string;
   /** Workspace a new (draft) chat will be created in, or null for none. */
   draftWorkspaceId: string | null;
+  /** Workspace-file ids excluded from context for the current draft chat (T61).
+   * Carries over until the draft is saved; at save time it is persisted to the
+   * thread row. Empty array = all selected (default). */
+  draftExcludedFileIds: string[];
   /** Incognito draft (T29): the first send creates the thread `ephemeral`. */
   draftIncognito: boolean;
   /** Deep research draft (T55): the first send creates the thread with deep
@@ -225,6 +230,11 @@ interface ThreadsState {
     threadId: string,
     workspaceId: string | null,
   ) => Promise<void>;
+  /** Set which workspace files are excluded from context for the current
+   * thread (or draft). Pass empty array to restore all-selected. Persisted
+   * per thread; for a draft it is carried in state until the thread is created
+   * on first send (T61). */
+  setExcludedFileIds: (excludedIds: string[]) => Promise<void>;
   /** Set provider+model for the current thread, or the draft if none. */
   setProviderModel: (provider: Provider, model: string) => Promise<void>;
   /** Turn deep research mode on/off (T55) for the current thread, or the draft
@@ -353,6 +363,20 @@ function friendlyError(e: unknown): string {
   return raw;
 }
 
+/** Parse a stored `workspace_files_excluded` JSON string into a string array.
+ * Returns null when the column is NULL/empty (= nothing excluded = all selected).
+ * Silently returns null on any parse error (defensive). */
+function parseExcludedFileIds(raw: string | null | undefined): string[] | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed as string[];
+  } catch {
+    // Malformed JSON — treat as nothing excluded.
+  }
+  return null;
+}
+
 /**
  * Load the system-context blocks shared by every reply of one send: skills
  * (T15) and the global addendum/memory (T10) in `head`, the workspace context
@@ -368,6 +392,7 @@ function friendlyError(e: unknown): string {
  */
 async function loadSharedSystemBlocks(
   workspaceId: string | null,
+  excludedFileIds?: string[] | null,
 ): Promise<{ head: ApiMessage[]; tail: ApiMessage[] }> {
   const head: ApiMessage[] = [];
   const tail: ApiMessage[] = [];
@@ -413,11 +438,12 @@ async function loadSharedSystemBlocks(
     head.push({ role: "system", content: globalSystemText, images: [] });
 
   // Workspace base context (T20/T58): instructions + reference files, for
-  // threads that belong to a workspace.
+  // threads that belong to a workspace. T61: only include files not excluded.
   if (workspaceId) {
     const workspace = await getWorkspace(workspaceId);
     if (workspace) {
-      const files = await listWorkspaceFiles(workspaceId);
+      const allFiles = await listWorkspaceFiles(workspaceId);
+      const files = filterWorkspaceFiles(allFiles, excludedFileIds);
       const systemText = buildWorkspaceSystemText(workspace, files);
       if (systemText)
         tail.push({ role: "system", content: systemText, images: [] });
@@ -499,6 +525,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   defaultProvider: PROVIDERS[0].id,
   defaultModel: PROVIDERS[0].defaultModel,
   draftWorkspaceId: null,
+  draftExcludedFileIds: [],
   draftIncognito: false,
   draftDeepResearch: false,
   draftBotId: null,
@@ -572,6 +599,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       messages: [],
       error: null,
       draftWorkspaceId: null,
+      draftExcludedFileIds: [],
       draftIncognito: opts?.incognito ?? false,
       draftDeepResearch: false,
       draftBotId: null,
@@ -590,6 +618,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       messages: [],
       error: null,
       draftWorkspaceId: workspaceId,
+      draftExcludedFileIds: [],
       draftIncognito: false,
       draftDeepResearch: false,
       draftBotId: null,
@@ -612,6 +641,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       messages: [],
       error: null,
       draftWorkspaceId: null,
+      draftExcludedFileIds: [],
       draftIncognito: false,
       draftDeepResearch: false,
       draftBotId: bot.id,
@@ -626,6 +656,19 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   assignThreadWorkspace: async (threadId, workspaceId) => {
     await setThreadWorkspace(threadId, workspaceId);
     await get().refreshThreads();
+    void get().refreshSystemTokens();
+  },
+
+  setExcludedFileIds: async (excludedIds) => {
+    const id = get().currentThreadId;
+    if (id) {
+      // Saved thread: persist immediately.
+      await setThreadWorkspaceFilesExcluded(id, excludedIds);
+      await get().refreshThreads();
+    } else {
+      // Draft thread: carry in state; persisted at thread-creation time.
+      set({ draftExcludedFileIds: excludedIds });
+    }
     void get().refreshSystemTokens();
   },
 
@@ -677,17 +720,22 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       const id = get().currentThreadId;
       let workspaceId: string | null;
       let botId: string | null;
+      let excludedFileIds: string[] | null;
       if (id) {
         const thread = get().threads.find((x) => x.id === id);
         workspaceId = thread?.workspace_id ?? null;
         botId = thread?.bot_id ?? null;
+        excludedFileIds = parseExcludedFileIds(
+          thread?.workspace_files_excluded,
+        );
       } else {
         workspaceId = get().draftWorkspaceId;
         botId = get().draftBotId;
+        excludedFileIds = get().draftExcludedFileIds;
       }
       // Reuse the exact builders send() uses, so the estimate tracks the real
       // request: skills + global/memory (head), persona (bot), workspace (tail).
-      const shared = await loadSharedSystemBlocks(workspaceId);
+      const shared = await loadSharedSystemBlocks(workspaceId, excludedFileIds);
       const bot = botId ? await getBot(botId) : null;
       const botBlock = bot ? await botSystemBlock(bot) : null;
       const blocks = [
@@ -747,6 +795,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       let botId: string | null;
       let ephemeral: boolean;
       let deepResearch: boolean;
+      let excludedFileIds: string[] | null;
 
       if (!id) {
         provider = get().draftProvider;
@@ -755,6 +804,10 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         botId = get().draftBotId;
         ephemeral = get().draftIncognito;
         deepResearch = get().draftDeepResearch;
+        excludedFileIds =
+          get().draftExcludedFileIds.length > 0
+            ? get().draftExcludedFileIds
+            : null;
         const thread = await createThread({
           provider,
           model,
@@ -773,6 +826,10 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         // Carry the draft's deep-research mode onto the new thread row (T55) so
         // it persists like incognito/workspace do.
         if (deepResearch) await setThreadDeepResearch(id, true);
+        // Carry the draft's excluded file ids onto the new thread row (T61).
+        if (excludedFileIds && excludedFileIds.length > 0) {
+          await setThreadWorkspaceFilesExcluded(id, excludedFileIds);
+        }
         // Incognito threads never become last_thread_id (T29).
         if (!ephemeral) await setSetting(LAST_THREAD_KEY, id);
         await get().refreshThreads();
@@ -784,6 +841,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         botId = t.bot_id;
         ephemeral = t.ephemeral !== 0;
         deepResearch = t.deep_research !== 0;
+        excludedFileIds = parseExcludedFileIds(t.workspace_files_excluded);
       }
 
       const userMsg = await addMessage({
@@ -830,7 +888,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
 
       // System context shared by every reply of this send (skills/global/
       // workspace); the persona block is per-reply and slots in between.
-      const shared = await loadSharedSystemBlocks(workspaceId);
+      const shared = await loadSharedSystemBlocks(workspaceId, excludedFileIds);
       const threadId = id; // non-null capture for the closures below
 
       /**
@@ -1191,6 +1249,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       model,
       workspace_id: workspaceId,
       bot_id: threadBotId,
+      workspace_files_excluded: workspaceFilesExcluded,
     } = thread;
 
     set({
@@ -1206,7 +1265,10 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       // own persona (an @-mention author wins over the thread persona) provides
       // the bot block; the history is everything BEFORE this reply's slot, so
       // the model answers the same prompt afresh.
-      const shared = await loadSharedSystemBlocks(workspaceId);
+      const shared = await loadSharedSystemBlocks(
+        workspaceId,
+        parseExcludedFileIds(workspaceFilesExcluded),
+      );
       const attributeBotId = target.bot_id;
       const replyBot = attributeBotId
         ? await getBot(attributeBotId)
@@ -1455,6 +1517,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       model,
       workspace_id: workspaceId,
       bot_id: threadBotId,
+      workspace_files_excluded: workspaceFilesExcludedSrc,
     } = thread;
 
     set({
@@ -1467,7 +1530,10 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     });
     try {
       // Build system context the same way a normal reply would.
-      const shared = await loadSharedSystemBlocks(workspaceId);
+      const shared = await loadSharedSystemBlocks(
+        workspaceId,
+        parseExcludedFileIds(workspaceFilesExcludedSrc),
+      );
       const attributeBotId = target.bot_id;
       const replyBot = attributeBotId
         ? await getBot(attributeBotId)

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildWorkspaceSystemText,
+  filterWorkspaceFiles,
   workspaceFilesSize,
   WORKSPACE_CONTEXT_CHAR_BUDGET,
 } from "@/lib/workspaces";
@@ -81,6 +82,57 @@ describe("buildWorkspaceSystemText", () => {
 
   it("uses a sane default budget", () => {
     expect(WORKSPACE_CONTEXT_CHAR_BUDGET).toBeGreaterThan(10_000);
+  });
+});
+
+describe("filterWorkspaceFiles", () => {
+  const files = [
+    { id: "a", name: "a.md", content: "Alpha" },
+    { id: "b", name: "b.md", content: "Beta" },
+    { id: "c", name: "c.md", content: "Gamma" },
+  ];
+
+  it("returns all files when excluded set is empty (default all selected)", () => {
+    expect(filterWorkspaceFiles(files, [])).toEqual(files);
+  });
+
+  it("returns all files when excluded set is null/undefined (backward compat)", () => {
+    expect(filterWorkspaceFiles(files, null)).toEqual(files);
+  });
+
+  it("excludes the ids in the excluded set", () => {
+    const result = filterWorkspaceFiles(files, ["b"]);
+    expect(result).toHaveLength(2);
+    expect(result.map((f) => f.id)).toEqual(["a", "c"]);
+  });
+
+  it("excludes multiple ids", () => {
+    const result = filterWorkspaceFiles(files, ["a", "c"]);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("b");
+  });
+
+  it("returns empty array when all files are excluded", () => {
+    expect(filterWorkspaceFiles(files, ["a", "b", "c"])).toEqual([]);
+  });
+
+  it("ignores excluded ids that don't match any file (robustness)", () => {
+    const result = filterWorkspaceFiles(files, ["x", "y"]);
+    expect(result).toEqual(files);
+  });
+
+  it("a newly added file (not in excluded set) is automatically included", () => {
+    const withNew = [
+      ...files,
+      { id: "d", name: "d.md", content: "Delta" },
+    ];
+    // Excluded set was captured before the new file was added — "d" is not in it.
+    const result = filterWorkspaceFiles(withNew, ["b"]);
+    expect(result.map((f) => f.id)).toEqual(["a", "c", "d"]);
+  });
+
+  it("returns empty array for empty file list", () => {
+    expect(filterWorkspaceFiles([], ["a"])).toEqual([]);
   });
 });
 

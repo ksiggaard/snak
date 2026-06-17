@@ -26,6 +26,10 @@ export interface Thread {
   /** Bot (persona) this thread belongs to, or null (T38). Deleting a bot
    * orphans its threads back to null — chat history is preserved. */
   bot_id: string | null;
+  /** Per-chat excluded workspace-file ids (T61). A JSON array of workspace-file
+   * ids the user has de-selected for this chat. NULL or "[]" = nothing excluded
+   * = all files are injected (default all-selected). */
+  workspace_files_excluded: string | null;
   created_at: string;
   updated_at: string;
 }

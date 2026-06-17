@@ -108,6 +108,22 @@ export async function setThreadProviderModel(
   );
 }
 
+/** Persist the per-chat excluded workspace-file ids (T61). Pass an empty array
+ * or null to restore "all selected". Does not bump updated_at — toggling file
+ * selection shouldn't reorder the recents list. */
+export async function setThreadWorkspaceFilesExcluded(
+  id: string,
+  excludedIds: string[],
+): Promise<void> {
+  const db = await getDb();
+  const value =
+    excludedIds.length === 0 ? null : JSON.stringify(excludedIds);
+  await db.execute(
+    `UPDATE threads SET workspace_files_excluded = $1 WHERE id = $2`,
+    [value, id],
+  );
+}
+
 /** Assign (or clear, with null) the workspace a thread belongs to. */
 export async function setThreadWorkspace(
   id: string,

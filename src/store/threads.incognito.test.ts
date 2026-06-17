@@ -35,6 +35,7 @@ const thread = (over: Partial<Thread>): Thread => ({
   archived: 0,
   deep_research: 0,
   bot_id: null,
+  workspace_files_excluded: null,
   created_at: "2026-06-12 00:00:00",
   updated_at: "2026-06-12 00:00:00",
   ...over,

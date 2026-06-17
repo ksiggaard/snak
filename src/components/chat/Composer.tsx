@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Canvas } from "@/components/chat/Canvas";
 import { ContextMeter } from "@/components/chat/ContextMeter";
 import { ModelPicker } from "@/components/chat/ModelPicker";
+import { WorkspaceFileSelector } from "@/components/chat/WorkspaceFileSelector";
 import { canCompact } from "@/lib/compaction";
 import {
   classifyFile,
@@ -961,6 +962,9 @@ export function Composer({
         >
           <Telescope className="size-4" />
         </Button>
+        {/* T61: workspace file selector — visible when the thread/draft belongs
+            to a workspace that has files. Hidden otherwise. */}
+        <WorkspaceFileSelector />
         <div className="flex-1" />
         <ModelPicker />
         {busy ? (

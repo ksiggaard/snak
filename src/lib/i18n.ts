@@ -736,6 +736,15 @@ export const en = {
   "workspace.quickActionsUsingGlobal":
     "This workspace uses the global quick actions. Add one below to override them here.",
 
+  // --- Per-chat workspace file selector (T61) --------------------------------
+  "workspace.fileSelector": "Workspace files",
+  "workspace.fileSelectorHint":
+    "Choose which workspace files are injected into this chat's context.",
+  "workspace.fileSelectorAll": "All files included",
+  "workspace.fileSelectorSome": "{n} / {total} files included",
+  "workspace.fileSelectorNone": "No files included",
+  "workspace.fileSelectorNoFiles": "No files in this workspace.",
+
   // --- Quick actions (empty-screen starters) ---------------------------------
   "quickActions.title": "Quick actions",
   "quickActions.description":

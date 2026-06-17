@@ -200,6 +200,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/023_workspace_file_source_url.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 24,
+            description: "threads.workspace_files_excluded: per-chat excluded workspace-file ids (T61)",
+            sql: include_str!("../migrations/024_workspace_files_excluded.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
