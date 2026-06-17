@@ -132,6 +132,7 @@
     "chat.variationHint": "Nur die angezeigte Variante wird als Kontext gesendet.",
     "chat.directionPlaceholder": "Optionale Vorgabe – z. B. professioneller",
     "chat.directionGenerate": "Generieren",
+    "chat.requestSources": "Quellen anfordern",
     "chat.copyCode": "Code kopieren",
     "chat.viewImage": "Bild ansehen",
     "chat.viewDiagram": "Diagramm ansehen",

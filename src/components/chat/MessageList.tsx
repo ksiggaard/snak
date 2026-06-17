@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  BookOpenText,
   Brain,
   Check,
   ChevronLeft,
@@ -545,6 +546,29 @@ function DirectionModal({
 }
 
 /**
+ * Request sources button (T56): re-asks the model to back up claims in the
+ * given assistant reply with web sources, credibility ratings, and quotes.
+ * Renders for every persisted (non-streaming) assistant message.
+ */
+function RequestSourcesButton({ messageId }: { messageId: string }) {
+  const t = useT();
+  const busy = useThreads((s) => s.busy);
+  const requestSources = useThreads((s) => s.requestSources);
+  return (
+    <button
+      type="button"
+      onClick={() => void requestSources(messageId)}
+      disabled={busy}
+      aria-label={t("chat.requestSources")}
+      title={t("chat.requestSources")}
+      className="hover:bg-muted hover:text-foreground rounded p-1 transition-colors disabled:opacity-40"
+    >
+      <BookOpenText className="size-3.5" aria-hidden />
+    </button>
+  );
+}
+
+/**
  * Variation controls (T54) shown inline in the latest assistant reply's meta
  * row, next to the copy button: a carousel to browse alternative variations
  * (browsing *is* selecting — the shown one is the one sent as context) and an
@@ -851,13 +875,25 @@ function ChatMessage({
     m.role === "assistant" && latestReply && m.variantIds ? (
       <VariationControls m={m} />
     ) : null;
+  // Request sources button (T56) — all persisted (non-streaming) assistant replies.
+  const requestSourcesBtn =
+    m.role === "assistant" && realMessageId ? (
+      <RequestSourcesButton messageId={realMessageId} />
+    ) : null;
   const meta = m.role === "assistant" && (
     <AssistantMeta
       createdAt={m.created_at}
       durationMs={m.duration_ms}
       now={now}
       content={m.content}
-      trailing={variations}
+      trailing={
+        variations || requestSourcesBtn ? (
+          <>
+            {variations}
+            {requestSourcesBtn}
+          </>
+        ) : undefined
+      }
       wide={wide}
       onToggleWide={onToggleWide}
     />

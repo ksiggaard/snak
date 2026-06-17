@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   applyRegenSteer,
+  applySourcesSteer,
   planVariants,
   regenSteer,
+  REQUEST_SOURCES_STEER,
   type VariantRow,
 } from "@/lib/variations";
 
@@ -91,5 +93,52 @@ describe("regenSteer / applyRegenSteer", () => {
     }));
     expect(out).toHaveLength(2);
     expect(out[1].role).toBe("user");
+  });
+});
+
+describe("REQUEST_SOURCES_STEER / applySourcesSteer (T56)", () => {
+  it("REQUEST_SOURCES_STEER mentions search_web, fetch_url, footnote, credibility, quote, unconfirmable", () => {
+    expect(REQUEST_SOURCES_STEER).toContain("search_web");
+    expect(REQUEST_SOURCES_STEER).toContain("fetch_url");
+    expect(REQUEST_SOURCES_STEER).toContain("footnote");
+    expect(REQUEST_SOURCES_STEER).toContain("credibility");
+    expect(REQUEST_SOURCES_STEER).toContain("quote");
+    expect(REQUEST_SOURCES_STEER).toContain("cannot confirm");
+  });
+
+  it("always appends a new user turn, even when history ends on an assistant reply", () => {
+    const history = [
+      { role: "user", content: "What is photosynthesis?" },
+      { role: "assistant", content: "Plants use sunlight to make food." },
+    ];
+    const out = applySourcesSteer(history, (content) => ({
+      role: "user",
+      content,
+    }));
+    expect(out).toHaveLength(3);
+    expect(out[2].role).toBe("user");
+    expect(out[2].content).toBe(REQUEST_SOURCES_STEER);
+  });
+
+  it("also appends when history ends on a user turn", () => {
+    const history = [{ role: "user", content: "Tell me something." }];
+    const out = applySourcesSteer(history, (content) => ({
+      role: "user",
+      content,
+    }));
+    expect(out).toHaveLength(2);
+    expect(out[1].content).toBe(REQUEST_SOURCES_STEER);
+  });
+
+  it("does not mutate the original history array", () => {
+    const history = [{ role: "assistant", content: "Some claim." }];
+    applySourcesSteer(history, (c) => ({ role: "user", content: c }));
+    expect(history).toHaveLength(1);
+  });
+
+  it("works on an empty history", () => {
+    const out = applySourcesSteer([], (c) => ({ role: "user", content: c }));
+    expect(out).toHaveLength(1);
+    expect(out[0].role).toBe("user");
   });
 });

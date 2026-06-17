@@ -203,6 +203,8 @@ export const en = {
   "chat.variationHint": "Only the shown variation is sent as context.",
   "chat.directionPlaceholder": "Optional direction — e.g. more professional",
   "chat.directionGenerate": "Generate",
+  // --- Request sources (T56) -----------------------------------------------
+  "chat.requestSources": "Request sources",
   "chat.copyCode": "Copy code",
   "chat.viewImage": "View image",
   "chat.viewDiagram": "View diagram",

@@ -310,3 +310,19 @@ html.overlay #root {
     height: 0;
   }
 }
+
+/* GFM footnotes (T56 Request sources): separate the footnote section from the
+   reply body with a faint rule and tighten the list spacing. */
+section[data-footnotes] {
+  border-top: 1px solid var(--border);
+  margin-top: 1rem;
+  padding-top: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+section[data-footnotes] ol {
+  padding-left: 1.25rem;
+}
+section[data-footnotes] li {
+  margin-bottom: 0.25rem;
+}

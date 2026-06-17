@@ -52,7 +52,7 @@ import {
   groupLabelingActive,
   type GroupContext,
 } from "@/lib/compaction";
-import { applyRegenSteer } from "@/lib/variations";
+import { applyRegenSteer, applySourcesSteer } from "@/lib/variations";
 import { estimateTokens } from "@/lib/contextSize";
 import { buildBotSystemText, buildGroupChatSystemText } from "@/lib/bots";
 import { extractMentions } from "@/lib/mentions";
@@ -268,6 +268,15 @@ interface ThreadsState {
    * shown variation is always the one in context.
    */
   selectVariant: (groupId: string, messageId: string) => Promise<void>;
+  /**
+   * Request sources for an assistant reply (T56): re-prompts the model with the
+   * reply in context and a steering instruction to verify each significant claim
+   * using search_web / fetch_url, then add per-claim markdown footnotes with a
+   * credibility rating and a supporting quote for each source. Claims that
+   * cannot be sourced are flagged explicitly. The result is persisted as a new
+   * standalone assistant message appended to the thread (the original is kept).
+   */
+  requestSources: (messageId: string) => Promise<void>;
   /**
    * Compact the current thread (T28): ask its provider/model to summarize the
    * history since the last compaction point and persist the result as a
@@ -1426,6 +1435,259 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     if (!id || get().busy) return;
     await dbSelectVariant(groupId, messageId);
     set({ messages: await loadThreadMessages(id) });
+  },
+
+  requestSources: async (messageId) => {
+    if (get().busy) return;
+    const id = get().currentThreadId;
+    if (!id) return;
+    const msgs = get().messages;
+    const i = msgs.findIndex((m) => m.id === messageId);
+    if (i < 0) return;
+    const target = msgs[i];
+    if (target.role !== "assistant") return;
+
+    const thread = get().threads.find((x) => x.id === id);
+    if (!thread) return;
+    const {
+      provider,
+      model,
+      project_id: projectId,
+      bot_id: threadBotId,
+    } = thread;
+
+    set({
+      busy: true,
+      cancelling: false,
+      pendingApproval: null,
+      autoApproveSysTools: false,
+      awaitingModel: false,
+      error: null,
+    });
+    try {
+      // Build system context the same way a normal reply would.
+      const shared = await loadSharedSystemBlocks(projectId);
+      const attributeBotId = target.bot_id;
+      const replyBot = attributeBotId
+        ? await getBot(attributeBotId)
+        : threadBotId
+          ? await getBot(threadBotId)
+          : null;
+      const botBlock = replyBot ? await botSystemBlock(replyBot) : null;
+      const allBots = await listBots();
+      const roster: Record<string, string> = {};
+      for (const b of allBots) roster[b.id] = b.name;
+      const keyed = useKeys.getState().present;
+      const hasKey = (p: Provider) => isKeylessProvider(p) || keyed.has(p);
+      const { provider: replyProvider, model: replyModel } = resolveReplyModel(
+        replyBot,
+        provider,
+        model,
+        hasKey,
+      );
+      // Include rows UP TO AND INCLUDING the target reply, so the model sees
+      // the reply it must source.
+      const includedRows = msgs.slice(0, i + 1);
+      const group: GroupContext = {
+        selfBotId: attributeBotId,
+        roster,
+        baseLabel: "Assistant",
+      };
+      const groupBlock: ApiMessage | null =
+        replyBot && groupLabelingActive(includedRows, group)
+          ? {
+              role: "system",
+              content: buildGroupChatSystemText({
+                selfName: replyBot.name,
+                others: groupParticipantNames(
+                  includedRows,
+                  attributeBotId,
+                  roster,
+                ),
+              }),
+              images: [],
+            }
+          : null;
+      const baseHistory: ApiMessage[] = [
+        ...shared.head,
+        ...(botBlock ? [botBlock] : []),
+        ...(groupBlock ? [groupBlock] : []),
+        ...shared.tail,
+        ...compactHistory(
+          includedRows,
+          group,
+          hasRenderer(selectRegistry(usePlugins.getState()), "youtube"),
+        ),
+      ];
+      // Append an ephemeral user turn carrying the sources-request steer.
+      const history = applySourcesSteer(
+        baseHistory,
+        (content): ApiMessage => ({ role: "user", content, images: [] }),
+      );
+
+      let acc = "";
+      const toolCalls: MessageToolCall[] = [];
+      const subagents: MessageSubagent[] = [];
+      const foundImages: MessageImage[] = [];
+      let reasoning = "";
+      const apiTrace: ApiTraceEntry[] = [];
+      const onDelta = (event: StreamEvent) => {
+        if (event.approvalRequest) {
+          const req = event.approvalRequest;
+          if (get().autoApproveSysTools) {
+            void approveToolCall(req.id, true);
+          } else {
+            set({ pendingApproval: req });
+          }
+          return;
+        }
+        applyToolEvent(event, toolCalls);
+        applySubagentEvent(event, subagents);
+        applyTraceEvent(event, apiTrace);
+        if (event.reasoning) reasoning += event.reasoning.text;
+        if (event.toolImages) {
+          for (const img of event.toolImages.images) {
+            foundImages.push({
+              media_type: img.mediaType,
+              data: img.data,
+              source: img.sourceUrl,
+              title: img.title,
+            });
+          }
+        }
+        if (event.text) acc += event.text;
+        set((s) => {
+          const exists = s.messages.some((m) => m.id === STREAM_ID);
+          const base = exists
+            ? s.messages
+            : [
+                ...s.messages,
+                {
+                  id: STREAM_ID,
+                  thread_id: id,
+                  role: "assistant" as const,
+                  content: "",
+                  kind: "normal" as const,
+                  duration_ms: null,
+                  bot_id: attributeBotId,
+                  variant_group: null,
+                  variant_selected: 1,
+                  created_at: "",
+                  images: [],
+                  documents: [],
+                  toolCalls: [],
+                  subagents: [],
+                },
+              ];
+          return {
+            messages: base.map((m) =>
+              m.id === STREAM_ID
+                ? {
+                    ...m,
+                    content: acc,
+                    toolCalls: [...toolCalls],
+                    subagents: [...subagents],
+                    images: [...foundImages],
+                    reasoning: reasoning || undefined,
+                    apiTrace: apiTrace.length ? [...apiTrace] : undefined,
+                  }
+                : m,
+            ),
+            ...(event.toolDone || event.subagent
+              ? { awaitingModel: true }
+              : {}),
+            ...(event.text ? { awaitingModel: false } : {}),
+          };
+        });
+      };
+
+      const started = Date.now();
+      const result = await chatStream(
+        replyProvider,
+        replyModel,
+        history,
+        onDelta,
+        id,
+        thread.deep_research !== 0,
+      );
+      if (
+        result.content.length > 0 ||
+        toolCalls.length > 0 ||
+        subagents.length > 0 ||
+        foundImages.length > 0
+      ) {
+        // Persist as a new standalone assistant message (not in a variant group)
+        // appended after the target reply. variant_group is null so it renders
+        // without variation controls.
+        const sourcesMsg = await addMessage({
+          thread_id: id,
+          role: "assistant",
+          content: result.content,
+          duration_ms: Math.round(Date.now() - started),
+          bot_id: attributeBotId,
+          variant_group: null,
+        });
+        for (const tc of toolCalls) {
+          await addAttachment({
+            message_id: sourcesMsg.id,
+            kind: "tool_call",
+            media_type: "application/json",
+            data: JSON.stringify(persistableToolCall(tc)),
+          });
+        }
+        for (const s of subagents) {
+          await addAttachment({
+            message_id: sourcesMsg.id,
+            kind: "subagent",
+            media_type: "application/json",
+            data: JSON.stringify(persistableSubagent(s)),
+          });
+        }
+        for (const img of foundImages) {
+          await addAttachment({
+            message_id: sourcesMsg.id,
+            kind: "image",
+            media_type: img.media_type,
+            data: img.data,
+            filename: img.source,
+          });
+        }
+        await persistTransparency(sourcesMsg.id, reasoning, apiTrace);
+        const u = result.usage;
+        if (
+          u &&
+          (u.input_tokens > 0 ||
+            u.output_tokens > 0 ||
+            u.cache_creation_tokens > 0 ||
+            u.cache_read_tokens > 0)
+        ) {
+          await addUsage({
+            message_id: sourcesMsg.id,
+            thread_id: id,
+            provider: replyProvider,
+            model: result.model || replyModel,
+            input_tokens: u.input_tokens,
+            output_tokens: u.output_tokens,
+            cache_creation_tokens: u.cache_creation_tokens,
+            cache_read_tokens: u.cache_read_tokens,
+          });
+        }
+      }
+      set({ messages: await loadThreadMessages(id) });
+      await get().refreshThreads();
+    } catch (e) {
+      set({ error: friendlyError(e) });
+      set({ messages: await loadThreadMessages(id) });
+    } finally {
+      set({
+        busy: false,
+        cancelling: false,
+        pendingApproval: null,
+        autoApproveSysTools: false,
+        awaitingModel: false,
+      });
+      void get().refreshSystemTokens();
+    }
   },
 
   compact: async () => {

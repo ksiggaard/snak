@@ -62,6 +62,43 @@ export function planVariants<T extends VariantRow>(rows: readonly T[]): VariantS
   return out;
 }
 
+// ── T56 Request sources ────────────────────────────────────────────────────
+
+/**
+ * The steering instruction appended when the user requests sources for an
+ * assistant reply. Instructs the model to re-examine the claims in its prior
+ * reply, use the search_web / fetch_url tools to verify each one, attach a
+ * markdown footnote to each significant claim, and include a credibility
+ * rating plus a short supporting quote for each source. Claims that cannot be
+ * sourced must be explicitly flagged as unconfirmable — the model must not
+ * fabricate sources.
+ */
+export const REQUEST_SOURCES_STEER =
+  "Please re-examine the claims in your previous reply and back them up with " +
+  "real web sources. Use the search_web and fetch_url tools to find and verify " +
+  "each significant claim. For every claim, add a markdown footnote " +
+  "(e.g. claim text[^1]) and list the sources at the bottom of your reply in " +
+  "standard GFM footnote format. For each source, include: the URL, a " +
+  "credibility rating (High / Medium / Low) with a one-line reason, and a short " +
+  "direct quote from the page that supports the claim. If you cannot find a " +
+  "credible source for a claim, explicitly state that you cannot confirm it — " +
+  "do not invent or hallucinate sources.";
+
+/**
+ * Apply the request-sources steer to an assembled API history that already
+ * includes the target assistant reply. Appends an ephemeral user turn carrying
+ * the steer instruction so the call ends on a user message (valid for every
+ * provider). Unlike `applyRegenSteer`, this does NOT modify an existing user
+ * turn — it always appends a new one, because the history already ends on an
+ * assistant reply.
+ */
+export function applySourcesSteer<T extends Steerable>(
+  history: readonly T[],
+  makeUser: (content: string) => T,
+): T[] {
+  return [...history, makeUser(REQUEST_SOURCES_STEER)];
+}
+
 /** The instruction appended when regenerating, with an optional direction. */
 export function regenSteer(direction: string): string {
   const base =

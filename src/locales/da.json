@@ -132,6 +132,7 @@
     "chat.variationHint": "Kun den viste variation sendes som kontekst.",
     "chat.directionPlaceholder": "Valgfri retning – f.eks. mere professionel",
     "chat.directionGenerate": "Generér",
+    "chat.requestSources": "Anmod om kilder",
     "chat.copyCode": "Kopiér koden",
     "chat.viewImage": "Vis billede",
     "chat.viewDiagram": "Vis diagram",

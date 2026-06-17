@@ -132,6 +132,7 @@
     "chat.variationHint": "Seule la variante affichée est envoyée comme contexte.",
     "chat.directionPlaceholder": "Indication facultative — p. ex. plus professionnel",
     "chat.directionGenerate": "Générer",
+    "chat.requestSources": "Demander des sources",
     "chat.copyCode": "Copier le code",
     "chat.viewImage": "Voir l’image",
     "chat.viewDiagram": "Voir le diagramme",
