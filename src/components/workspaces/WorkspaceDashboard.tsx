@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { FileText, Globe, Image as ImageIcon, MessageSquare, Settings2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,6 +33,12 @@ export function WorkspaceDashboard() {
 
   const profileInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
+
+  const [repositioning, setRepositioning] = useState(false);
+  const [repos, setRepos] = useState({ x: 0.5, y: 0.5, zoom: 1.0 });
+  const [dragStart, setDragStart] = useState<{ mx: number; my: number; x: number; y: number } | null>(null);
+  const [minZoomVal, setMinZoomVal] = useState(1.0);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   const workspace = workspaces.find((w) => w.id === openWorkspaceId);
   if (!workspace) {
@@ -77,6 +83,44 @@ export function WorkspaceDashboard() {
   }
 
   const initial = workspace.name.slice(0, 2).toUpperCase();
+
+  function openReposition() {
+    if (!workspace) return;
+    setRepos({
+      x: workspace.profile_image_x,
+      y: workspace.profile_image_y,
+      zoom: workspace.profile_image_zoom,
+    });
+    setRepositioning(true);
+    // Compute minZoom after next render when imgRef is populated
+    requestAnimationFrame(() => {
+      if (imgRef.current) {
+        const d = 256;
+        setMinZoomVal(d / Math.min(imgRef.current.naturalWidth, imgRef.current.naturalHeight));
+      }
+    });
+  }
+
+  function closeReposition() {
+    setRepositioning(false);
+    setDragStart(null);
+  }
+
+  async function saveReposition() {
+    if (!workspace) return;
+    await setImages(
+      workspace.id,
+      workspace.profile_image,
+      workspace.cover_image,
+      repos.x,
+      repos.y,
+      repos.zoom,
+      workspace.cover_image_x,
+      workspace.cover_image_y,
+    );
+    setRepositioning(false);
+    setDragStart(null);
+  }
 
   return (
     <div aria-label={t("workspace.dashboard")} className="bg-card flex flex-1 flex-col overflow-y-auto rounded-lg border">
@@ -184,11 +228,7 @@ export function WorkspaceDashboard() {
               </div>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-40">
-              <DropdownMenuItem
-                onClick={() => {
-                  /* Opens reposition overlay — handled in Task 8 */
-                }}
-              >
+              <DropdownMenuItem onClick={openReposition}>
                 <ImageIcon className="size-3.5" />
                 {t("workspace.repositionImage")}
               </DropdownMenuItem>
@@ -350,6 +390,83 @@ export function WorkspaceDashboard() {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+      {/* Profile image reposition overlay */}
+      {repositioning && (
+        <div
+          className="bg-background/80 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeReposition();
+          }}
+        >
+          <div className="flex flex-col items-center gap-4">
+            <div
+              className="relative size-64 overflow-hidden rounded-full border-4 border-white/30"
+              onMouseDown={(e) => {
+                if (!imgRef.current) return;
+                setDragStart({
+                  mx: e.clientX,
+                  my: e.clientY,
+                  x: repos.x,
+                  y: repos.y,
+                });
+                e.preventDefault();
+              }}
+              onMouseMove={(e) => {
+                if (!dragStart || !imgRef.current) return;
+                const rect = imgRef.current.getBoundingClientRect();
+                const dx = (e.clientX - dragStart.mx) / rect.width;
+                const dy = (e.clientY - dragStart.my) / rect.height;
+                setRepos((r) => ({
+                  ...r,
+                  x: Math.max(0, Math.min(1, dragStart.x - dx)),
+                  y: Math.max(0, Math.min(1, dragStart.y - dy)),
+                }));
+              }}
+              onMouseUp={() => setDragStart(null)}
+              onMouseLeave={() => setDragStart(null)}
+            >
+              {workspace?.profile_image && (
+                <img
+                  ref={imgRef}
+                  src={`data:image/jpeg;base64,${workspace.profile_image}`}
+                  alt=""
+                  className="h-full w-full object-cover"
+                  style={{
+                    objectPosition: `${repos.x * 100}% ${repos.y * 100}%`,
+                    transform: `scale(${repos.zoom})`,
+                    transformOrigin: "center",
+                  }}
+                  draggable={false}
+                />
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-muted-foreground text-xs">
+                {t("workspace.imageZoom")}
+              </span>
+              <input
+                type="range"
+                min={minZoomVal}
+                max={3.0}
+                step={0.01}
+                value={repos.zoom}
+                onChange={(e) =>
+                  setRepos((r) => ({ ...r, zoom: parseFloat(e.target.value) }))
+                }
+                className="w-32"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={() => void saveReposition()}>
+                {t("common.save")}
+              </Button>
+              <Button size="sm" variant="outline" onClick={closeReposition}>
+                {t("common.cancel")}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>
