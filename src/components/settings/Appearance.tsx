@@ -24,12 +24,14 @@ import {
   CHAT_WIDTH,
   CONTRAST,
   DEFAULT_PICKER_COLORS,
-  RADIUS,
+  DENSITY_LABELS,
   FONT_OPTIONS,
+  RADIUS,
   styleClasses,
   UI_SIZE,
   type ChatListStyle,
   type ChatStyle,
+  type Density,
   type SizeRange,
 } from "@/lib/appearance";
 import {
@@ -48,11 +50,12 @@ import {
  */
 export function Appearance() {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
       <ThemeCard />
       <TitleBarCard />
       <ColorsCard />
       <CornersCard />
+      <DensityCard />
       <AnimationsCard />
       <TypographyCard />
       <ChatStyleCard />
@@ -586,6 +589,39 @@ function AnimationsCard() {
           >
             <ToggleGroupItem value="on">{t("common.on")}</ToggleGroupItem>
             <ToggleGroupItem value="off">{t("common.off")}</ToggleGroupItem>
+          </ToggleGroup>
+        </OptionRow>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** UI density: compact, default, or comfortable. Drives the --density-scale
+ *  CSS variable that components reference for spacing/padding. */
+function DensityCard() {
+  const t = useT();
+  const density = useAppearance((s) => s.density);
+  const setDensity = useAppearance((s) => s.setDensity);
+
+  return (
+    <Card className="w-full max-w-lg">
+      <CardHeader>
+        <CardTitle>{t("density.title")}</CardTitle>
+        <CardDescription>{t("density.description")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <OptionRow label={t("density.label")}>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            spacing={0}
+            value={String(density)}
+            onValueChange={(v) => v && setDensity(Number(v) as Density)}
+          >
+            <ToggleGroupItem value="0">{DENSITY_LABELS[0]}</ToggleGroupItem>
+            <ToggleGroupItem value="1">{DENSITY_LABELS[1]}</ToggleGroupItem>
+            <ToggleGroupItem value="2">{DENSITY_LABELS[2]}</ToggleGroupItem>
           </ToggleGroup>
         </OptionRow>
       </CardContent>

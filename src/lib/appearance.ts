@@ -71,9 +71,11 @@ const TYPOGRAPHY_KEY = "custom-typography";
 const RADIUS_KEY = "custom-radius";
 const CHAT_WIDTH_KEY = "chat-max-width";
 const ANIMATIONS_KEY = "animations";
+const DENSITY_KEY = "density";
 const COLORS_STYLE_ID = "custom-colors";
 const TYPOGRAPHY_STYLE_ID = "custom-typography";
 const RADIUS_STYLE_ID = "custom-radius";
+const DENSITY_STYLE_ID = "custom-density";
 
 // ── UI animations (T46) ─────────────────────────────────────────────────────
 // A single global on/off. Enabled by default; when off, a `.no-animations`
@@ -92,6 +94,38 @@ export function storeAnimations(enabled: boolean): void {
 /** Toggle the `.no-animations` kill-switch class on <html>. */
 export function applyAnimations(enabled: boolean): void {
   document.documentElement.classList.toggle("no-animations", !enabled);
+}
+
+// ── UI density (spacing scale) ───────────────────────────────────────────────
+// 0 = compact (~today's density), 1 = default (airy), 2 = comfortable (generous).
+// Drives a --density-scale CSS variable that components reference via calc().
+
+export type Density = 0 | 1 | 2;
+
+export const DENSITY_SCALE: Record<Density, number> = { 0: 0.75, 1: 1, 2: 1.5 };
+
+export const DENSITY_LABELS: Record<Density, string> = {
+  0: "Compact",
+  1: "Default",
+  2: "Comfortable",
+};
+
+export function getStoredDensity(): Density {
+  const raw = localStorage.getItem(DENSITY_KEY);
+  if (raw === "0") return 0;
+  if (raw === "2") return 2;
+  return 1;
+}
+
+export function storeDensity(d: Density): void {
+  if (d === 1) localStorage.removeItem(DENSITY_KEY);
+  else localStorage.setItem(DENSITY_KEY, String(d));
+}
+
+export function applyDensity(d: Density): void {
+  const scale = DENSITY_SCALE[d];
+  const css = `:root { --density-scale: ${scale}; }`;
+  injectStyle(DENSITY_STYLE_ID, d === 1 ? "" : css);
 }
 
 // ── Chat layout style (T34) & chat-list row style (T35) ─────────────────────
@@ -156,12 +190,12 @@ const CHAT_LIST_STYLE_KEY = "chat-list-style";
 /** Scroll-column gap/padding per chat style, shared by `MessageList` and the
  * settings chat-style preview so the message rhythm matches. */
 export const CHAT_CONTAINER_CLASSES: Record<ChatStyle, string> = {
-  default: "gap-4 p-4",
-  bubbles: "gap-4 p-4",
+  default: "gap-5 p-5",
+  bubbles: "gap-5 p-5",
   compact: "gap-1 p-2",
-  document: "gap-6 p-4",
-  cards: "gap-3 p-4",
-  cozy: "gap-5 p-4",
+  document: "gap-6 p-5",
+  cards: "gap-4 p-5",
+  cozy: "gap-6 p-5",
   terminal: "gap-2 p-3",
   zebra: "gap-2 p-3",
 };
@@ -174,12 +208,12 @@ export const CHAT_CONTAINER_CLASSES: Record<ChatStyle, string> = {
  * gutter on the right (`scrollbar-gutter: stable`). **Keep in sync with
  * CHAT_CONTAINER_CLASSES.** */
 export const CHAT_X_PADDING: Record<ChatStyle, string> = {
-  default: "1rem",
-  bubbles: "1rem",
+  default: "1.25rem",
+  bubbles: "1.25rem",
   compact: "0.5rem",
-  document: "1rem",
-  cards: "1rem",
-  cozy: "1rem",
+  document: "1.25rem",
+  cards: "1.25rem",
+  cozy: "1.25rem",
   terminal: "0.75rem",
   zebra: "0.75rem",
 };
@@ -309,10 +343,8 @@ export const DEFAULT_PICKER_COLORS: Record<
   ColorMode,
   Record<ColorKey, string>
 > = {
-  light: { primary: "#171717", background: "#ffffff", surface: "#000000" },
-  // The default dark palette is the logo colours (baked into `.dark` in
-  // index.css); these source picks seed the pickers + reset targets to match.
-  dark: { primary: "#dc8add", background: "#163e54", surface: "#000000" },
+  light: { primary: "#3b4f94", background: "#fafbfc", surface: "#b8c8e0" },
+  dark: { primary: "#e090e0", background: "#0f2a38", surface: "#1a4a63" },
 };
 
 /** Bounds for the surface-contrast multiplier (1 = the built-in steps). */

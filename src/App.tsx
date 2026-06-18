@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -278,8 +279,8 @@ function App() {
               showCloseButton={false}
               className="bg-sidebar text-sidebar-foreground flex flex-row gap-0 p-0"
               style={{
-                top: menuBarMode === "inline" ? 60 : 32,
-                height: `calc(100% - ${menuBarMode === "inline" ? 60 : 32}px)`,
+                top: menuBarMode === "inline" ? 64 : 36,
+                height: `calc(100% - ${menuBarMode === "inline" ? 64 : 36}px)`,
                 width: compactNav >= 2 ? 320 : 272,
               }}
             >
@@ -293,33 +294,37 @@ function App() {
             </SheetContent>
           </Sheet>
 
-          <main className="flex min-w-0 flex-1 flex-col p-3 md:p-4">
-            {/* Keyed so switching views replays the fade-in (T46). The
-                `.no-animations` kill-switch makes this instant when disabled. */}
-            <div
-              key={
-                view === "settings" || view === "usage"
-                  ? view
-                  : openBotId
-                    ? `bot:${openBotId}`
-                    : openWorkspaceId
-                      ? `workspace:${openWorkspaceId}`
-                      : "chat"
-              }
-              className="animate-in fade-in-0 flex min-h-0 flex-1 flex-col duration-200"
-            >
-              {view === "settings" ? (
-                <SettingsView />
-              ) : view === "usage" ? (
-                <UsageView />
-              ) : openBotId ? (
-                <BotView />
-              ) : openWorkspaceId ? (
-                <WorkspacePage />
-              ) : (
-                <ChatView />
-              )}
-            </div>
+          <main className="flex min-w-0 flex-1 flex-col p-[calc(1.25rem*var(--density-scale,1))] md:p-[calc(1.5rem*var(--density-scale,1))]">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={
+                  view === "settings" || view === "usage"
+                    ? view
+                    : openBotId
+                      ? `bot:${openBotId}`
+                      : openWorkspaceId
+                        ? `workspace:${openWorkspaceId}`
+                        : "chat"
+                }
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.15, ease: "easeOut" }}
+                className="flex min-h-0 flex-1 flex-col"
+              >
+                {view === "settings" ? (
+                  <SettingsView />
+                ) : view === "usage" ? (
+                  <UsageView />
+                ) : openBotId ? (
+                  <BotView />
+                ) : openWorkspaceId ? (
+                  <WorkspacePage />
+                ) : (
+                  <ChatView />
+                )}
+              </motion.div>
+            </AnimatePresence>
           </main>
         </div>
       </div>

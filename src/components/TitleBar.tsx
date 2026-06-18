@@ -39,7 +39,7 @@ export function TitleBar() {
   const showControls = barMode === "custom";
 
   return (
-    <div className="bg-sidebar text-sidebar-foreground flex h-8 shrink-0 select-none items-center">
+    <div className="bg-sidebar text-sidebar-foreground flex h-9 shrink-0 select-none items-center">
       {showControls && controlsSide === "left" && (
         <WindowControls style={controlsStyle} />
       )}

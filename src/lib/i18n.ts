@@ -605,6 +605,10 @@ export const en = {
   "animations.description":
     "Subtle motion throughout the app — views fade in, the sidebar slides, the thinking indicator pulses. Turn off for a fully static UI.",
   "animations.label": "UI animations",
+  "density.title": "Density",
+  "density.description":
+    "How much breathing room the UI has — scaling padding and gaps throughout. Compact matches the original layout; Comfortable adds generous space.",
+  "density.label": "Spacing density",
 
   // --- Settings: appearance — typography card ------------------------------------------------------------------------------
   "typography.title": "Typography",

@@ -1,3 +1,4 @@
+import { motion } from "framer-motion";
 import { SidebarPane } from "./SidebarPane";
 import { SidebarResizeHandle } from "./SidebarResizeHandle";
 import { useLayout } from "@/store/layout";
@@ -9,12 +10,16 @@ export function Sidebar() {
   const width = useLayout((s) => s.sidebarWidth);
 
   return (
-    <aside
-      className="bg-sidebar text-sidebar-foreground border-sidebar-border animate-in slide-in-from-left-4 fade-in-0 relative flex shrink-0 flex-col border-r duration-200"
+    <motion.aside
+      initial={{ x: -16, opacity: 0 }}
+      animate={{ x: 0, opacity: 1 }}
+      exit={{ x: -16, opacity: 0 }}
+      transition={{ type: "spring", stiffness: 400, damping: 30 }}
+      className="bg-sidebar text-sidebar-foreground border-sidebar-border relative flex shrink-0 flex-col border-r"
       style={{ width }}
     >
       <SidebarPane />
       <SidebarResizeHandle />
-    </aside>
+    </motion.aside>
   );
 }

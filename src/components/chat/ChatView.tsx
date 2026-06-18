@@ -207,10 +207,10 @@ export function ChatView() {
   const pending = busy && (!last || last.role === "user" || awaitingModel);
 
   return (
-    <div className="relative flex flex-1 flex-row gap-3 overflow-hidden">
+    <div className="relative flex flex-1 flex-row gap-4 overflow-hidden">
       <div
         className={cn(
-          "flex min-w-0 flex-1 flex-col gap-3 overflow-hidden",
+          "flex min-w-0 flex-1 flex-col gap-4 overflow-hidden",
           // Incognito identity (T36): the whole chat surface reads as a
           // distinct, temporary space — dashed border + muted tint.
           incognito &&
@@ -245,7 +245,7 @@ export function ChatView() {
           }}
         >
           <div
-            className="mx-auto flex w-full flex-col gap-3"
+            className="mx-auto flex w-full flex-col gap-4"
             style={{ maxWidth: chatMaxWidth ?? undefined }}
           >
             {error && <p className="text-destructive px-1 text-sm">{error}</p>}

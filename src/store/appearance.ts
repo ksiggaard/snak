@@ -4,6 +4,7 @@ import {
   applyCustomColors,
   applyCustomRadius,
   applyCustomTypography,
+  applyDensity,
   applyScrollbarWidth,
   clampContrast,
   clampSize,
@@ -12,6 +13,7 @@ import {
   getStoredChatMaxWidth,
   getStoredChatStyle,
   getStoredCustomColors,
+  getStoredDensity,
   getStoredRadius,
   getStoredTypography,
   isHexColor,
@@ -22,6 +24,7 @@ import {
   storeChatMaxWidth,
   storeChatStyle,
   storeCustomColors,
+  storeDensity,
   storeRadius,
   storeTypography,
   type ChatListStyle,
@@ -29,6 +32,7 @@ import {
   type ColorKey,
   type ColorMode,
   type CustomColors,
+  type Density,
   type TypographyPrefs,
 } from "@/lib/appearance";
 
@@ -47,6 +51,8 @@ interface AppearanceState {
   animations: boolean;
   /** Chat column max-width in px; `null` = off (full width). Default 760. */
   chatMaxWidth: number | null;
+  /** UI density level: 0=compact, 1=default, 2=comfortable. */
+  density: Density;
 
   /** Set one color pick for one mode, persist, and re-apply the overrides. */
   setColor: (mode: ColorMode, key: ColorKey, hex: string) => void;
@@ -68,6 +74,8 @@ interface AppearanceState {
   setAnimations: (enabled: boolean) => void;
   /** Set the chat column max-width (number = capped px, `null` = off). */
   setChatMaxWidth: (v: number | null) => void;
+  /** Set UI density (0=compact, 1=default, 2=comfortable). */
+  setDensity: (d: Density) => void;
 }
 
 export const useAppearance = create<AppearanceState>((set, get) => ({
@@ -78,6 +86,7 @@ export const useAppearance = create<AppearanceState>((set, get) => ({
   radius: getStoredRadius(),
   animations: getStoredAnimations(),
   chatMaxWidth: getStoredChatMaxWidth(),
+  density: getStoredDensity(),
 
   setColor: (mode, key, hex) => {
     if (!isHexColor(hex)) return;
@@ -151,6 +160,11 @@ export const useAppearance = create<AppearanceState>((set, get) => ({
     storeChatMaxWidth(v);
     set({ chatMaxWidth: v === null ? null : clampSize(v, CHAT_WIDTH) });
   },
+  setDensity: (d) => {
+    storeDensity(d);
+    applyDensity(d);
+    set({ density: d });
+  },
 }));
 
 // Apply the stored overrides as soon as this module loads (before first
@@ -161,6 +175,7 @@ applyCustomColors(getStoredCustomColors());
 applyCustomTypography(getStoredTypography());
 applyCustomRadius(getStoredRadius());
 applyAnimations(getStoredAnimations());
+applyDensity(getStoredDensity());
 
 // Publish the OS scrollbar width so the composer can line up with the message
 // column (see lib/appearance.ts). Re-measured on focus/resize because macOS's

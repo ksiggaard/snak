@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BotAvatar } from "@/components/bots/BotAvatar";
@@ -129,7 +130,12 @@ export function EmptySuggestions({ bot }: { bot?: Bot | null }) {
     <div className="flex flex-1 items-center justify-center overflow-y-auto p-4">
       <div className="flex w-full max-w-2xl flex-col items-center gap-6">
         <div className="flex flex-col items-center gap-1 text-center">
-          <Sparkles className="text-primary mb-1 size-8" aria-hidden />
+          <motion.div
+            animate={{ opacity: [0.7, 1, 0.7] }}
+            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <Sparkles className="text-primary mb-1 size-8" aria-hidden />
+          </motion.div>
           <h2 className="text-foreground text-lg font-semibold">
             {t("chat.suggestionsTitle")}
           </h2>

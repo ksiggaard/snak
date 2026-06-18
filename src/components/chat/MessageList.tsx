@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   BookOpenText,
   Brain,
@@ -1260,90 +1261,101 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
         CHAT_CONTAINER_CLASSES[chatStyle],
       )}
     >
-      {messages.map((m, idx) =>
-        m.kind === "summary" ? (
-          // Compaction point (T28): a divider, not a chat bubble. The summary
-          // text is kept available behind a disclosure — the API context for
-          // later turns starts here, but the full transcript above remains.
-          <div
-            key={m.id}
-            ref={(el) => {
-              if (el) messageRefs.current.set(m.id, el);
-              else messageRefs.current.delete(m.id);
-            }}
-            className={cn(
-              "mx-auto w-full scroll-mt-4",
-              flashId === m.id &&
-                "ring-primary rounded-lg ring-2 ring-offset-2",
-            )}
-            style={{ maxWidth: chatMaxWidth ?? undefined }}
-          >
-            <div className="text-muted-foreground flex items-center gap-2 text-xs">
-              <div className="bg-border h-px flex-1" />
-              <FoldVertical className="size-3 shrink-0" aria-hidden />
-              <details className="min-w-0">
-                <summary className="cursor-pointer select-none">
-                  {t("chat.compacted")}
-                </summary>
-                <div className="bg-muted/40 text-foreground/90 mt-2 rounded-md border p-3 text-sm">
-                  <Markdown content={m.content} />
-                </div>
-              </details>
-              <div className="bg-border h-px flex-1" />
-            </div>
-          </div>
-        ) : (
-          <ChatMessage
-            key={m.id}
-            m={m}
-            chatStyle={chatStyle}
-            flashed={flashId === m.id}
-            now={now}
-            bot={bot}
-            latestReply={idx === lastAssistantIndex}
-            imageLabelStart={imageOffsets[idx]}
-            videoLabelStart={videoOffsets[idx]}
-            mentionBot={
-              m.bot_id ? (bots.find((b) => b.id === m.bot_id) ?? null) : null
-            }
-            innerRef={(el) => {
-              if (el) messageRefs.current.set(m.id, el);
-              else messageRefs.current.delete(m.id);
-            }}
-            maxWidth={capped && !wideIds.has(m.id) ? chatMaxWidth : undefined}
-            wide={wideIds.has(m.id)}
-            onToggleWide={capped ? () => toggleWide(m.id) : undefined}
-          />
-        ),
-      )}
+      <AnimatePresence mode="popLayout">
+        {messages.map((m, idx) =>
+          m.kind === "summary" ? (
+            <motion.div
+              key={m.id}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              ref={(el: HTMLDivElement | null) => {
+                if (el) messageRefs.current.set(m.id, el);
+                else messageRefs.current.delete(m.id);
+              }}
+              className={cn(
+                "mx-auto w-full scroll-mt-4",
+                flashId === m.id &&
+                  "ring-primary rounded-lg ring-2 ring-offset-2",
+              )}
+              style={{ maxWidth: chatMaxWidth ?? undefined }}
+            >
+              <div className="text-muted-foreground flex items-center gap-2 text-xs">
+                <div className="bg-border h-px flex-1" />
+                <FoldVertical className="size-3 shrink-0" aria-hidden />
+                <details className="min-w-0">
+                  <summary className="cursor-pointer select-none">
+                    {t("chat.compacted")}
+                  </summary>
+                  <div className="bg-muted/40 text-foreground/90 mt-2 rounded-md border p-3 text-sm">
+                    <Markdown content={m.content} />
+                  </div>
+                </details>
+                <div className="bg-border h-px flex-1" />
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key={m.id}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            >
+              <ChatMessage
+                m={m}
+                chatStyle={chatStyle}
+                flashed={flashId === m.id}
+                now={now}
+                bot={bot}
+                latestReply={idx === lastAssistantIndex}
+                imageLabelStart={imageOffsets[idx]}
+                videoLabelStart={videoOffsets[idx]}
+                mentionBot={
+                  m.bot_id ? (bots.find((b) => b.id === m.bot_id) ?? null) : null
+                }
+                innerRef={(el) => {
+                  if (el) messageRefs.current.set(m.id, el);
+                  else messageRefs.current.delete(m.id);
+                }}
+                maxWidth={capped && !wideIds.has(m.id) ? chatMaxWidth : undefined}
+                wide={wideIds.has(m.id)}
+                onToggleWide={capped ? () => toggleWide(m.id) : undefined}
+              />
+            </motion.div>
+          ),
+        )}
+      </AnimatePresence>
       {pending && (
         <div
           className="mx-auto flex w-full justify-start"
           style={{ maxWidth: chatMaxWidth ?? undefined }}
         >
           <div className="text-muted-foreground flex items-center gap-1.5 text-sm">
-            {/* T57 — rotating loading phrase. The key prop forces a DOM remount
-                on each tick so the CSS fade-in plays again. When animations are
-                off (T46) or the OS prefers reduced-motion, the CSS global
-                kill-switch collapses the animation to ~0ms — the text still
-                rotates but without the motion, which is appropriate. */}
             <span
               key={animations ? loadingKey : undefined}
               className={animations ? "snak-loading-message" : undefined}
             >
               {t(loadingKey)}
             </span>
-            {/* Three dots pulsing in sequence (T46). Static when animations
-                are off — the kill-switch zeroes the animation. */}
-            <span aria-hidden className="flex gap-0.5">
-              {[0, 0.2, 0.4].map((delay, i) => (
-                <span
-                  key={i}
-                  className="snak-thinking-dot bg-muted-foreground inline-block size-1 rounded-full"
-                  style={{ animationDelay: `${delay}s` }}
-                />
-              ))}
-            </span>
+            {animations ? (
+              <motion.span
+                aria-hidden
+                className="bg-muted-foreground/30 inline-block h-3 w-8 rounded-full"
+                animate={{ opacity: [0.3, 0.7, 0.3] }}
+                transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+              />
+            ) : (
+              <span aria-hidden className="flex gap-0.5">
+                {[0, 0.2, 0.4].map((_delay, i) => (
+                  <span
+                    key={i}
+                    className="bg-muted-foreground inline-block size-1 rounded-full opacity-30"
+                  />
+                ))}
+              </span>
+            )}
           </div>
         </div>
       )}

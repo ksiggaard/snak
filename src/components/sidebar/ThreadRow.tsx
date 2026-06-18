@@ -159,8 +159,8 @@ export function ThreadRow({
       <ContextMenuTrigger asChild disabled={editing}>
         <div
           className={cn(
-            "group relative flex items-center gap-1 rounded-md px-2",
-            compact ? "py-0.5" : "py-1.5",
+            "group relative flex items-center gap-1 rounded-md px-3",
+            compact ? "py-1" : "py-2",
             active
               ? "bg-primary/10 hover:bg-primary/15"
               : "hover:bg-sidebar-accent/50",

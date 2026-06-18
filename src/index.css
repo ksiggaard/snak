@@ -46,6 +46,10 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
+    --shadow-xs: 0 0.5px 1px rgb(0 0 0 / 0.06);
+    --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.08);
+    --shadow-md: 0 2px 8px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 4px 16px rgb(0 0 0 / 0.12);
 }
 
 /* ── Theme CSS-variable contract (T11) ──────────────────────────────────────
@@ -71,78 +75,77 @@
     /* Native widgets (select dropdown lists, scrollbars, color inputs) follow
        the active mode instead of WebKitGTK's light defaults. */
     color-scheme: light;
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
+    --density-scale: 1;
+    --background: oklch(0.985 0.002 240);
+    --foreground: oklch(0.18 0.006 260);
     --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
+    --card-foreground: oklch(0.18 0.006 260);
     --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.18 0.006 260);
+    --primary: oklch(0.35 0.06 260);
     --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.965 0.003 240);
+    --secondary-foreground: oklch(0.25 0.008 260);
+    --muted: oklch(0.965 0.003 240);
+    --muted-foreground: oklch(0.52 0.012 260);
+    --accent: oklch(0.955 0.02 260);
+    --accent-foreground: oklch(0.25 0.008 260);
     --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
+    --border: oklch(0.91 0.008 260);
+    --input: oklch(0.91 0.008 260);
+    --ring: oklch(0.65 0.04 260);
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
     --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
+    --sidebar: oklch(0.975 0.003 240);
+    --sidebar-foreground: oklch(0.18 0.006 260);
+    --sidebar-primary: oklch(0.35 0.06 260);
     --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+    --sidebar-accent: oklch(0.955 0.02 260);
+    --sidebar-accent-foreground: oklch(0.25 0.008 260);
+    --sidebar-border: oklch(0.91 0.008 260);
+    --sidebar-ring: oklch(0.65 0.04 260);
 }
 
 .dark {
-    /* Default dark palette = the logo colours (accent #dc8add, background
-       #163e54, mix #000000). These surface/foreground values are the exact
-       output of the Appearance color pipeline (buildColorCss → derivedSurfaceDecls)
-       for those three picks, baked in at the base layer so installed themes (T11)
-       and user picker overrides still win by load order / specificity. */
+    /* Rich dark palette: deep warm-teal background with better surface
+       differentiation and a vibrant magenta accent. Surface tokens step
+       visibly so cards, sidebar, and muted areas are clearly distinct. */
     color-scheme: dark;
-    --background: #153b50;
-    --foreground: #ffffff;
-    --card: #14374b;
-    --card-foreground: #ffffff;
-    --popover: #14374b;
-    --popover-foreground: #ffffff;
-    --primary: #dc8add;
-    --primary-foreground: #171717;
-    --secondary: #123345;
-    --secondary-foreground: #ffffff;
-    --muted: #123345;
-    --muted-foreground: #a1b1b9;
-    --accent: #123345;
-    --accent-foreground: #ffffff;
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: #113042;
-    --input: #113042;
-    --ring: #0e2836;
+    --background: #0f2a38;
+    --foreground: #f0f4f6;
+    --card: #133449;
+    --card-foreground: #f0f4f6;
+    --popover: #133449;
+    --popover-foreground: #f0f4f6;
+    --primary: #e090e0;
+    --primary-foreground: #0f1a24;
+    --secondary: #163e54;
+    --secondary-foreground: #e4eaf0;
+    --muted: #153b50;
+    --muted-foreground: #8a9ba8;
+    --accent: #1a4a63;
+    --accent-foreground: #e4eaf0;
+    --destructive: oklch(0.65 0.2 22);
+    --border: #1a4a63;
+    --input: #1a4a63;
+    --ring: #2a5f7a;
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
-    --sidebar: #133548;
-    --sidebar-foreground: #ffffff;
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: #123345;
-    --sidebar-accent-foreground: #ffffff;
-    --sidebar-border: #113042;
-    --sidebar-ring: #0e2836;
+    --sidebar: #0d2633;
+    --sidebar-foreground: #e4eaf0;
+    --sidebar-primary: #e090e0;
+    --sidebar-primary-foreground: #0f1a24;
+    --sidebar-accent: #153b50;
+    --sidebar-accent-foreground: #e4eaf0;
+    --sidebar-border: #1a4a63;
+    --sidebar-ring: #2a5f7a;
 }
 
 @layer base {
@@ -155,6 +158,15 @@
   html {
     @apply font-sans;
     }
+
+  button:not([disabled]),
+  a:not([disabled]) {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  button:not([disabled]):active,
+  a:not([disabled]):active {
+    transform: scale(0.98);
+  }
 }
 
 /* Quick-input overlay window: transparent background so the floating card's
@@ -224,6 +236,16 @@ html.overlay #root {
   transition-duration: 0.001ms !important;
   transition-delay: 0ms !important;
   scroll-behavior: auto !important;
+}
+
+/* Settings cards: subtle lift on hover for depth feedback.
+   Respects the no-animations / prefers-reduced-motion kill switches above. */
+.card-hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.card-hover-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 @media (prefers-reduced-motion: reduce) {
