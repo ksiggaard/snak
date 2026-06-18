@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { Ghost, PanelRight, ShieldAlert } from "lucide-react";
+import { Brain, Ghost, PanelRight, ShieldAlert } from "lucide-react";
 import { MessageList } from "@/components/chat/MessageList";
 import { Composer } from "@/components/chat/Composer";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { Button } from "@/components/ui/button";
 import { useThreads } from "@/store/threads";
 import { useBots } from "@/store/bots";
+import { useKeys } from "@/store/keys";
 import { useAppearance } from "@/store/appearance";
 import { useT } from "@/store/i18n";
 import { isKeylessProvider, useProviders } from "@/lib/providers";
@@ -93,6 +94,49 @@ function ApprovalGate({
           {t("chat.deny")}
         </Button>
       </div>
+    </div>
+  );
+}
+
+/** Planner mode toggle bar: shown above the composer when at least two distinct
+ *  models are available. Lets the user toggle planner orchestration on/off for
+ *  the current chat. */
+function PlannerToggleBar() {
+  const t = useT();
+  const currentThreadId = useThreads((s) => s.currentThreadId);
+  const threads = useThreads((s) => s.threads);
+  const draftUsePlanner = useThreads((s) => s.draftUsePlanner);
+  const setUsePlanner = useThreads((s) => s.setUsePlanner);
+  const providers = useProviders();
+  const present = useKeys((s) => s.present);
+
+  // Only show when ≥2 distinct providers are keyed (planner needs choices).
+  const keyedCount = providers.filter(
+    (p) => isKeylessProvider(p.id) || present.has(p.id),
+  ).length;
+  if (keyedCount < 2) return null;
+
+  const thread = threads.find((t) => t.id === currentThreadId);
+  const plannerActive = currentThreadId
+    ? (thread?.planner_active ?? 0) !== 0
+    : draftUsePlanner;
+
+  return (
+    <div className="flex items-center justify-center">
+      <button
+        type="button"
+        onClick={() => void setUsePlanner(!plannerActive)}
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition-colors",
+          plannerActive
+            ? "bg-primary/10 text-primary hover:bg-primary/15"
+            : "text-muted-foreground hover:bg-accent hover:text-foreground",
+        )}
+        title={t(plannerActive ? "planner.toggleOn" : "planner.toggleOff")}
+      >
+        <Brain className="size-3.5 shrink-0" />
+        <span>{t("planner.title")}</span>
+      </button>
     </div>
   );
 }
@@ -205,6 +249,7 @@ export function ChatView() {
             style={{ maxWidth: chatMaxWidth ?? undefined }}
           >
             {error && <p className="text-destructive px-1 text-sm">{error}</p>}
+            <PlannerToggleBar />
             <ApprovalGate providerLabel={providerLabel} local={providerLocal} />
             <Composer
               onSend={(text, images, documents) =>

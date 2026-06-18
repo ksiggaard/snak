@@ -639,6 +639,24 @@
     "appearance.theme.dark": "Dunkel",
     "menu.zoomIn": "Vergrößern",
     "menu.zoomOut": "Verkleinern",
-    "menu.resetZoom": "Zoom zurücksetzen"
+    "menu.resetZoom": "Zoom zurücksetzen",
+    "models.notesLabel": "Notizen",
+    "models.notesPlaceholder": "Wofür dieses Modell geeignet ist (z.B. ideal für Programmierung)",
+    "settings.nav.planner": "Planer",
+    "planner.title": "Planer-Modell",
+    "planner.description": "Wähle ein Modell zur Orchestrierung komplexer Aufgaben. Der Planer analysiert Anfragen und verteilt sie auf die besten Modelle.",
+    "planner.modelLabel": "Planer-Modell",
+    "planner.defaultToggle": "Planer für neue Chats als Standard verwenden",
+    "planner.needsMoreModels": "Ein Planer ist am nützlichsten mit mindestens zwei Modellen. Füge API-Schlüssel hinzu.",
+    "planner.planning": "Plane…",
+    "planner.stepRunning": "Läuft",
+    "planner.stepDone": "Fertig",
+    "planner.badge": "Planer",
+    "planner.planTitle": "Plan",
+    "planner.stepLabel": "Schritt {n}",
+    "planner.synthesisLabel": "Zusammenfassung",
+    "planner.toggleOn": "Planer-Modus ein",
+    "planner.toggleOff": "Planer-Modus aus",
+    "planner.toggleHint": "Das Planer-Modell entscheidet, wie Anfragen bearbeitet werden — Weiterleitung oder parallele Schritte."
   }
 }

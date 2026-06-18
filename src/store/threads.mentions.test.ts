@@ -47,6 +47,7 @@ import {
   listBotMemory,
 } from "@/lib/db";
 import { chatStream, type ApiMessage } from "@/lib/chat";
+import type { Message, MessageKind } from "@/types/db";
 import { loadThreadMessages, type MessageView } from "@/lib/messages";
 import { runPersonaMemoryUpdate } from "@/lib/personaMemory";
 import { PROVIDERS } from "@/lib/providers";
@@ -91,6 +92,9 @@ const thread = (over: Partial<Thread>): Thread => ({
   deep_research: 0,
   bot_id: null,
   workspace_files_excluded: null,
+  planner_active: 0,
+  pre_planner_provider: null,
+  pre_planner_model: null,
   created_at: "2026-06-13 00:00:00",
   updated_at: "2026-06-13 00:00:00",
   ...over,
@@ -130,20 +134,15 @@ beforeEach(() => {
   rows = [];
   vi.mocked(loadThreadMessages).mockImplementation(async () => [...rows]);
   vi.mocked(addMessage).mockImplementation(
-    async (input: {
-      thread_id: string;
-      role: MessageView["role"];
-      content: string;
-      bot_id?: string | null;
-      variant_group?: string | null;
-    }) => {
+    async (input) => {
       const id = `m${rows.length + 1}`;
-      const m = {
+      const m: Message = {
         id,
-        kind: "normal" as const,
-        duration_ms: null,
-        created_at: "2026-06-13 00:00:00",
-        ...input,
+        thread_id: input.thread_id,
+        role: input.role,
+        content: input.content,
+        kind: (input.kind as MessageKind) ?? "normal",
+        duration_ms: input.duration_ms ?? null,
         bot_id: input.bot_id ?? null,
         variant_group:
           input.variant_group !== undefined
@@ -152,6 +151,9 @@ beforeEach(() => {
               ? id
               : null,
         variant_selected: 1,
+        provider: input.provider ?? null,
+        model: input.model ?? null,
+        created_at: "2026-06-13 00:00:00",
       };
       rows.push({
         ...m,

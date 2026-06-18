@@ -13,6 +13,7 @@ import {
   listBots,
   listWorkspaceFiles,
   listWorkspaceMemory,
+  restoreThreadPrePlannerModel,
   setThreadWorkspaceFilesExcluded,
   listThreads,
   listUserMemory,
@@ -23,6 +24,7 @@ import {
   setThreadArchived,
   setThreadDeepResearch,
   setThreadFavorite,
+  setThreadPlannerActive,
   setThreadWorkspace,
   setThreadProviderModel,
   SYSTEM_PROMPT_ADDENDUM_KEY,
@@ -69,6 +71,12 @@ import { buildYouTubeSystemText } from "@/lib/youtube";
 import { hasRenderer } from "@/lib/plugins";
 import { selectRegistry, usePlugins } from "@/store/plugins";
 import { useKeys } from "@/store/keys";
+import { useModels } from "@/store/models";
+import {
+  buildPlannerSystemPrompt,
+  parsePlan,
+  resolveStepVariables,
+} from "@/lib/planner";
 import {
   buildGlobalSystemText,
   buildWorkspaceMemoryText,
@@ -84,6 +92,9 @@ import type { Bot, Provider, Thread } from "@/types/db";
 const LAST_THREAD_KEY = "last_thread_id";
 export const DEFAULT_PROVIDER_KEY = "default_provider";
 export const DEFAULT_MODEL_KEY = "default_model";
+export const PLANNER_PROVIDER_KEY = "planner_provider";
+export const PLANNER_MODEL_KEY = "planner_model";
+export const PLANNER_DEFAULT_KEY = "planner_default";
 // Sentinel id for the in-progress assistant message shown while streaming;
 // replaced by the persisted DB row once the stream completes. Exported so the
 // renderer can tell a not-yet-persisted placeholder from a real message (e.g.
@@ -175,6 +186,13 @@ interface ThreadsState {
   /** Provider/model new interactions start from (persisted default). */
   defaultProvider: Provider;
   defaultModel: string;
+  /** Planner model: orchestrates complex multi-model tasks. */
+  plannerProvider: Provider;
+  plannerModel: string;
+  /** Whether planner mode is the default for new chats. */
+  plannerDefault: boolean;
+  /** Whether the current draft (or thread) should use planner orchestration. */
+  draftUsePlanner: boolean;
   /** Workspace a new (draft) chat will be created in, or null for none. */
   draftWorkspaceId: string | null;
   /** Workspace-file ids excluded from context for the current draft chat (T61).
@@ -253,6 +271,12 @@ interface ThreadsState {
   focusComposer: () => void;
   /** Persist the default provider+model for new interactions. */
   setDefaultModel: (provider: Provider, model: string) => Promise<void>;
+  /** Persist the planner provider+model. */
+  setPlannerModel: (provider: Provider, model: string) => Promise<void>;
+  /** Persist whether planner mode is the default for new chats. */
+  setPlannerDefault: (on: boolean) => Promise<void>;
+  /** Toggle planner mode on/off for the current thread (or draft). */
+  setUsePlanner: (on: boolean) => Promise<void>;
   /** Recompute `systemTokens` for the current thread/draft (skills + global +
    * persona + workspace blocks). Cheap DB/store reads; never throws. */
   refreshSystemTokens: () => Promise<void>;
@@ -538,6 +562,10 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   draftModel: PROVIDERS[0].defaultModel,
   defaultProvider: PROVIDERS[0].id,
   defaultModel: PROVIDERS[0].defaultModel,
+  plannerProvider: PROVIDERS[0].id,
+  plannerModel: PROVIDERS[0].defaultModel,
+  plannerDefault: false,
+  draftUsePlanner: false,
   draftWorkspaceId: null,
   draftExcludedFileIds: [],
   draftIncognito: false,
@@ -572,11 +600,23 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       getSetting(DEFAULT_MODEL_KEY),
     ]);
     const def = resolveDefault(dp, dm);
+    // Load planner settings.
+    const [pp, pm, pdRaw] = await Promise.all([
+      getSetting(PLANNER_PROVIDER_KEY),
+      getSetting(PLANNER_MODEL_KEY),
+      getSetting(PLANNER_DEFAULT_KEY),
+    ]);
+    const plannerDef = resolveDefault(pp, pm);
+    const plannerDefault = pdRaw === "1";
     set({
       defaultProvider: def.provider,
       defaultModel: def.model,
       draftProvider: def.provider,
       draftModel: def.model,
+      plannerProvider: plannerDef.provider,
+      plannerModel: plannerDef.model,
+      plannerDefault,
+      draftUsePlanner: plannerDefault,
     });
     const lastId = await getSetting(LAST_THREAD_KEY);
     if (lastId && threads.some((t) => t.id === lastId)) {
@@ -608,6 +648,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   },
 
   startNewChat: (opts) => {
+    const usePlanner = get().plannerDefault;
     set({
       currentThreadId: null,
       messages: [],
@@ -619,6 +660,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       draftBotId: null,
       draftProvider: get().defaultProvider,
       draftModel: get().defaultModel,
+      draftUsePlanner: usePlanner,
     });
     void get().refreshSystemTokens();
     // Move focus to the Composer so the user can start typing immediately,
@@ -727,6 +769,46 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       defaultModel: model,
       ...(onDraft ? { draftProvider: provider, draftModel: model } : {}),
     });
+  },
+
+  setPlannerModel: async (provider, model) => {
+    await setSetting(PLANNER_PROVIDER_KEY, provider);
+    await setSetting(PLANNER_MODEL_KEY, model);
+    set({ plannerProvider: provider, plannerModel: model });
+  },
+
+  setPlannerDefault: async (on) => {
+    await setSetting(PLANNER_DEFAULT_KEY, on ? "1" : "0");
+    set({ plannerDefault: on });
+  },
+
+  setUsePlanner: async (on) => {
+    const id = get().currentThreadId;
+    if (!id) {
+      // Draft: just toggle the flag. The draft provider/model stay as-is;
+      // the planner model is used at send time when draftUsePlanner is true.
+      set({ draftUsePlanner: on });
+      return;
+    }
+    // Saved thread: persist the planner flag and save/restore pre-planner model.
+    const thread = get().threads.find((t) => t.id === id);
+    if (!thread) return;
+    if (on) {
+      // Save the current provider/model so we can restore when toggling off.
+      await setThreadPlannerActive(id, true, thread.provider, thread.model);
+      // Swap thread to use the planner model.
+      const { plannerProvider, plannerModel } = get();
+      await setThreadProviderModel(id, plannerProvider, plannerModel);
+    } else {
+      // Restore the pre-planner provider/model.
+      await restoreThreadPrePlannerModel(id);
+      await setThreadPlannerActive(id, false);
+    }
+    await get().refreshThreads();
+    // Reload messages so the UI reflects the updated thread.
+    if (id === get().currentThreadId) {
+      set({ messages: await loadThreadMessages(id) });
+    }
   },
 
   refreshSystemTokens: async () => {
@@ -909,6 +991,280 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       const shared = await loadSharedSystemBlocks(workspaceId, excludedFileIds);
       const threadId = id; // non-null capture for the closures below
 
+      // Planner mode: the planner model orchestrates the response instead of
+      // sending directly to a single model. Skip @-mentions — the planner
+      // itself can decide to delegate to different models.
+      const threadPlannerActive =
+        (get().threads.find((t) => t.id === threadId)?.planner_active ?? 0) !==
+        0;
+      const usePlanner = threadPlannerActive || get().draftUsePlanner;
+
+      const runPlannerOrchestration = async (
+        tid: string,
+        rows: MessageView[],
+        sysBlocks: { head: ApiMessage[]; tail: ApiMessage[] },
+      ) => {
+        const { plannerProvider, plannerModel } = get();
+        const allModels = useModels.getState().models;
+        const plannerPrompt = buildPlannerSystemPrompt(allModels, PROVIDERS);
+
+        // Build API history: planner system prompt first, then shared context,
+        // then the conversation history.
+        const history: ApiMessage[] = [
+          { role: "system", content: plannerPrompt, images: [] },
+          ...sysBlocks.head,
+          ...sysBlocks.tail,
+          ...compactHistory(
+            rows,
+            { selfBotId: null, roster: {}, baseLabel: "Assistant" },
+            hasRenderer(selectRegistry(usePlugins.getState()), "youtube"),
+          ),
+        ];
+
+        // Stream the planner's output into a placeholder.
+        let plannerAcc = "";
+        const plannerToolCalls: MessageToolCall[] = [];
+        const plannerSubagents: MessageSubagent[] = [];
+        let plannerReasoning = "";
+        const plannerApiTrace: ApiTraceEntry[] = [];
+
+        const onDelta = (event: StreamEvent) => {
+          applyToolEvent(event, plannerToolCalls);
+          applySubagentEvent(event, plannerSubagents);
+          applyTraceEvent(event, plannerApiTrace);
+          if (event.reasoning) plannerReasoning += event.reasoning.text;
+          if (event.text) plannerAcc += event.text;
+          set((s) => {
+            const exists = s.messages.some((m) => m.id === STREAM_ID);
+            const base = exists
+              ? s.messages
+              : [
+                  ...s.messages,
+                  {
+                    id: STREAM_ID,
+                    thread_id: tid,
+                    role: "assistant" as const,
+                    content: "",
+                    kind: "normal" as const,
+                    duration_ms: null,
+                    bot_id: null,
+                    variant_group: null,
+                    variant_selected: 1,
+                    created_at: "",
+                    provider: plannerProvider,
+                    model: plannerModel,
+                    images: [],
+                    documents: [],
+                    toolCalls: [],
+                    subagents: [],
+                  } as MessageView,
+                ];
+            return {
+              messages: base.map((m) =>
+                m.id === STREAM_ID
+                  ? {
+                      ...m,
+                      content: plannerAcc,
+                      toolCalls: [...plannerToolCalls],
+                      subagents: [...plannerSubagents],
+                      reasoning: plannerReasoning || undefined,
+                      apiTrace: plannerApiTrace.length
+                        ? [...plannerApiTrace]
+                        : undefined,
+                    }
+                  : m,
+              ),
+              ...(isModelOutput(event) ? { awaitingModel: false } : {}),
+            };
+          });
+        };
+
+        const started = Date.now();
+        const plannerResult = await chatStream(
+          plannerProvider,
+          plannerModel,
+          history,
+          onDelta,
+          tid,
+          false,
+        );
+
+        // Persist planner message.
+        if (
+          plannerResult.content.length > 0 ||
+          plannerToolCalls.length > 0 ||
+          plannerSubagents.length > 0
+        ) {
+          const plannerMsg = await addMessage({
+            thread_id: tid,
+            role: "assistant",
+            content: plannerResult.content,
+            duration_ms: Math.round(Date.now() - started),
+            provider: plannerProvider,
+            model: plannerModel,
+          });
+          // Persist tool calls, subagents, transparency.
+          for (const tc of plannerToolCalls) {
+            await addAttachment({
+              message_id: plannerMsg.id,
+              kind: "tool_call",
+              media_type: "application/json",
+              data: JSON.stringify(persistableToolCall(tc)),
+            });
+          }
+          for (const s of plannerSubagents) {
+            await addAttachment({
+              message_id: plannerMsg.id,
+              kind: "subagent",
+              media_type: "application/json",
+              data: JSON.stringify(persistableSubagent(s)),
+            });
+          }
+          await persistTransparency(plannerMsg.id, plannerReasoning, plannerApiTrace);
+          // Record usage.
+          const u = plannerResult.usage;
+          if (
+            u &&
+            (u.input_tokens > 0 ||
+              u.output_tokens > 0 ||
+              u.cache_creation_tokens > 0 ||
+              u.cache_read_tokens > 0)
+          ) {
+            await addUsage({
+              message_id: plannerMsg.id,
+              thread_id: tid,
+              provider: plannerProvider,
+              model: plannerResult.model || plannerModel,
+              input_tokens: u.input_tokens,
+              output_tokens: u.output_tokens,
+              cache_creation_tokens: u.cache_creation_tokens,
+              cache_read_tokens: u.cache_read_tokens,
+            });
+          }
+
+          // Parse plan from the planner's output.
+          const plan = parsePlan(plannerResult.content);
+
+          if (plan && (plan.strategy === "route" || plan.strategy === "multi_step")) {
+            // Persist the plan as an attachment so the UI can render it.
+            await addAttachment({
+              message_id: plannerMsg.id,
+              kind: "plan",
+              media_type: "application/json",
+              data: JSON.stringify(plan),
+            });
+
+            // Reload messages so the planner message + plan are visible.
+            set({ messages: await loadThreadMessages(tid) });
+
+            // Execute steps sequentially (for streaming simplicity — each step
+            // gets its own placeholder and message). Parallelism is internal to
+            // future waves but the UX is sequential for now.
+            const stepResults = new Map<string, string>();
+            for (const step of plan.steps) {
+              if (get().cancelling) break;
+
+              // Resolve placeholders from completed steps.
+              const resolvedPrompt = resolveStepVariables(
+                step.prompt,
+                stepResults,
+              );
+
+              // Stream the worker step into a new placeholder.
+              let stepAcc = "";
+              const stepOnDelta = (event: StreamEvent) => {
+                if (event.text) stepAcc += event.text;
+                set((s) => {
+                  const exists = s.messages.some((m) => m.id === STREAM_ID);
+                  const base = exists
+                    ? s.messages
+                    : [
+                        ...s.messages,
+                        {
+                          id: STREAM_ID,
+                          thread_id: tid,
+                          role: "assistant" as const,
+                          content: "",
+                          kind: "normal" as const,
+                          duration_ms: null,
+                          bot_id: null,
+                          variant_group: null,
+                          variant_selected: 1,
+                          created_at: "",
+                          provider: step.provider,
+                          model: step.model,
+                          images: [],
+                          documents: [],
+                          toolCalls: [],
+                          subagents: [],
+                        } as MessageView,
+                      ];
+                  return {
+                    messages: base.map((m) =>
+                      m.id === STREAM_ID
+                        ? { ...m, content: stepAcc }
+                        : m,
+                    ),
+                    ...(isModelOutput(event) ? { awaitingModel: false } : {}),
+                  };
+                });
+              };
+
+              const stepStarted = Date.now();
+              const stepResult = await chatStream(
+                step.provider,
+                step.model,
+                [{ role: "user", content: resolvedPrompt, images: [] }],
+                stepOnDelta,
+                tid,
+                false,
+              );
+
+              if (stepResult.content.length > 0) {
+                const stepMsg = await addMessage({
+                  thread_id: tid,
+                  role: "assistant",
+                  content: stepResult.content,
+                  duration_ms: Math.round(Date.now() - stepStarted),
+                  provider: step.provider,
+                  model: step.model,
+                });
+                stepResults.set(step.id, stepResult.content);
+                // Record usage for this step.
+                const su = stepResult.usage;
+                if (
+                  su &&
+                  (su.input_tokens > 0 ||
+                    su.output_tokens > 0 ||
+                    su.cache_creation_tokens > 0 ||
+                    su.cache_read_tokens > 0)
+                ) {
+                  await addUsage({
+                    message_id: stepMsg.id,
+                    thread_id: tid,
+                    provider: step.provider,
+                    model: stepResult.model || step.model,
+                    input_tokens: su.input_tokens,
+                    output_tokens: su.output_tokens,
+                    cache_creation_tokens: su.cache_creation_tokens,
+                    cache_read_tokens: su.cache_read_tokens,
+                  });
+                }
+              }
+            }
+          }
+
+          // Reload messages to replace all placeholders and show final state.
+          set({ messages: await loadThreadMessages(tid) });
+          await get().refreshThreads();
+        }
+      };
+
+      if (usePlanner && !deepResearch) {
+        await runPlannerOrchestration(threadId, afterUser, shared);
+        return; // planner handled everything — skip normal reply path
+      }
+
       /**
        * Stream one assistant reply and persist it (+ tool calls, usage).
        * `replyBot`'s persona block occupies the "bot" slot of the precedence
@@ -1020,22 +1376,24 @@ export const useThreads = create<ThreadsState>((set, get) => ({
               ? s.messages
               : [
                   ...s.messages,
-                  {
-                    id: STREAM_ID,
-                    thread_id: threadId,
-                    role: "assistant" as const,
-                    content: "",
-                    kind: "normal" as const,
-                    duration_ms: null,
-                    bot_id: attributeBotId,
-                    variant_group: null,
-                    variant_selected: 1,
-                    created_at: "",
-                    images: [],
-                    documents: [],
-                    toolCalls: [],
-                    subagents: [],
-                  },
+                    {
+                      id: STREAM_ID,
+                      thread_id: threadId,
+                      role: "assistant" as const,
+                      content: "",
+                      kind: "normal" as const,
+                      duration_ms: null,
+                      bot_id: attributeBotId,
+                      variant_group: null,
+                      variant_selected: 1,
+                      created_at: "",
+                      provider: null,
+                      model: null,
+                      images: [],
+                      documents: [],
+                      toolCalls: [],
+                      subagents: [],
+                    },
                 ];
             return {
               messages: base.map((m) =>
@@ -1399,6 +1757,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                   variant_group: groupId,
                   variant_selected: 1,
                   created_at: "",
+                  provider: null,
+                  model: null,
                   images: [],
                   documents: [],
                   toolCalls: [],
@@ -1666,6 +2026,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                   variant_group: null,
                   variant_selected: 1,
                   created_at: "",
+                  provider: null,
+                  model: null,
                   images: [],
                   documents: [],
                   toolCalls: [],

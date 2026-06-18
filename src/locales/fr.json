@@ -639,6 +639,24 @@
     "appearance.theme.dark": "Sombre",
     "menu.zoomIn": "Zoom avant",
     "menu.zoomOut": "Zoom arrière",
-    "menu.resetZoom": "Réinitialiser le zoom"
+    "menu.resetZoom": "Réinitialiser le zoom",
+    "models.notesLabel": "Notes",
+    "models.notesPlaceholder": "What this model is good at (e.g. great for coding)",
+    "settings.nav.planner": "Planificateur",
+    "planner.title": "Planner model",
+    "planner.description": "Choose a model to orchestrate complex tasks.",
+    "planner.modelLabel": "Planner model",
+    "planner.defaultToggle": "Use planner for new chats by default",
+    "planner.needsMoreModels": "A planner is most useful with at least two models configured.",
+    "planner.planning": "Planning…",
+    "planner.stepRunning": "Running",
+    "planner.stepDone": "Done",
+    "planner.badge": "Planner",
+    "planner.planTitle": "Plan",
+    "planner.stepLabel": "Step {n}",
+    "planner.synthesisLabel": "Synthesis",
+    "planner.toggleOn": "Planner mode on",
+    "planner.toggleOff": "Planner mode off",
+    "planner.toggleHint": "Let the planner model decide how to handle your requests."
   }
 }

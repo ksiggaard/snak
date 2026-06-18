@@ -9,6 +9,7 @@ import { Language } from "@/components/settings/Language";
 import { McpServers } from "@/components/settings/McpServers";
 import { Skills } from "@/components/settings/Skills";
 import { Plugins } from "@/components/settings/Plugins";
+import { PlannerModel } from "@/components/settings/PlannerModel";
 import { Advanced } from "@/components/settings/Advanced";
 import { useT, type MessageKey } from "@/store/i18n";
 import { cn } from "@/lib/utils";
@@ -42,6 +43,7 @@ const SECTIONS: Section[] = [
   { id: "mcp", label: "settings.nav.mcp", Component: McpServers },
   { id: "skills", label: "settings.nav.skills", Component: Skills },
   { id: "plugins", label: "settings.nav.plugins", Component: Plugins },
+  { id: "planner", label: "settings.nav.planner", Component: PlannerModel },
   { id: "advanced", label: "settings.nav.advanced", Component: Advanced },
 ];
 

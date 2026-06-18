@@ -31,6 +31,8 @@ import { openExternal } from "@/lib/openExternal";
 import { Markdown } from "@/components/chat/Markdown";
 import { ArtifactCard } from "@/components/chat/ArtifactCard";
 import { ArtifactContext } from "@/components/chat/artifactContext";
+import { ModelBadge } from "@/components/chat/ModelBadge";
+import { PlanPanel } from "@/components/chat/PlanPanel";
 import { parseArtifact } from "@/lib/artifacts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -872,6 +874,21 @@ function ChatMessage({
     ) : (
       <span className="whitespace-pre-wrap">{m.content}</span>
     ));
+  // Planner plan panel: shown above the message body when a plan exists.
+  const planPanel =
+    m.role === "assistant" && m.plan ? (
+      <PlanPanel plan={m.plan as unknown as import("@/lib/planner").Plan} />
+    ) : null;
+  // Model attribution: collapsible detail showing which model generated this
+  // message (useful for planner/worker-step attribution).
+  const attribution =
+    m.role === "assistant" && m.provider ? (
+      <ModelBadge
+        provider={m.provider}
+        model={m.model ?? ""}
+        role={m.plan ? undefined : undefined}
+      />
+    ) : null;
   // Variation controls (T54) — only on the latest reply, only when grouped.
   // They ride in the meta row (next to copy), so they render inside AssistantMeta.
   const variations =
@@ -965,7 +982,9 @@ function ChatMessage({
             {tools}
             {subagents}
             {apiTrace}
+            {planPanel}
             {body}
+            {attribution}
             {meta}
           </div>
         </div>
@@ -1020,7 +1039,9 @@ function ChatMessage({
           {tools}
           {subagents}
           {apiTrace}
+          {planPanel}
           {body}
+          {attribution}
           {meta}
         </div>
       </div>
@@ -1071,7 +1092,9 @@ function ChatMessage({
             {tools}
             {subagents}
             {apiTrace}
+            {planPanel}
             {body}
+            {attribution}
             {meta}
           </div>
         </div>
@@ -1103,7 +1126,9 @@ function ChatMessage({
         {tools}
         {subagents}
         {apiTrace}
+        {planPanel}
         {body}
+        {attribution}
         {meta}
       </div>
     </div>

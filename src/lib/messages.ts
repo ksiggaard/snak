@@ -102,6 +102,8 @@ export interface MessageView extends Message {
    * group (T54), incl. this row's own id; undefined for ungrouped rows. The
    * UI shows the carousel + regenerate controls only when this is present. */
   variantIds?: string[];
+  /** Planner-orchestrated plan for this message (parsed from a `plan` attachment). */
+  plan?: Record<string, unknown>;
 }
 
 /**
@@ -387,6 +389,12 @@ export async function loadThreadMessages(
       const reasoning = attachments.find((a) => a.kind === "reasoning")?.data;
       const apiTraceRaw = attachments.find((a) => a.kind === "api_trace")?.data;
       const apiTrace = apiTraceRaw ? parseApiTrace(apiTraceRaw) : undefined;
+      // Planner plan attachment (JSON).
+      const planRaw = attachments.find((a) => a.kind === "plan")?.data;
+      let plan: Record<string, unknown> | undefined;
+      if (planRaw) {
+        try { plan = JSON.parse(planRaw); } catch { /* ignore */ }
+      }
       return {
         ...m,
         images,
@@ -395,6 +403,7 @@ export async function loadThreadMessages(
         subagents,
         reasoning: reasoning || undefined,
         apiTrace,
+        plan,
         ...variants,
       };
     }),
