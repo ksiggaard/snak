@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import {
   applyAnimations,
+  applyBgGradient,
   applyCustomColors,
   applyCustomRadius,
   applyCustomTypography,
@@ -9,6 +10,7 @@ import {
   clampContrast,
   clampSize,
   getStoredAnimations,
+  getStoredBgGradient,
   getStoredChatListStyle,
   getStoredChatMaxWidth,
   getStoredChatStyle,
@@ -19,6 +21,7 @@ import {
   isHexColor,
   CHAT_WIDTH,
   RADIUS,
+  storeBgGradient,
   storeChatListStyle,
   storeAnimations,
   storeChatMaxWidth,
@@ -53,6 +56,8 @@ interface AppearanceState {
   chatMaxWidth: number | null;
   /** UI density level: 0=compact, 1=default, 2=comfortable. */
   density: Density;
+  /** Subtle radial background gradient (off by default). */
+  bgGradient: boolean;
 
   /** Set one color pick for one mode, persist, and re-apply the overrides. */
   setColor: (mode: ColorMode, key: ColorKey, hex: string) => void;
@@ -76,6 +81,8 @@ interface AppearanceState {
   setChatMaxWidth: (v: number | null) => void;
   /** Set UI density (0=compact, 1=default, 2=comfortable). */
   setDensity: (d: Density) => void;
+  /** Toggle the subtle background gradient. */
+  setBgGradient: (enabled: boolean) => void;
 }
 
 export const useAppearance = create<AppearanceState>((set, get) => ({
@@ -87,6 +94,7 @@ export const useAppearance = create<AppearanceState>((set, get) => ({
   animations: getStoredAnimations(),
   chatMaxWidth: getStoredChatMaxWidth(),
   density: getStoredDensity(),
+  bgGradient: getStoredBgGradient(),
 
   setColor: (mode, key, hex) => {
     if (!isHexColor(hex)) return;
@@ -165,6 +173,11 @@ export const useAppearance = create<AppearanceState>((set, get) => ({
     applyDensity(d);
     set({ density: d });
   },
+  setBgGradient: (enabled) => {
+    storeBgGradient(enabled);
+    applyBgGradient(enabled);
+    set({ bgGradient: enabled });
+  },
 }));
 
 // Apply the stored overrides as soon as this module loads (before first
@@ -176,6 +189,7 @@ applyCustomTypography(getStoredTypography());
 applyCustomRadius(getStoredRadius());
 applyAnimations(getStoredAnimations());
 applyDensity(getStoredDensity());
+applyBgGradient(getStoredBgGradient());
 
 // Publish the OS scrollbar width so the composer can line up with the message
 // column (see lib/appearance.ts). Re-measured on focus/resize because macOS's

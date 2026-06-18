@@ -25,7 +25,7 @@ import { useT } from "@/store/i18n";
 export function MenuBar() {
   const t = useT();
   return (
-    <div className="bg-sidebar text-sidebar-foreground border-border/50 flex h-7 shrink-0 select-none items-center gap-0.5 border-b px-1.5">
+    <div className="bg-background text-foreground border-border flex h-7 shrink-0 select-none items-center gap-0.5 border-b px-1.5">
       <Menu label={t("menu.file")}>
         <Item action="new-chat" shortcut="N">
           {t("menu.newChat")}
@@ -72,7 +72,7 @@ function Menu({ label, children }: { label: string; children: ReactNode }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-foreground rounded px-2 py-0.5 text-[13px] transition-colors">
+        <button className="text-foreground/80 hover:bg-muted hover:text-foreground data-[state=open]:bg-muted data-[state=open]:text-foreground rounded px-2 py-0.5 text-[13px] transition-colors">
           {label}
         </button>
       </DropdownMenuTrigger>

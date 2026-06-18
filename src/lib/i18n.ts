@@ -609,6 +609,10 @@ export const en = {
   "density.description":
     "How much breathing room the UI has — scaling padding and gaps throughout. Compact matches the original layout; Comfortable adds generous space.",
   "density.label": "Spacing density",
+  "bgGradient.title": "Background gradient",
+  "bgGradient.description":
+    "A subtle radial gradient tinted by the accent color, radiating from the top of the window. Adds visual depth without distraction.",
+  "bgGradient.label": "Background gradient",
 
   // --- Settings: appearance — typography card ------------------------------------------------------------------------------
   "typography.title": "Typography",

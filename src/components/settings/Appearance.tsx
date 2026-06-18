@@ -56,6 +56,7 @@ export function Appearance() {
       <ColorsCard />
       <CornersCard />
       <DensityCard />
+      <BgGradientCard />
       <AnimationsCard />
       <TypographyCard />
       <ChatStyleCard />
@@ -622,6 +623,38 @@ function DensityCard() {
             <ToggleGroupItem value="0">{DENSITY_LABELS[0]}</ToggleGroupItem>
             <ToggleGroupItem value="1">{DENSITY_LABELS[1]}</ToggleGroupItem>
             <ToggleGroupItem value="2">{DENSITY_LABELS[2]}</ToggleGroupItem>
+          </ToggleGroup>
+        </OptionRow>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Subtle radial background gradient: off by default, toggles a soft
+ *  primary-tinted gradient beneath the UI for depth. */
+function BgGradientCard() {
+  const t = useT();
+  const bgGradient = useAppearance((s) => s.bgGradient);
+  const setBgGradient = useAppearance((s) => s.setBgGradient);
+
+  return (
+    <Card className="card-hover-lift w-full max-w-lg">
+      <CardHeader>
+        <CardTitle>{t("bgGradient.title")}</CardTitle>
+        <CardDescription>{t("bgGradient.description")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <OptionRow label={t("bgGradient.label")}>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            spacing={0}
+            value={bgGradient ? "on" : "off"}
+            onValueChange={(v) => v && setBgGradient(v === "on")}
+          >
+            <ToggleGroupItem value="on">{t("common.on")}</ToggleGroupItem>
+            <ToggleGroupItem value="off">{t("common.off")}</ToggleGroupItem>
           </ToggleGroup>
         </OptionRow>
       </CardContent>

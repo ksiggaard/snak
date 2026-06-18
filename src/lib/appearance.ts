@@ -72,10 +72,12 @@ const RADIUS_KEY = "custom-radius";
 const CHAT_WIDTH_KEY = "chat-max-width";
 const ANIMATIONS_KEY = "animations";
 const DENSITY_KEY = "density";
+const BG_GRADIENT_KEY = "bg-gradient";
 const COLORS_STYLE_ID = "custom-colors";
 const TYPOGRAPHY_STYLE_ID = "custom-typography";
 const RADIUS_STYLE_ID = "custom-radius";
 const DENSITY_STYLE_ID = "custom-density";
+const GRADIENT_STYLE_ID = "custom-gradient";
 
 // ── UI animations (T46) ─────────────────────────────────────────────────────
 // A single global on/off. Enabled by default; when off, a `.no-animations`
@@ -126,6 +128,44 @@ export function applyDensity(d: Density): void {
   const scale = DENSITY_SCALE[d];
   const css = `:root { --density-scale: ${scale}; }`;
   injectStyle(DENSITY_STYLE_ID, d === 1 ? "" : css);
+}
+
+// ── Background gradient ──────────────────────────────────────────────────────
+// A subtle radial gradient radiating from the top of the viewport, tinted
+// by the primary color. Off by default; toggle in Appearance.
+
+export function getStoredBgGradient(): boolean {
+  return localStorage.getItem(BG_GRADIENT_KEY) === "1";
+}
+
+export function storeBgGradient(enabled: boolean): void {
+  if (enabled) localStorage.setItem(BG_GRADIENT_KEY, "1");
+  else localStorage.removeItem(BG_GRADIENT_KEY);
+}
+
+export function applyBgGradient(enabled: boolean): void {
+  if (!enabled) {
+    injectStyle(GRADIENT_STYLE_ID, "");
+    return;
+  }
+  const css = `
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse 60% 50% at 50% 0%, var(--primary) 0%, transparent 70%),
+        radial-gradient(ellipse 40% 30% at 80% 100%, var(--primary) 0%, transparent 60%);
+      opacity: 0.06;
+    }
+    #root {
+      position: relative;
+      z-index: 1;
+    }
+  `;
+  injectStyle(GRADIENT_STYLE_ID, css);
 }
 
 // ── Chat layout style (T34) & chat-list row style (T35) ─────────────────────

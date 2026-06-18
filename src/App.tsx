@@ -306,10 +306,10 @@ function App() {
                         ? `workspace:${openWorkspaceId}`
                         : "chat"
                 }
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
+                initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                transition={{ type: "spring", stiffness: 350, damping: 30, mass: 0.8 }}
                 className="flex min-h-0 flex-1 flex-col"
               >
                 {view === "settings" ? (

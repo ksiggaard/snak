@@ -62,7 +62,7 @@ export function ChatsPane() {
     <LayoutGroup>
       <div className="flex flex-col gap-2">
       {favorites.length > 0 && (
-        <section>
+        <section className="stagger-container">
           <p className="text-muted-foreground px-2 py-1 text-xs font-medium">
             {t("sidebar.favorites")}
           </p>
@@ -77,7 +77,7 @@ export function ChatsPane() {
           ))}
         </section>
       )}
-      <section>
+      <section className="stagger-container">
         {favorites.length > 0 && rest.length > 0 && (
           <p className="text-muted-foreground px-2 py-1 text-xs font-medium">
             {t("sidebar.allChats")}
@@ -94,7 +94,7 @@ export function ChatsPane() {
         ))}
       </section>
       {archived.length > 0 && (
-        <section>
+      <section className="stagger-container">
           <div className="group/archive flex items-center gap-1 px-2 py-1">
             <button
               type="button"

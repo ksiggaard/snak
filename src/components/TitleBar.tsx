@@ -39,7 +39,7 @@ export function TitleBar() {
   const showControls = barMode === "custom";
 
   return (
-    <div className="bg-sidebar text-sidebar-foreground flex h-10 shrink-0 select-none items-center">
+    <div className="bg-background text-foreground flex h-10 shrink-0 select-none items-center">
       {showControls && controlsSide === "left" && (
         <WindowControls style={controlsStyle} />
       )}
@@ -58,7 +58,7 @@ export function TitleBar() {
         <TooltipTrigger asChild>
           <button
             onClick={toggleSidebar}
-            className="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground flex h-8 w-8 items-center justify-center transition-colors"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground flex h-8 w-8 items-center justify-center transition-colors"
             aria-label={
               (tier === "wide" ? sidebarOpen : compactNav > 0)
                 ? t("titleBar.hideSidebar")
@@ -84,7 +84,7 @@ export function TitleBar() {
         <TooltipTrigger asChild>
           <button
             onClick={() => runMenuAction("search")}
-            className="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground flex h-8 w-8 items-center justify-center transition-colors"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground flex h-8 w-8 items-center justify-center transition-colors"
             aria-label={t("titleBar.searchChats")}
           >
             <Search className="size-3.5" />
@@ -105,7 +105,7 @@ export function TitleBar() {
           <TooltipTrigger asChild>
             <button
               onClick={() => void refreshConnectivity()}
-              className="text-amber-600 hover:bg-sidebar-accent dark:text-amber-500 mr-1 flex h-6 items-center gap-1 rounded-md px-2 text-[11px] font-medium transition-colors"
+              className="text-amber-600 hover:bg-muted dark:text-amber-500 mr-1 flex h-6 items-center gap-1 rounded-md px-2 text-[11px] font-medium transition-colors"
               aria-label={t("titleBar.offline")}
             >
               <WifiOff className="size-3" />
@@ -184,14 +184,14 @@ function WindowControls({ style }: { style: ControlsStyle }) {
     <div className="flex items-center">
       <button
         onClick={minimize}
-        className="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground flex h-8 w-9 items-center justify-center transition-colors"
+        className="text-muted-foreground hover:bg-muted hover:text-foreground flex h-8 w-9 items-center justify-center transition-colors"
         aria-label={t("titleBar.minimize")}
       >
         <Minus className="size-3.5" />
       </button>
       <button
         onClick={maximize}
-        className="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground flex h-8 w-9 items-center justify-center transition-colors"
+        className="text-muted-foreground hover:bg-muted hover:text-foreground flex h-8 w-9 items-center justify-center transition-colors"
         aria-label={t("titleBar.maximize")}
       >
         <Square className="size-3" />
@@ -245,10 +245,10 @@ function CircleButton({
   return (
     <button
       onClick={onClick}
-      className={`bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground flex size-5 items-center justify-center rounded-full transition-colors ${
+      className={`bg-muted text-muted-foreground hover:text-foreground flex size-5 items-center justify-center rounded-full transition-colors ${
         danger
           ? "hover:bg-red-500/80 hover:!text-white"
-          : "hover:bg-sidebar-accent/70"
+          : "hover:bg-muted"
       }`}
       aria-label={label}
     >
