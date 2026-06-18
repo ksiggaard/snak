@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { Brain, Ghost, PanelRight, ShieldAlert } from "lucide-react";
 import { MessageList } from "@/components/chat/MessageList";
 import { Composer } from "@/components/chat/Composer";
@@ -209,7 +209,8 @@ export function ChatView() {
 
   return (
     <div className="relative flex flex-1 flex-row gap-4 overflow-hidden">
-      <div
+      <motion.div
+        layout
         className={cn(
           "flex min-w-0 flex-1 flex-col gap-4 overflow-hidden",
           // Incognito identity (T36): the whole chat surface reads as a
@@ -265,26 +266,32 @@ export function ChatView() {
             />
           </div>
         </div>
-      </div>
-      {!panelOpen && (
-        // In-flow slim strip (mirrors the sidebar's reopen bar) so the toggle
-        // never overlaps messages or crowds the composer.
-        <div className="hidden w-9 shrink-0 flex-col items-center pt-0.5 md:flex">
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={t("panel.open")}
-            title={t("panel.open")}
-            onClick={() => setPanelOpen(true)}
-            className="text-muted-foreground hover:text-foreground"
+      </motion.div>
+      <AnimatePresence mode="popLayout">
+        {!panelOpen && (
+          <motion.div
+            key="panel-toggle"
+            initial={{ opacity: 0, width: 0 }}
+            animate={{ opacity: 1, width: "auto" }}
+            exit={{ opacity: 0, width: 0 }}
+            transition={{ type: "spring", stiffness: 350, damping: 30 }}
+            className="hidden shrink-0 flex-col items-center pt-0.5 md:flex overflow-hidden"
           >
-            <PanelRight className="size-4" />
-          </Button>
-        </div>
-      )}
-      <AnimatePresence>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("panel.open")}
+              title={t("panel.open")}
+              onClick={() => setPanelOpen(true)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <PanelRight className="size-4" />
+            </Button>
+          </motion.div>
+        )}
         {panelOpen && (
           <ChatPanel
+            key="chat-panel"
             messages={messages}
             threadId={currentThreadId}
             onClose={() => setPanelOpen(false)}
