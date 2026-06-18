@@ -37,18 +37,33 @@ export function ImageChip({
     }
   }
 
+  /** Extract an image File from a DataTransfer, trying .files first, then
+   *  .items (needed on Linux where browser/clipboard drags use items). */
+  function fileFromTransfer(dt: DataTransfer): File | undefined {
+    if (dt.files.length > 0) return dt.files[0];
+    for (const item of dt.items) {
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        const blob = item.getAsFile();
+        if (blob) return new File([blob], blob.name || "image.png", { type: blob.type });
+      }
+    }
+    return undefined;
+  }
+
   return (
     <div
       className="relative shrink-0"
       onDragOver={(e) => {
         e.preventDefault();
-        if (e.dataTransfer.files.length > 0) setDragOver(true);
+        e.stopPropagation();
+        if (e.dataTransfer.files.length > 0 || e.dataTransfer.types.includes("Files")) setDragOver(true);
       }}
       onDragLeave={() => setDragOver(false)}
       onDrop={(e) => {
         e.preventDefault();
+        e.stopPropagation();
         setDragOver(false);
-        const file = e.dataTransfer.files[0];
+        const file = fileFromTransfer(e.dataTransfer);
         if (file) void handleReplace(file);
       }}
     >

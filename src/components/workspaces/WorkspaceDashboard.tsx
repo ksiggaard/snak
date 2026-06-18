@@ -48,6 +48,17 @@ export function WorkspaceDashboard() {
   const [coverDragOver, setCoverDragOver] = useState(false);
   const [profileDragOver, setProfileDragOver] = useState(false);
 
+  function fileFromTransfer(dt: DataTransfer): File | undefined {
+    if (dt.files.length > 0) return dt.files[0];
+    for (const item of dt.items) {
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        const blob = item.getAsFile();
+        if (blob) return new File([blob], blob.name || "image.png", { type: blob.type });
+      }
+    }
+    return undefined;
+  }
+
   useEffect(() => {
     if (!draggingCover) return;
     function onKey(e: KeyboardEvent) {
@@ -252,7 +263,7 @@ export function WorkspaceDashboard() {
                   e.preventDefault();
                   e.stopPropagation();
                   setCoverDragOver(false);
-                  const file = e.dataTransfer.files[0];
+                  const file = fileFromTransfer(e.dataTransfer);
                   if (!file || !workspace) return;
                   void (async () => {
                     try {
@@ -332,7 +343,7 @@ export function WorkspaceDashboard() {
                   e.preventDefault();
                   e.stopPropagation();
                   setProfileDragOver(false);
-                  const file = e.dataTransfer.files[0];
+                  const file = fileFromTransfer(e.dataTransfer);
                   if (!file || !workspace) return;
                   void (async () => {
                     try {

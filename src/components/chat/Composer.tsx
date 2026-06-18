@@ -325,6 +325,20 @@ export function Composer({
     }
   }
 
+  /** Extract files from a DataTransfer, trying .files first, then .items
+   *  (needed on Linux where browser/clipboard drags use items instead). */
+  function filesFromDataTransfer(dt: DataTransfer): File[] {
+    if (dt.files.length > 0) return Array.from(dt.files);
+    const result: File[] = [];
+    for (const item of dt.items) {
+      if (item.kind === "file") {
+        const blob = item.getAsFile();
+        if (blob) result.push(new File([blob], blob.name || "file", { type: blob.type }));
+      }
+    }
+    return result;
+  }
+
   /**
    * Route picked/dropped/pasted files by `classifyFile` (T39): images keep the
    * existing pipeline; text files are read in the webview; binary documents go
@@ -545,7 +559,7 @@ export function Composer({
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
-        void addFiles(e.dataTransfer.files);
+        void addFiles(filesFromDataTransfer(e.dataTransfer));
       }}
     >
       {canvasOpen && (
@@ -791,9 +805,7 @@ export function Composer({
         // palette to the token now under the caret.
         onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
         onPaste={(e) => {
-          // Any pasted *files* go through the attach flow (images, documents,
-          // …); plain-text pastes have no files and stay normal text input.
-          const files = Array.from(e.clipboardData.files);
+          const files = filesFromDataTransfer(e.clipboardData);
           if (files.length > 0) {
             e.preventDefault();
             void addFiles(files);
