@@ -135,8 +135,8 @@ export function applyDensity(d: Density): void {
 }
 
 // ── Background gradient ──────────────────────────────────────────────────────
-// A subtle radial gradient radiating from the top of the viewport, tinted
-// by the primary color. Off by default; toggle in Appearance.
+// A subtle linear gradient blending the main background toward the tint color.
+// Off by default; toggle in Appearance.
 
 export function getStoredBgGradient(): boolean {
   return localStorage.getItem(BG_GRADIENT_KEY) === "1";
@@ -159,9 +159,7 @@ export function applyBgGradient(enabled: boolean): void {
       inset: 0;
       z-index: 0;
       pointer-events: none;
-      background:
-        radial-gradient(ellipse 60% 50% at 50% 0%, var(--primary) 0%, transparent 70%),
-        radial-gradient(ellipse 40% 30% at 80% 100%, var(--primary) 0%, transparent 60%);
+      background: linear-gradient(135deg, var(--background), var(--tint));
       opacity: 0.06;
     }
     #root {

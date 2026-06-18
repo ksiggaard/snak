@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
+  applyBgGradient,
   applyCustomColors,
   applyCustomTypography,
   buildColorCss,
@@ -583,5 +584,24 @@ describe("accent no longer derived from background", () => {
     expect(decls).not.toContain("--accent:");
     expect(decls).not.toContain("--accent-foreground:");
     expect(decls).toContain("--sidebar-accent:");
+  });
+});
+
+describe("two-color background gradient", () => {
+  it("injects a two-color gradient referencing --background and --tint", () => {
+    applyBgGradient(true);
+    const el = document.getElementById("custom-gradient");
+    expect(el?.tagName).toBe("STYLE");
+    const css = el!.textContent!;
+    expect(css).toContain("linear-gradient");
+    expect(css).toContain("var(--background)");
+    expect(css).toContain("var(--tint)");
+    expect(css).toContain("opacity: 0.06");
+  });
+
+  it("removes the style element when disabled", () => {
+    applyBgGradient(true);
+    applyBgGradient(false);
+    expect(document.getElementById("custom-gradient")).toBeNull();
   });
 });
