@@ -47,9 +47,9 @@
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
     --shadow-xs: 0 0.5px 1px rgb(0 0 0 / 0.06);
-    --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.08);
-    --shadow-md: 0 2px 8px rgb(0 0 0 / 0.1);
-    --shadow-lg: 0 4px 16px rgb(0 0 0 / 0.12);
+    --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.1);
+    --shadow-md: 0 4px 12px rgb(0 0 0 / 0.12);
+    --shadow-lg: 0 8px 24px rgb(0 0 0 / 0.16);
 }
 
 /* ── Theme CSS-variable contract (T11) ──────────────────────────────────────
@@ -72,80 +72,78 @@
  * independent of style-element order.
  * ──────────────────────────────────────────────────────────────────────────── */
 :root {
-    /* Native widgets (select dropdown lists, scrollbars, color inputs) follow
-       the active mode instead of WebKitGTK's light defaults. */
     color-scheme: light;
     --density-scale: 1;
-    --background: oklch(0.985 0.002 240);
-    --foreground: oklch(0.18 0.006 260);
+    --background: oklch(0.99 0.002 240);
+    --foreground: oklch(0.15 0.005 260);
     --card: oklch(1 0 0);
-    --card-foreground: oklch(0.18 0.006 260);
+    --card-foreground: oklch(0.15 0.005 260);
     --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.18 0.006 260);
-    --primary: oklch(0.35 0.06 260);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.965 0.003 240);
-    --secondary-foreground: oklch(0.25 0.008 260);
-    --muted: oklch(0.965 0.003 240);
-    --muted-foreground: oklch(0.52 0.012 260);
-    --accent: oklch(0.955 0.02 260);
-    --accent-foreground: oklch(0.25 0.008 260);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.91 0.008 260);
-    --input: oklch(0.91 0.008 260);
-    --ring: oklch(0.65 0.04 260);
+    --popover-foreground: oklch(0.15 0.005 260);
+    --primary: oklch(0.38 0.18 260);
+    --primary-foreground: oklch(0.99 0 0);
+    --secondary: oklch(0.96 0.003 240);
+    --secondary-foreground: oklch(0.22 0.008 260);
+    --muted: oklch(0.96 0.003 240);
+    --muted-foreground: oklch(0.5 0.015 260);
+    --accent: oklch(0.94 0.04 260);
+    --accent-foreground: oklch(0.25 0.05 260);
+    --destructive: oklch(0.55 0.25 27);
+    --border: oklch(0.88 0.008 260);
+    --input: oklch(0.88 0.008 260);
+    --ring: oklch(0.55 0.12 260);
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
     --radius: 0.625rem;
-    --sidebar: oklch(0.975 0.003 240);
-    --sidebar-foreground: oklch(0.18 0.006 260);
-    --sidebar-primary: oklch(0.35 0.06 260);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.955 0.02 260);
-    --sidebar-accent-foreground: oklch(0.25 0.008 260);
-    --sidebar-border: oklch(0.91 0.008 260);
-    --sidebar-ring: oklch(0.65 0.04 260);
+    --sidebar: oklch(0.97 0.003 240);
+    --sidebar-foreground: oklch(0.15 0.005 260);
+    --sidebar-primary: oklch(0.38 0.18 260);
+    --sidebar-primary-foreground: oklch(0.99 0 0);
+    --sidebar-accent: oklch(0.94 0.04 260);
+    --sidebar-accent-foreground: oklch(0.25 0.05 260);
+    --sidebar-border: oklch(0.88 0.008 260);
+    --sidebar-ring: oklch(0.55 0.12 260);
 }
 
 .dark {
-    /* Rich dark palette: deep warm-teal background with better surface
-       differentiation and a vibrant magenta accent. Surface tokens step
-       visibly so cards, sidebar, and muted areas are clearly distinct. */
+    /* Deep navy-indigo background with hot pink accent. Surfaces step clearly:
+       sidebar is darkest, cards/muted lift up through distinct tones so every
+       UI region reads as a separate layer. */
     color-scheme: dark;
-    --background: #0f2a38;
-    --foreground: #f0f4f6;
-    --card: #133449;
-    --card-foreground: #f0f4f6;
-    --popover: #133449;
-    --popover-foreground: #f0f4f6;
-    --primary: #e090e0;
-    --primary-foreground: #0f1a24;
-    --secondary: #163e54;
-    --secondary-foreground: #e4eaf0;
-    --muted: #153b50;
-    --muted-foreground: #8a9ba8;
-    --accent: #1a4a63;
-    --accent-foreground: #e4eaf0;
-    --destructive: oklch(0.65 0.2 22);
-    --border: #1a4a63;
-    --input: #1a4a63;
-    --ring: #2a5f7a;
+    --background: #0b1a2e;
+    --foreground: #edf2f9;
+    --card: #0f2340;
+    --card-foreground: #edf2f9;
+    --popover: #0f2340;
+    --popover-foreground: #edf2f9;
+    --primary: #f472b6;
+    --primary-foreground: #0b0f18;
+    --secondary: #122e4a;
+    --secondary-foreground: #dce6f2;
+    --muted: #102840;
+    --muted-foreground: #7e93aa;
+    --accent: #1a3d5c;
+    --accent-foreground: #dce6f2;
+    --destructive: oklch(0.6 0.22 22);
+    --border: #1a3d5c;
+    --input: #1a3d5c;
+    --ring: #f472b6;
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
-    --sidebar: #0d2633;
-    --sidebar-foreground: #e4eaf0;
-    --sidebar-primary: #e090e0;
-    --sidebar-primary-foreground: #0f1a24;
-    --sidebar-accent: #153b50;
-    --sidebar-accent-foreground: #e4eaf0;
-    --sidebar-border: #1a4a63;
-    --sidebar-ring: #2a5f7a;
+    --sidebar: #091525;
+    --sidebar-foreground: #dce6f2;
+    --sidebar-primary: #f472b6;
+    --sidebar-primary-foreground: #0b0f18;
+    --sidebar-accent: #122e4a;
+    --sidebar-accent-foreground: #dce6f2;
+    --sidebar-border: #1a3d5c;
+    --sidebar-ring: #f472b6;
 }
 
 @layer base {
@@ -161,11 +159,15 @@
 
   button:not([disabled]),
   a:not([disabled]) {
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  }
+  button:not([disabled]):hover,
+  a:not([disabled]):hover {
+    transform: scale(1.03);
   }
   button:not([disabled]):active,
   a:not([disabled]):active {
-    transform: scale(0.98);
+    transform: scale(0.97);
   }
 }
 

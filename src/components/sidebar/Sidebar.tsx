@@ -14,7 +14,7 @@ export function Sidebar() {
       initial={{ x: -16, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: -16, opacity: 0 }}
-      transition={{ type: "spring", stiffness: 400, damping: 30 }}
+      transition={{ type: "spring", stiffness: 300, damping: 25, mass: 0.8 }}
       className="bg-sidebar text-sidebar-foreground border-sidebar-border relative flex shrink-0 flex-col border-r"
       style={{ width }}
     >

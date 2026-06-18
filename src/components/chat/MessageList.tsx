@@ -1269,7 +1269,7 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
-              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25, mass: 0.8 }}
               ref={(el: HTMLDivElement | null) => {
                 if (el) messageRefs.current.set(m.id, el);
                 else messageRefs.current.delete(m.id);
@@ -1301,7 +1301,7 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
-              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25, mass: 0.8 }}
             >
               <ChatMessage
                 m={m}

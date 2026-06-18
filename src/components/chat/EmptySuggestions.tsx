@@ -131,12 +131,12 @@ export function EmptySuggestions({ bot }: { bot?: Bot | null }) {
       <div className="flex w-full max-w-2xl flex-col items-center gap-6">
         <div className="flex flex-col items-center gap-1 text-center">
           <motion.div
-            animate={{ opacity: [0.7, 1, 0.7] }}
-            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            animate={{ opacity: [0.6, 1, 0.6], scale: [1, 1.05, 1] }}
+            transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
           >
-            <Sparkles className="text-primary mb-1 size-8" aria-hidden />
+            <Sparkles className="text-primary mb-2 size-10" aria-hidden />
           </motion.div>
-          <h2 className="text-foreground text-lg font-semibold">
+          <h2 className="text-foreground text-xl font-bold">
             {t("chat.suggestionsTitle")}
           </h2>
           <p className="text-muted-foreground text-sm">

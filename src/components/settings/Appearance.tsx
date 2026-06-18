@@ -50,7 +50,7 @@ import {
  */
 export function Appearance() {
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
       <ThemeCard />
       <TitleBarCard />
       <ColorsCard />
@@ -181,7 +181,7 @@ function ChatStyleCard() {
   const setChatStyle = useAppearance((s) => s.setChatStyle);
 
   return (
-    <Card className="w-full max-w-lg">
+    <Card className="card-hover-lift w-full max-w-lg">
       <CardHeader>
         <CardTitle>{t("chatStyle.title")}</CardTitle>
         <CardDescription>{t("chatStyle.description")}</CardDescription>
@@ -226,7 +226,7 @@ function ChatWidthCard() {
   const width = chatMaxWidth ?? CHAT_WIDTH.fallback;
 
   return (
-    <Card className="w-full max-w-lg">
+    <Card className="card-hover-lift w-full max-w-lg">
       <CardHeader>
         <CardTitle>{t("chatWidth.title")}</CardTitle>
         <CardDescription>{t("chatWidth.description")}</CardDescription>
@@ -352,7 +352,7 @@ function ChatListCard() {
   const setListStyle = useAppearance((s) => s.setChatListStyle);
 
   return (
-    <Card className="w-full max-w-lg">
+    <Card className="card-hover-lift w-full max-w-lg">
       <CardHeader>
         <CardTitle>{t("chatList.title")}</CardTitle>
         <CardDescription>{t("chatList.description")}</CardDescription>
@@ -405,7 +405,7 @@ function ColorsCard() {
     Object.keys(colors.light).length > 0 || Object.keys(colors.dark).length > 0;
 
   return (
-    <Card className="w-full max-w-lg">
+    <Card className="card-hover-lift w-full max-w-lg">
       <CardHeader>
         <CardTitle>{t("colors.title")}</CardTitle>
         <CardDescription>
@@ -548,7 +548,7 @@ function CornersCard() {
   const setRadius = useAppearance((s) => s.setRadius);
 
   return (
-    <Card className="w-full max-w-lg">
+    <Card className="card-hover-lift w-full max-w-lg">
       <CardHeader>
         <CardTitle>{t("corners.title")}</CardTitle>
         <CardDescription>{t("corners.description")}</CardDescription>
@@ -572,7 +572,7 @@ function AnimationsCard() {
   const setAnimations = useAppearance((s) => s.setAnimations);
 
   return (
-    <Card className="w-full max-w-lg">
+    <Card className="card-hover-lift w-full max-w-lg">
       <CardHeader>
         <CardTitle>{t("animations.title")}</CardTitle>
         <CardDescription>{t("animations.description")}</CardDescription>
@@ -604,7 +604,7 @@ function DensityCard() {
   const setDensity = useAppearance((s) => s.setDensity);
 
   return (
-    <Card className="w-full max-w-lg">
+    <Card className="card-hover-lift w-full max-w-lg">
       <CardHeader>
         <CardTitle>{t("density.title")}</CardTitle>
         <CardDescription>{t("density.description")}</CardDescription>
@@ -641,7 +641,7 @@ function TypographyCard() {
   const setTypography = useAppearance((s) => s.setTypography);
 
   return (
-    <Card className="w-full max-w-lg">
+    <Card className="card-hover-lift w-full max-w-lg">
       <CardHeader>
         <CardTitle>{t("typography.title")}</CardTitle>
         <CardDescription>{t("typography.description")}</CardDescription>
@@ -814,7 +814,7 @@ function ThemeCard() {
   const setTheme = useTheme((s) => s.setTheme);
 
   return (
-    <Card className="w-full max-w-lg">
+    <Card className="card-hover-lift w-full max-w-lg">
       <CardHeader>
         <CardTitle>{t("appearance.theme.title")}</CardTitle>
         <CardDescription>{t("appearance.theme.description")}</CardDescription>
@@ -857,7 +857,7 @@ function TitleBarCard() {
   const setMenuBar = useTitleBar((s) => s.setMenuBar);
 
   return (
-    <Card className="w-full max-w-lg">
+    <Card className="card-hover-lift w-full max-w-lg">
       <CardHeader>
         <CardTitle>{t("appearance.titleBar.title")}</CardTitle>
         <CardDescription>

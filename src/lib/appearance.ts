@@ -102,7 +102,7 @@ export function applyAnimations(enabled: boolean): void {
 
 export type Density = 0 | 1 | 2;
 
-export const DENSITY_SCALE: Record<Density, number> = { 0: 0.75, 1: 1, 2: 1.5 };
+export const DENSITY_SCALE: Record<Density, number> = { 0: 0.75, 1: 1, 2: 1.75 };
 
 export const DENSITY_LABELS: Record<Density, string> = {
   0: "Compact",
@@ -190,14 +190,14 @@ const CHAT_LIST_STYLE_KEY = "chat-list-style";
 /** Scroll-column gap/padding per chat style, shared by `MessageList` and the
  * settings chat-style preview so the message rhythm matches. */
 export const CHAT_CONTAINER_CLASSES: Record<ChatStyle, string> = {
-  default: "gap-5 p-5",
-  bubbles: "gap-5 p-5",
+  default: "gap-6 p-6",
+  bubbles: "gap-6 p-6",
   compact: "gap-1 p-2",
-  document: "gap-6 p-5",
-  cards: "gap-4 p-5",
-  cozy: "gap-6 p-5",
+  document: "gap-7 p-6",
+  cards: "gap-5 p-6",
+  cozy: "gap-7 p-6",
   terminal: "gap-2 p-3",
-  zebra: "gap-2 p-3",
+  zebra: "gap-2 p-4",
 };
 
 /** Base horizontal padding (CSS length) per chat style — the `px` half of
@@ -208,14 +208,14 @@ export const CHAT_CONTAINER_CLASSES: Record<ChatStyle, string> = {
  * gutter on the right (`scrollbar-gutter: stable`). **Keep in sync with
  * CHAT_CONTAINER_CLASSES.** */
 export const CHAT_X_PADDING: Record<ChatStyle, string> = {
-  default: "1.25rem",
-  bubbles: "1.25rem",
+  default: "1.5rem",
+  bubbles: "1.5rem",
   compact: "0.5rem",
-  document: "1.25rem",
-  cards: "1.25rem",
-  cozy: "1.25rem",
+  document: "1.5rem",
+  cards: "1.5rem",
+  cozy: "1.5rem",
   terminal: "0.75rem",
-  zebra: "0.75rem",
+  zebra: "1rem",
 };
 
 // ── Scrollbar width (chat composer ↔ message-column alignment) ───────────────
@@ -343,8 +343,8 @@ export const DEFAULT_PICKER_COLORS: Record<
   ColorMode,
   Record<ColorKey, string>
 > = {
-  light: { primary: "#3b4f94", background: "#fafbfc", surface: "#b8c8e0" },
-  dark: { primary: "#e090e0", background: "#0f2a38", surface: "#1a4a63" },
+  light: { primary: "#3858d6", background: "#fafbfc", surface: "#b8c8e0" },
+  dark: { primary: "#f472b6", background: "#0b1a2e", surface: "#1a3d5c" },
 };
 
 /** Bounds for the surface-contrast multiplier (1 = the built-in steps). */

@@ -1,4 +1,5 @@
 import { useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { motion } from "framer-motion";
 import {
   FolderInput,
   Ghost,
@@ -157,7 +158,9 @@ export function ThreadRow({
     <ContextMenu onOpenChange={setMenuOpen}>
       {/* Renaming owns the row; don't hijack right-click into the menu then. */}
       <ContextMenuTrigger asChild disabled={editing}>
-        <div
+        <motion.div
+          whileHover={{ x: 2 }}
+          transition={{ type: "spring", stiffness: 500, damping: 30 }}
           className={cn(
             "group relative flex items-center gap-1 rounded-md px-3",
             compact ? "py-1" : "py-2",
@@ -296,8 +299,8 @@ export function ThreadRow({
               </button>
             )}
           </div>
-        </div>
-      </ContextMenuTrigger>
+          </motion.div>
+        </ContextMenuTrigger>
       <ContextMenuContent>
         <ContextMenuItem onClick={() => void toggleFavorite(thread.id)}>
           <Star className={cn(fav && "fill-yellow-500 text-yellow-500")} />

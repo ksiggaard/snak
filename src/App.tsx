@@ -279,8 +279,8 @@ function App() {
               showCloseButton={false}
               className="bg-sidebar text-sidebar-foreground flex flex-row gap-0 p-0"
               style={{
-                top: menuBarMode === "inline" ? 64 : 36,
-                height: `calc(100% - ${menuBarMode === "inline" ? 64 : 36}px)`,
+                top: menuBarMode === "inline" ? 68 : 40,
+                height: `calc(100% - ${menuBarMode === "inline" ? 68 : 40}px)`,
                 width: compactNav >= 2 ? 320 : 272,
               }}
             >
@@ -294,7 +294,7 @@ function App() {
             </SheetContent>
           </Sheet>
 
-          <main className="flex min-w-0 flex-1 flex-col p-[calc(1.25rem*var(--density-scale,1))] md:p-[calc(1.5rem*var(--density-scale,1))]">
+          <main className="flex min-w-0 flex-1 flex-col p-[calc(1.5rem*var(--density-scale,1))] md:p-[calc(2rem*var(--density-scale,1))]">
             <AnimatePresence mode="wait">
               <motion.div
                 key={
@@ -306,10 +306,10 @@ function App() {
                         ? `workspace:${openWorkspaceId}`
                         : "chat"
                 }
-                initial={{ opacity: 0, y: 6 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.15, ease: "easeOut" }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
                 className="flex min-h-0 flex-1 flex-col"
               >
                 {view === "settings" ? (
