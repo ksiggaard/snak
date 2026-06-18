@@ -868,11 +868,29 @@ export async function setWorkspaceImages(
   id: string,
   profileImage: string | null,
   coverImage: string | null,
+  profileX?: number,
+  profileY?: number,
+  profileZoom?: number,
+  coverX?: number,
+  coverY?: number,
 ): Promise<void> {
   const db = await getDb();
   await db.execute(
-    `UPDATE workspaces SET profile_image = $1, cover_image = $2, updated_at = datetime('now') WHERE id = $3`,
-    [profileImage, coverImage, id],
+    `UPDATE workspaces SET profile_image = $1, cover_image = $2,
+         profile_image_x = $3, profile_image_y = $4, profile_image_zoom = $5,
+         cover_image_x = $6, cover_image_y = $7,
+         updated_at = datetime('now')
+     WHERE id = $8`,
+    [
+      profileImage,
+      coverImage,
+      profileX ?? 0.5,
+      profileY ?? 0.5,
+      profileZoom ?? 1.0,
+      coverX ?? 0.5,
+      coverY ?? 0.5,
+      id,
+    ],
   );
 }
 

@@ -50,6 +50,11 @@ interface WorkspacesState {
     id: string,
     profileImage: string | null,
     coverImage: string | null,
+    profileX?: number,
+    profileY?: number,
+    profileZoom?: number,
+    coverX?: number,
+    coverY?: number,
   ) => Promise<void>;
   addFile: (
     workspaceId: string,
@@ -140,8 +145,26 @@ export const useWorkspaces = create<WorkspacesState>((set, get) => ({
 
   setWorkspaceView: (view) => set({ openWorkspaceView: view }),
 
-  setImages: async (id, profileImage, coverImage) => {
-    await setWorkspaceImages(id, profileImage, coverImage);
+  setImages: async (
+    id,
+    profileImage,
+    coverImage,
+    profileX,
+    profileY,
+    profileZoom,
+    coverX,
+    coverY,
+  ) => {
+    await setWorkspaceImages(
+      id,
+      profileImage,
+      coverImage,
+      profileX,
+      profileY,
+      profileZoom,
+      coverX,
+      coverY,
+    );
     await get().refresh();
   },
 
