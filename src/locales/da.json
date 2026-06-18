@@ -659,6 +659,12 @@
     "planner.synthesisLabel": "Synthesis",
     "planner.toggleOn": "Planner mode on",
     "planner.toggleOff": "Planner mode off",
-    "planner.toggleHint": "Let the planner model decide how to handle your requests."
+    "planner.toggleHint": "Let the planner model decide how to handle your requests.",
+    "density.title": "Tæthed",
+    "density.description": "Styrer afstand og polstring i hele brugergrænsefladen — kompakt, standard eller komfortabel.",
+    "density.label": "Mellemrums tæthed",
+    "bgGradient.title": "Baggrundsgradient",
+    "bgGradient.description": "En subtil diagonal gradient fra baggrund til farvetone bag hele brugergrænsefladen.",
+    "bgGradient.label": "Baggrundsgradient"
   }
 }

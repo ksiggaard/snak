@@ -659,6 +659,12 @@
     "planner.synthesisLabel": "Synthesis",
     "planner.toggleOn": "Planner mode on",
     "planner.toggleOff": "Planner mode off",
-    "planner.toggleHint": "Let the planner model decide how to handle your requests."
+    "planner.toggleHint": "Let the planner model decide how to handle your requests.",
+    "density.title": "Densidad",
+    "density.description": "Controla el espaciado y relleno en toda la interfaz: compacto, estándar o cómodo.",
+    "density.label": "Densidad de espaciado",
+    "bgGradient.title": "Degradado de fondo",
+    "bgGradient.description": "Un sutil degradado diagonal del fondo al tinte detrás de toda la interfaz.",
+    "bgGradient.label": "Degradado de fondo"
   }
 }

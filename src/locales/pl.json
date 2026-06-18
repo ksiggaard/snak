@@ -671,6 +671,12 @@
     "planner.synthesisLabel": "Synthesis",
     "planner.toggleOn": "Planner mode on",
     "planner.toggleOff": "Planner mode off",
-    "planner.toggleHint": "Let the planner model decide how to handle your requests."
+    "planner.toggleHint": "Let the planner model decide how to handle your requests.",
+    "density.title": "Gęstość",
+    "density.description": "Kontroluje odstępy i marginesy w całym interfejsie — zwarty, standardowy lub wygodny.",
+    "density.label": "Gęstość odstępów",
+    "bgGradient.title": "Gradient tła",
+    "bgGradient.description": "Subtelny diagonalny gradient od tła do odcienia za całym interfejsem.",
+    "bgGradient.label": "Gradient tła"
   }
 }
