@@ -240,6 +240,11 @@ describe("send() with a bot (T38)", () => {
       memory_enabled: 1,
       profile_image: null,
       cover_image: null,
+      profile_image_x: 0.5,
+      profile_image_y: 0.5,
+      profile_image_zoom: 1.0,
+      cover_image_x: 0.5,
+      cover_image_y: 0.5,
       created_at: "",
       updated_at: "",
     });

@@ -230,6 +230,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/028_message_model.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 29,
+            description: "workspace image reposition (profile x/y/zoom, cover x/y)",
+            sql: include_str!("../migrations/029_image_position.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

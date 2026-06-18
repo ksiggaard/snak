@@ -101,6 +101,16 @@ export interface Workspace {
   profile_image: string | null;
   /** Cover/banner image for the workspace dashboard (base64 JPEG); null = no image. */
   cover_image: string | null;
+  /** Profile image pan x offset (0-1, default center). */
+  profile_image_x: number;
+  /** Profile image pan y offset (0-1, default center). */
+  profile_image_y: number;
+  /** Profile image zoom scale (1.0 = natural cover size, min ensures circle always covered). */
+  profile_image_zoom: number;
+  /** Cover image pan x offset (0-1, default center). */
+  cover_image_x: number;
+  /** Cover image pan y offset (0-1, default center). */
+  cover_image_y: number;
   created_at: string;
   updated_at: string;
 }
