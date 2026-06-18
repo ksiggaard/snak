@@ -271,11 +271,11 @@ export function ChatView() {
         {!panelOpen && (
           <motion.div
             key="panel-toggle"
-            initial={{ opacity: 0, width: 0 }}
-            animate={{ opacity: 1, width: "auto" }}
-            exit={{ opacity: 0, width: 0 }}
-            transition={{ type: "spring", stiffness: 350, damping: 30 }}
-            className="hidden shrink-0 flex-col items-center pt-0.5 md:flex overflow-hidden"
+            layout
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="hidden w-9 shrink-0 flex-col items-center pt-0.5 md:flex"
           >
             <Button
               variant="ghost"
