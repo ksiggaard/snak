@@ -593,6 +593,8 @@ export const en = {
   "colors.background": "Background",
   "colors.colorAria": "{label} color",
   "colors.mixColor": "Mix color",
+  "colors.highlight": "Highlight",
+  "colors.tint": "Tint",
   "colors.contrast": "Surface contrast",
   "colors.resetAll": "Reset all colors",
 

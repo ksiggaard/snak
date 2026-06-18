@@ -390,6 +390,8 @@
     "colors.background": "Hintergrund",
     "colors.colorAria": "Farbe: {label}",
     "colors.mixColor": "Mischfarbe",
+    "colors.highlight": "Hervorhebung",
+    "colors.tint": "Farbton",
     "colors.contrast": "Flächenkontrast",
     "colors.resetAll": "Alle Farben zurücksetzen",
     "corners.title": "Ecken",

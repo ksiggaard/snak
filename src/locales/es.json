@@ -390,6 +390,8 @@
     "colors.background": "Fondo",
     "colors.colorAria": "Color de {label}",
     "colors.mixColor": "Color de mezcla",
+    "colors.highlight": "Resaltado",
+    "colors.tint": "Tinte",
     "colors.contrast": "Contraste de superficies",
     "colors.resetAll": "Restablecer todos los colores",
     "corners.title": "Esquinas",

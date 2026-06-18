@@ -400,6 +400,8 @@
     "colors.background": "Tło",
     "colors.colorAria": "Kolor: {label}",
     "colors.mixColor": "Kolor domieszki",
+    "colors.highlight": "Podświetlenie",
+    "colors.tint": "Odcień",
     "colors.contrast": "Kontrast powierzchni",
     "colors.resetAll": "Przywróć wszystkie kolory",
     "corners.title": "Narożniki",

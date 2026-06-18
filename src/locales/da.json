@@ -390,6 +390,8 @@
     "colors.background": "Baggrund",
     "colors.colorAria": "Farve for {label}",
     "colors.mixColor": "Blandingsfarve",
+    "colors.highlight": "Fremhævning",
+    "colors.tint": "Tone",
     "colors.contrast": "Fladekontrast",
     "colors.resetAll": "Nulstil alle farver",
     "corners.title": "Hjørner",

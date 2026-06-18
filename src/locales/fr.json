@@ -390,6 +390,8 @@
     "colors.background": "Arrière-plan",
     "colors.colorAria": "Couleur {label}",
     "colors.mixColor": "Couleur de mélange",
+    "colors.highlight": "Surbrillance",
+    "colors.tint": "Teinte",
     "colors.contrast": "Contraste des surfaces",
     "colors.resetAll": "Réinitialiser toutes les couleurs",
     "corners.title": "Coins",
