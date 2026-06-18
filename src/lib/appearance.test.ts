@@ -517,3 +517,40 @@ describe("chat max-width preference (CHAT_WIDTH)", () => {
     expect(getStoredChatMaxWidth()).toBe(CHAT_WIDTH.fallback);
   });
 });
+
+describe("accent and tint picks", () => {
+  it("round-trips accent and tint picks", () => {
+    storeCustomColors({
+      light: { accent: "#88bbee" },
+      dark: { tint: "#1a2e4a" },
+    });
+    expect(getStoredCustomColors()).toEqual({
+      light: { accent: "#88bbee" },
+      dark: { tint: "#1a2e4a" },
+    });
+    storeCustomColors({ light: {}, dark: {} });
+    expect(localStorage.getItem("custom-colors")).toBeNull();
+  });
+
+  it("sanitizes accent and tint as hex colors", () => {
+    localStorage.setItem(
+      "custom-colors",
+      JSON.stringify({ light: { accent: "not a color", tint: "#1a2e4a" }, dark: {} }),
+    );
+    expect(getStoredCustomColors()).toEqual({
+      light: { tint: "#1a2e4a" },
+      dark: {},
+    });
+  });
+
+  it("persists combined with existing picks", () => {
+    storeCustomColors({
+      light: { primary: "#3858d6", accent: "#88bbee", tint: "#c9daf0" },
+      dark: { background: "#0b1a2e", accent: "#3366cc", tint: "#1a2e4a" },
+    });
+    expect(getStoredCustomColors()).toEqual({
+      light: { primary: "#3858d6", accent: "#88bbee", tint: "#c9daf0" },
+      dark: { background: "#0b1a2e", accent: "#3366cc", tint: "#1a2e4a" },
+    });
+  });
+});

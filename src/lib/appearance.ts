@@ -17,7 +17,7 @@
 // so light and dark can be customized independently.
 
 export type ColorMode = "light" | "dark";
-export type ColorKey = "primary" | "background" | "surface";
+export type ColorKey = "primary" | "background" | "surface" | "accent" | "tint";
 
 export interface ModeColors {
   /** Accent (`--primary`) hex pick, e.g. "#3b82f6". */
@@ -27,6 +27,10 @@ export interface ModeColors {
   /** Secondary mix color the derived surfaces blend toward (defaults to the
    * background's tonal pole — black on a light pick, white on a dark one). */
   surface?: string;
+  /** UI interaction color (`--accent`), distinct from primary. */
+  accent?: string;
+  /** Gradient tint color (`--tint`), blended with background. */
+  tint?: string;
   /** Multiplier on the derived-surface tone steps (see `CONTRAST`). */
   contrast?: number;
 }
@@ -407,6 +411,8 @@ function sanitizeModeColors(v: unknown): ModeColors {
   if (isHexColor(m.primary)) out.primary = m.primary.toLowerCase();
   if (isHexColor(m.background)) out.background = m.background.toLowerCase();
   if (isHexColor(m.surface)) out.surface = m.surface.toLowerCase();
+  if (isHexColor(m.accent)) out.accent = m.accent.toLowerCase();
+  if (isHexColor(m.tint)) out.tint = m.tint.toLowerCase();
   if (typeof m.contrast === "number" && Number.isFinite(m.contrast))
     out.contrast = clampContrast(m.contrast);
   return out;
