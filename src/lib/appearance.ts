@@ -385,8 +385,20 @@ export const DEFAULT_PICKER_COLORS: Record<
   ColorMode,
   Record<ColorKey, string>
 > = {
-  light: { primary: "#3858d6", background: "#fafbfc", surface: "#b8c8e0" },
-  dark: { primary: "#f472b6", background: "#0b1a2e", surface: "#1a3d5c" },
+  light: {
+    primary: "#3858d6",
+    background: "#fafbfc",
+    surface: "#b8c8e0",
+    accent: "#88bbee",
+    tint: "#c9daf0",
+  },
+  dark: {
+    primary: "#f472b6",
+    background: "#0b1a2e",
+    surface: "#1a3d5c",
+    accent: "#3b5998",
+    tint: "#1a2e4a",
+  },
 };
 
 /** Bounds for the surface-contrast multiplier (1 = the built-in steps). */
