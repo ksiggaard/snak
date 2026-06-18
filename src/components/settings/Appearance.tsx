@@ -438,6 +438,20 @@ function ColorsCard() {
           onChange={(hex) => setColor(mode, "surface", hex)}
           onReset={() => resetColor(mode, "surface")}
         />
+        <ColorRow
+          label={t("colors.highlight")}
+          value={picks.accent ?? DEFAULT_PICKER_COLORS[mode].accent}
+          custom={picks.accent !== undefined}
+          onChange={(hex) => setColor(mode, "accent", hex)}
+          onReset={() => resetColor(mode, "accent")}
+        />
+        <ColorRow
+          label={t("colors.tint")}
+          value={picks.tint ?? DEFAULT_PICKER_COLORS[mode].tint}
+          custom={picks.tint !== undefined}
+          onChange={(hex) => setColor(mode, "tint", hex)}
+          onReset={() => resetColor(mode, "tint")}
+        />
         <div className="flex items-center justify-between gap-3">
           <span
             className={cn(
