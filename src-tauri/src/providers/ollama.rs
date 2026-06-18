@@ -122,25 +122,47 @@ async fn native_chat(
         .await
         .context("ollama chat request failed")?;
 
-    // Resilience: `think: true` errors on models that don't support thinking
-    // (e.g. gemma3, qwen2.5). Rather than let an enabled global setting break
-    // chat for non-thinking local models, drop `think` and retry once.
-    if !resp.status().is_success() && req.reasoning {
-        if let Some(obj) = body.as_object_mut() {
-            obj.remove("think");
+    // Resilience: retry up to once, dropping features the model doesn't support.
+    // - `think: true` errors on non-thinking models (gemma3, qwen2.5).
+    // - `tools` errors on tiny models that lack tool-calling (gemma4:e2b, etc.).
+    let mut retried = false;
+    loop {
+        let status = resp.status();
+        if status.is_success() {
+            break;
+        }
+        if retried {
+            let text = resp.text().await.unwrap_or_default();
+            return Err(anyhow!("ollama error {status}: {text}"));
+        }
+        retried = true;
+        let text = resp.text().await.unwrap_or_default();
+        let can_retry = if text.contains("does not support tools") {
+            if let Some(o) = body.as_object_mut() {
+                o.remove("tools");
+                true
+            } else {
+                false
+            }
+        } else if req.reasoning && text.contains("does not support") {
+            if let Some(o) = body.as_object_mut() {
+                o.remove("think");
+                true
+            } else {
+                false
+            }
+        } else {
+            return Err(anyhow!("ollama error {status}: {text}"));
+        };
+        if !can_retry {
+            return Err(anyhow!("ollama error {status}: {text}"));
         }
         resp = client
             .post(format!("{BASE_URL}/api/chat"))
             .json(&body)
             .send()
             .await
-            .context("ollama chat request failed")?;
-    }
-
-    let status = resp.status();
-    if !status.is_success() {
-        let text = resp.text().await.unwrap_or_default();
-        return Err(anyhow!("ollama error {status}: {text}"));
+            .context("ollama chat retry failed")?;
     }
 
     let mut content = String::new();
