@@ -556,6 +556,7 @@ export function Composer({
           onChange={setText}
           images={images}
           onRemoveImage={removeImage}
+          onReplaceImage={replaceImage}
           onSend={send}
           canSend={canSend}
           onClose={() => setCanvasOpen(false)}

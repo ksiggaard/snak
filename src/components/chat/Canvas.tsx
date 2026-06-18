@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Maximize2, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ImageChip } from "@/components/chat/ImageChip";
 import { Markdown } from "@/components/chat/Markdown";
 import { useT } from "@/store/i18n";
 import type { PreparedImage } from "@/lib/image";
@@ -14,6 +15,8 @@ interface CanvasProps {
   images: PreparedImage[];
   /** Remove an attached image by index. */
   onRemoveImage: (index: number) => void;
+  /** Replace an attached image at index with a new prepared image. */
+  onReplaceImage: (index: number, image: PreparedImage) => void;
   /** Send the draft and close (mirrors the composer's send). */
   onSend: () => void;
   /** Whether sending is currently allowed (provider/key/non-empty gating). */
@@ -35,6 +38,7 @@ export function Canvas({
   onChange,
   images,
   onRemoveImage,
+  onReplaceImage,
   onSend,
   canSend,
   onClose,
@@ -126,21 +130,13 @@ export function Canvas({
           {images.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {images.map((img, i) => (
-                <div key={i} className="relative">
-                  <img
-                    src={img.dataUrl}
-                    alt={t("composer.attachmentPreview")}
-                    className="size-10 rounded-md object-cover"
-                  />
-                  <button
-                    type="button"
-                    aria-label={t("composer.removeImage")}
-                    onClick={() => onRemoveImage(i)}
-                    className="bg-background/80 absolute -top-1.5 -right-1.5 rounded-full border p-0.5"
-                  >
-                    <X className="size-3" />
-                  </button>
-                </div>
+                <ImageChip
+                  key={i}
+                  image={img}
+                  index={i}
+                  onRemove={onRemoveImage}
+                  onReplace={onReplaceImage}
+                />
               ))}
             </div>
           ) : (
