@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Canvas } from "@/components/chat/Canvas";
+import { ImageChip } from "@/components/chat/ImageChip";
 import { ContextMeter } from "@/components/chat/ContextMeter";
 import { ModelPicker } from "@/components/chat/ModelPicker";
 import { WorkspaceFileSelector } from "@/components/chat/WorkspaceFileSelector";
@@ -409,6 +410,10 @@ export function Composer({
     setImages((prev) => prev.filter((_, i) => i !== index));
   }
 
+  function replaceImage(index: number, prepared: PreparedImage) {
+    setImages((prev) => prev.map((img, i) => (i === index ? prepared : img)));
+  }
+
   function removeDocument(index: number) {
     setDocuments((prev) => prev.filter((_, i) => i !== index));
   }
@@ -709,21 +714,13 @@ export function Composer({
       {(images.length > 0 || documents.length > 0 || extracting) && (
         <div className="flex flex-wrap items-center gap-2">
           {images.map((img, i) => (
-            <div key={i} className="relative">
-              <img
-                src={img.dataUrl}
-                alt={t("composer.attachmentPreview")}
-                className="size-16 rounded-md object-cover"
-              />
-              <button
-                type="button"
-                aria-label={t("composer.removeImage")}
-                onClick={() => removeImage(i)}
-                className="bg-background/80 absolute -top-1.5 -right-1.5 rounded-full border p-0.5"
-              >
-                <X className="size-3" />
-              </button>
-            </div>
+            <ImageChip
+              key={i}
+              image={img}
+              index={i}
+              onRemove={removeImage}
+              onReplace={replaceImage}
+            />
           ))}
           {documents.map((doc, i) => (
             <div
