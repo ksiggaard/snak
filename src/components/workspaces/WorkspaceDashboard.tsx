@@ -1,6 +1,12 @@
 import { useRef } from "react";
-import { FileText, Globe, MessageSquare, Settings2, X } from "lucide-react";
+import { FileText, Globe, Image as ImageIcon, MessageSquare, Settings2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useWorkspaces } from "@/store/workspaces";
 import { useThreads } from "@/store/threads";
 import { useT } from "@/store/i18n";
@@ -76,36 +82,59 @@ export function WorkspaceDashboard() {
     <div aria-label={t("workspace.dashboard")} className="bg-card flex flex-1 flex-col overflow-y-auto rounded-lg border">
       {/* Cover image banner */}
       <div className="relative h-32 shrink-0 overflow-hidden rounded-t-lg">
-        {workspace.cover_image ? (
-          <img
-            src={`data:image/jpeg;base64,${workspace.cover_image}`}
-            alt=""
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div className="from-primary/30 to-primary/10 h-full w-full bg-gradient-to-br" />
-        )}
-        {/* Cover image controls */}
-        <div className="absolute right-2 top-2 flex gap-1">
-          <button
-            type="button"
-            onClick={() => coverInputRef.current?.click()}
-            className="bg-background/70 hover:bg-background/90 rounded px-2 py-1 text-xs"
-            title={t("workspace.changeCoverImage")}
-          >
-            {t("workspace.coverImage")}
-          </button>
-          {workspace.cover_image && (
-            <button
-              type="button"
-              onClick={() => void onRemoveCoverImage()}
-              className="bg-background/70 hover:bg-background/90 rounded p-1"
-              aria-label={t("workspace.removeCoverImage")}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <div
+              className="h-full w-full cursor-pointer"
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const file = e.dataTransfer.files[0];
+                if (!file || !workspace) return;
+                void (async () => {
+                  try {
+                    const prepared = await prepareImage(file);
+                    await setImages(workspace.id, workspace.profile_image, prepared.base64);
+                  } catch { /* ignore non-image drops */ }
+                })();
+              }}
             >
-              <X className="size-3" />
-            </button>
-          )}
-        </div>
+              {workspace.cover_image ? (
+                <img
+                  src={`data:image/jpeg;base64,${workspace.cover_image}`}
+                  alt=""
+                  className="h-full w-full object-cover"
+                  style={{
+                    objectPosition: `${workspace.cover_image_x * 100}% ${workspace.cover_image_y * 100}%`,
+                  }}
+                />
+              ) : (
+                <div className="from-primary/30 to-primary/10 h-full w-full bg-gradient-to-br" />
+              )}
+            </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-40">
+            <DropdownMenuItem
+              onClick={() => {
+                /* Reposition starts inline drag mode — handled in Task 9 */
+              }}
+            >
+              <ImageIcon className="size-3.5" />
+              {t("workspace.repositionImage")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => coverInputRef.current?.click()}>
+              <ImageIcon className="size-3.5" />
+              {t("workspace.replaceImage")}
+            </DropdownMenuItem>
+            {workspace.cover_image && (
+              <DropdownMenuItem onClick={() => void onRemoveCoverImage()}>
+                <X className="size-3.5" />
+                {t("workspace.clearImage")}
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
         <input
           ref={coverInputRef}
           type="file"
@@ -118,36 +147,63 @@ export function WorkspaceDashboard() {
       {/* Profile image + name row */}
       <div className="-mt-8 flex items-end gap-4 px-5 pb-3 pt-0">
         <div className="relative shrink-0">
-          {workspace.profile_image ? (
-            <img
-              src={`data:image/jpeg;base64,${workspace.profile_image}`}
-              alt={workspace.name}
-              className="border-card size-16 rounded-full border-4 object-cover"
-            />
-          ) : (
-            <div className="border-card bg-primary/20 text-primary flex size-16 items-center justify-center rounded-full border-4 text-xl font-bold">
-              {initial}
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={() => profileInputRef.current?.click()}
-            className="bg-background/70 hover:bg-background/90 absolute bottom-0 right-0 rounded-full p-0.5"
-            aria-label={t("workspace.profileImage")}
-            title={t("workspace.changeProfileImage")}
-          >
-            <Settings2 className="size-3" />
-          </button>
-          {workspace.profile_image && (
-            <button
-              type="button"
-              onClick={() => void onRemoveProfileImage()}
-              className="bg-background/70 hover:bg-background/90 absolute -right-1 -top-1 rounded-full p-0.5"
-              aria-label={t("workspace.removeProfileImage")}
-            >
-              <X className="size-3" />
-            </button>
-          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <div
+                className="cursor-pointer"
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const file = e.dataTransfer.files[0];
+                  if (!file || !workspace) return;
+                  void (async () => {
+                    try {
+                      const prepared = await prepareImage(file);
+                      await setImages(workspace.id, prepared.base64, workspace.cover_image);
+                    } catch { /* ignore */ }
+                  })();
+                }}
+              >
+                {workspace.profile_image ? (
+                  <img
+                    src={`data:image/jpeg;base64,${workspace.profile_image}`}
+                    alt={workspace.name}
+                    className="border-card size-16 rounded-full border-4 object-cover"
+                    style={{
+                      objectPosition: `${workspace.profile_image_x * 100}% ${workspace.profile_image_y * 100}%`,
+                      transform: `scale(${workspace.profile_image_zoom})`,
+                      transformOrigin: "center",
+                    }}
+                  />
+                ) : (
+                  <div className="border-card bg-primary/20 text-primary flex size-16 items-center justify-center rounded-full border-4 text-xl font-bold">
+                    {initial}
+                  </div>
+                )}
+              </div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-40">
+              <DropdownMenuItem
+                onClick={() => {
+                  /* Opens reposition overlay — handled in Task 8 */
+                }}
+              >
+                <ImageIcon className="size-3.5" />
+                {t("workspace.repositionImage")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => profileInputRef.current?.click()}>
+                <ImageIcon className="size-3.5" />
+                {t("workspace.replaceImage")}
+              </DropdownMenuItem>
+              {workspace.profile_image && (
+                <DropdownMenuItem onClick={() => void onRemoveProfileImage()}>
+                  <X className="size-3.5" />
+                  {t("workspace.clearImage")}
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <input
             ref={profileInputRef}
             type="file"
