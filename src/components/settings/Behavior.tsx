@@ -73,7 +73,7 @@ export function BehaviorSettings() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 xl:grid xl:grid-cols-2">
       {/* Global Shortcut Card */}
       <Card className="w-full max-w-lg xl:max-w-2xl">
         <CardHeader>
