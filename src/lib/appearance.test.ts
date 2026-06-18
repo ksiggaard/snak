@@ -125,7 +125,6 @@ describe("buildColorCss", () => {
       "--popover:",
       "--muted:",
       "--secondary:",
-      "--accent:",
       "--border:",
       "--input:",
       "--ring:",
@@ -552,5 +551,37 @@ describe("accent and tint picks", () => {
       light: { primary: "#3858d6", accent: "#88bbee", tint: "#c9daf0" },
       dark: { background: "#0b1a2e", accent: "#3366cc", tint: "#1a2e4a" },
     });
+  });
+});
+
+describe("accent and tint in color CSS", () => {
+  it("emits --accent and --accent-foreground when accent is picked", () => {
+    const css = buildColorCss({ light: { accent: "#88bbee" }, dark: {} });
+    expect(css).toContain("--accent: #88bbee;");
+    expect(css).toContain("--accent-foreground: ");
+  });
+
+  it("emits --tint when tint is picked", () => {
+    const css = buildColorCss({ light: { tint: "#c9daf0" }, dark: {} });
+    expect(css).toContain("--tint: #c9daf0;");
+  });
+
+  it("emits all custom picks combined", () => {
+    const css = buildColorCss({
+      light: { primary: "#3858d6", accent: "#88bbee", tint: "#c9daf0" },
+      dark: {},
+    });
+    expect(css).toContain("--primary: #3858d6;");
+    expect(css).toContain("--accent: #88bbee;");
+    expect(css).toContain("--tint: #c9daf0;");
+  });
+});
+
+describe("accent no longer derived from background", () => {
+  it("derivedSurfaceDecls does not include --accent or --accent-foreground", () => {
+    const decls = derivedSurfaceDecls("#ffffff").join(" ");
+    expect(decls).not.toContain("--accent:");
+    expect(decls).not.toContain("--accent-foreground:");
+    expect(decls).toContain("--sidebar-accent:");
   });
 });

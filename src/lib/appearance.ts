@@ -612,8 +612,6 @@ export function derivedSurfaceDecls(
     `--secondary-foreground: ${contrastForeground(muted)};`,
     `--muted: ${muted};`,
     `--muted-foreground: ${mutedFg};`,
-    `--accent: ${muted};`,
-    `--accent-foreground: ${contrastForeground(muted)};`,
     `--border: ${border};`,
     `--input: ${border};`,
     `--ring: ${ring};`,
@@ -659,6 +657,13 @@ function colorDecls(mc: ModeColors): string[] {
   if (mc.primary) {
     d.push(`--primary: ${mc.primary};`);
     d.push(`--primary-foreground: ${contrastForeground(mc.primary)};`);
+  }
+  if (mc.accent) {
+    d.push(`--accent: ${mc.accent};`);
+    d.push(`--accent-foreground: ${contrastForeground(mc.accent)};`);
+  }
+  if (mc.tint) {
+    d.push(`--tint: ${mc.tint};`);
   }
   if (mc.background) {
     const bg = tintedBackground(mc.background, mc.surface, mc.contrast);
