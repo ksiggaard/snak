@@ -40,6 +40,11 @@ export function WorkspaceDashboard() {
   const [minZoomVal, setMinZoomVal] = useState(1.0);
   const imgRef = useRef<HTMLImageElement>(null);
 
+  const [draggingCover, setDraggingCover] = useState(false);
+  const [coverDrag, setCoverDrag] = useState<{ mx: number; my: number; x: number; y: number } | null>(null);
+  const [coverPos, setCoverPos] = useState({ x: 0.5, y: 0.5 });
+  const coverImgRef = useRef<HTMLImageElement>(null);
+
   const workspace = workspaces.find((w) => w.id === openWorkspaceId);
   if (!workspace) {
     return (
@@ -122,63 +127,117 @@ export function WorkspaceDashboard() {
     setDragStart(null);
   }
 
+  async function startCoverReposition() {
+    if (!workspace) return;
+    setCoverPos({
+      x: workspace.cover_image_x,
+      y: workspace.cover_image_y,
+    });
+    setDraggingCover(true);
+  }
+
   return (
     <div aria-label={t("workspace.dashboard")} className="bg-card flex flex-1 flex-col overflow-y-auto rounded-lg border">
       {/* Cover image banner */}
       <div className="relative h-32 shrink-0 overflow-hidden rounded-t-lg">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <div
-              className="h-full w-full cursor-pointer"
-              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-              onDrop={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                const file = e.dataTransfer.files[0];
-                if (!file || !workspace) return;
-                void (async () => {
-                  try {
-                    const prepared = await prepareImage(file);
-                    await setImages(workspace.id, workspace.profile_image, prepared.base64);
-                  } catch { /* ignore non-image drops */ }
-                })();
-              }}
-            >
-              {workspace.cover_image ? (
-                <img
-                  src={`data:image/jpeg;base64,${workspace.cover_image}`}
-                  alt=""
-                  className="h-full w-full object-cover"
-                  style={{
-                    objectPosition: `${workspace.cover_image_x * 100}% ${workspace.cover_image_y * 100}%`,
-                  }}
-                />
-              ) : (
-                <div className="from-primary/30 to-primary/10 h-full w-full bg-gradient-to-br" />
-              )}
-            </div>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-40">
-            <DropdownMenuItem
-              onClick={() => {
-                /* Reposition starts inline drag mode — handled in Task 9 */
-              }}
-            >
-              <ImageIcon className="size-3.5" />
-              {t("workspace.repositionImage")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => coverInputRef.current?.click()}>
-              <ImageIcon className="size-3.5" />
-              {t("workspace.replaceImage")}
-            </DropdownMenuItem>
+        {draggingCover ? (
+          <div
+            className="h-full w-full cursor-grab active:cursor-grabbing"
+            onMouseDown={(e) => {
+              if (!coverImgRef.current) return;
+              setCoverDrag({ mx: e.clientX, my: e.clientY, x: coverPos.x, y: coverPos.y });
+              e.preventDefault();
+            }}
+            onMouseMove={(e) => {
+              if (!coverDrag || !coverImgRef.current) return;
+              const rect = coverImgRef.current.getBoundingClientRect();
+              const dx = (e.clientX - coverDrag.mx) / rect.width;
+              const dy = (e.clientY - coverDrag.my) / rect.height;
+              setCoverPos({
+                x: Math.max(0, Math.min(1, coverDrag.x - dx)),
+                y: Math.max(0, Math.min(1, coverDrag.y - dy)),
+              });
+            }}
+            onMouseUp={async () => {
+              setCoverDrag(null);
+              setDraggingCover(false);
+              if (!workspace) return;
+              await setImages(
+                workspace.id,
+                workspace.profile_image,
+                workspace.cover_image,
+                workspace.profile_image_x,
+                workspace.profile_image_y,
+                workspace.profile_image_zoom,
+                coverPos.x,
+                coverPos.y,
+              );
+            }}
+            onMouseLeave={() => setCoverDrag(null)}
+          >
             {workspace.cover_image && (
-              <DropdownMenuItem onClick={() => void onRemoveCoverImage()}>
-                <X className="size-3.5" />
-                {t("workspace.clearImage")}
-              </DropdownMenuItem>
+              <img
+                ref={coverImgRef}
+                src={`data:image/jpeg;base64,${workspace.cover_image}`}
+                alt=""
+                className="h-full w-full object-cover"
+                style={{ objectPosition: `${coverPos.x * 100}% ${coverPos.y * 100}%` }}
+                draggable={false}
+              />
             )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+          </div>
+        ) : (
+          /* Drop-to-replace + DropdownMenu trigger (from Task 7) wraps the image */
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <div
+                className="h-full w-full cursor-pointer"
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const file = e.dataTransfer.files[0];
+                  if (!file || !workspace) return;
+                  void (async () => {
+                    try {
+                      const prepared = await prepareImage(file);
+                      await setImages(workspace.id, workspace.profile_image, prepared.base64);
+                    } catch { /* ignore */ }
+                  })();
+                }}
+              >
+                {workspace.cover_image ? (
+                  <img
+                    src={`data:image/jpeg;base64,${workspace.cover_image}`}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    style={{
+                      objectPosition: `${workspace.cover_image_x * 100}% ${workspace.cover_image_y * 100}%`,
+                    }}
+                  />
+                ) : (
+                  <div className="from-primary/30 to-primary/10 h-full w-full bg-gradient-to-br" />
+                )}
+              </div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuItem onClick={startCoverReposition}>
+                <ImageIcon className="size-3.5" />
+                {t("workspace.repositionImage")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => coverInputRef.current?.click()}>
+                <ImageIcon className="size-3.5" />
+                {t("workspace.replaceImage")}
+              </DropdownMenuItem>
+              {workspace.cover_image && (
+                <DropdownMenuItem onClick={() => void onRemoveCoverImage()}>
+                  <X className="size-3.5" />
+                  {t("workspace.clearImage")}
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         <input
           ref={coverInputRef}
           type="file"
