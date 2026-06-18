@@ -1,4 +1,5 @@
 import { Bot, Folder, MessagesSquare, type LucideIcon } from "lucide-react";
+import { motion } from "framer-motion";
 import {
   Tooltip,
   TooltipContent,
@@ -73,7 +74,10 @@ export function SidebarRail({
                   )}
                 >
                   {active && (
-                    <span className="bg-primary absolute top-1.5 bottom-1.5 -left-2 w-0.5 rounded-full" />
+                    <motion.span
+                      layoutId="rail-indicator"
+                      className="bg-primary absolute top-1.5 bottom-1.5 -left-2 w-0.5 rounded-full"
+                    />
                   )}
                   <Icon className="size-5" />
                 </button>

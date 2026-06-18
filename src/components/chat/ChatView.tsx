@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import { Brain, Ghost, PanelRight, ShieldAlert } from "lucide-react";
 import { MessageList } from "@/components/chat/MessageList";
 import { Composer } from "@/components/chat/Composer";
@@ -281,13 +282,15 @@ export function ChatView() {
           </Button>
         </div>
       )}
-      {panelOpen && (
-        <ChatPanel
-          messages={messages}
-          threadId={currentThreadId}
-          onClose={() => setPanelOpen(false)}
-        />
-      )}
+      <AnimatePresence>
+        {panelOpen && (
+          <ChatPanel
+            messages={messages}
+            threadId={currentThreadId}
+            onClose={() => setPanelOpen(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
