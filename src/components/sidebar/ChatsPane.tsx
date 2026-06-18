@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { LayoutGroup } from "framer-motion";
 import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import { useThreads } from "@/store/threads";
 import { confirmDialog } from "@/store/confirm";
@@ -58,7 +59,8 @@ export function ChatsPane() {
   const archived = threads.filter((t) => !!t.archived);
 
   return (
-    <div className="flex flex-col gap-2">
+    <LayoutGroup>
+      <div className="flex flex-col gap-2">
       {favorites.length > 0 && (
         <section>
           <p className="text-muted-foreground px-2 py-1 text-xs font-medium">
@@ -142,5 +144,6 @@ export function ChatsPane() {
         </section>
       )}
     </div>
+    </LayoutGroup>
   );
 }

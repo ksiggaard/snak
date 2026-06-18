@@ -153,6 +153,18 @@
   body {
     @apply bg-background text-foreground;
     }
+
+  /* Floating-card layout: slightly darker canvas behind the rounded cards
+     so they read as elevated surfaces. Light and dark each tune the shade. */
+  :root {
+    --canvas: oklch(0.96 0.003 240);
+  }
+  .dark {
+    --canvas: #060e18;
+  }
+  .canvas-bg {
+    background: var(--canvas);
+  }
   html {
     @apply font-sans;
     }
@@ -248,6 +260,39 @@ html.overlay #root {
 .card-hover-lift:hover {
   transform: translateY(-1px);
   box-shadow: var(--shadow-sm);
+}
+
+/* Animated gradient border shimmer for the composer on focus. A thin
+   rotating conic-gradient pseudo-element gives a lively "active" feel. */
+@keyframes composer-shimmer {
+  from { --shimmer-angle: 0deg; }
+  to   { --shimmer-angle: 360deg; }
+}
+@property --shimmer-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+.composer-shimmer:focus-within {
+  border-color: transparent;
+  background-clip: padding-box;
+  position: relative;
+}
+.composer-shimmer:focus-within::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--shimmer-angle, 0deg),
+    var(--primary),
+    var(--ring),
+    var(--primary)
+  );
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  animation: composer-shimmer 3s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

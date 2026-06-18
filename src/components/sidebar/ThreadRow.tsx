@@ -159,8 +159,10 @@ export function ThreadRow({
       {/* Renaming owns the row; don't hijack right-click into the menu then. */}
       <ContextMenuTrigger asChild disabled={editing}>
         <motion.div
-          whileHover={{ x: 2 }}
-          transition={{ type: "spring", stiffness: 500, damping: 30 }}
+          initial={{ opacity: 0, x: -6 }}
+          animate={{ opacity: 1, x: 0 }}
+          whileHover={{ x: 3 }}
+          transition={{ type: "spring", stiffness: 400, damping: 30, mass: 0.7 }}
           className={cn(
             "group relative flex items-center gap-1 rounded-md px-3",
             compact ? "py-1" : "py-2",
@@ -178,7 +180,8 @@ export function ThreadRow({
               glance in any theme, where the `bg-sidebar-accent` tint alone is
               too close to the sidebar background to spot the active chat. */}
           {active && (
-            <span
+            <motion.span
+              layoutId="active-indicator"
               aria-hidden
               className="bg-primary absolute inset-y-1 left-0 w-[3px] rounded-r-full"
             />

@@ -536,7 +536,7 @@ export function Composer({
 
   return (
     <div
-      className="bg-card shadow-sm flex flex-col gap-3 rounded-xl border p-5 transition-shadow focus-within:ring-primary/40 focus-within:ring-2"
+      className="bg-card shadow-sm composer-shimmer flex flex-col gap-3 rounded-xl border p-5 transition-shadow focus-within:ring-primary/40 focus-within:ring-2"
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();

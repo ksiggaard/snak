@@ -261,7 +261,7 @@ function App() {
         <ImageLightbox />
         <SearchOverlay />
 
-        <div className="flex min-h-0 flex-1">
+        <div className="canvas-bg flex min-h-0 flex-1 gap-3 p-3">
           {/* Icon rail (wide tier): always visible, independent of the pane. */}
           {tier === "wide" && <SidebarRail />}
 
@@ -294,7 +294,7 @@ function App() {
             </SheetContent>
           </Sheet>
 
-          <main className="flex min-w-0 flex-1 flex-col p-[calc(1.5rem*var(--density-scale,1))] md:p-[calc(2rem*var(--density-scale,1))]">
+          <main className="bg-background shadow-sm flex min-w-0 flex-1 flex-col rounded-2xl p-[calc(1.25rem*var(--density-scale,1))] md:p-[calc(1.5rem*var(--density-scale,1))]">
             <AnimatePresence mode="wait">
               <motion.div
                 key={

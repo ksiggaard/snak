@@ -51,8 +51,8 @@ export function SidebarRail({
     <nav
       aria-label={t("sidebar.navigation")}
       className={cn(
-        "bg-sidebar text-sidebar-foreground border-sidebar-border flex w-12 shrink-0 flex-col items-center border-r py-2",
-        variant === "overlay" && "z-20 shadow-lg",
+        "bg-sidebar text-sidebar-foreground flex w-12 shrink-0 flex-col items-center rounded-2xl py-2",
+        variant === "overlay" && "z-20 shadow-lg rounded-none",
       )}
     >
       <div className="flex flex-col items-center gap-1">

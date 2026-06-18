@@ -65,7 +65,7 @@ export function SidebarPane() {
 
   return (
     <>
-      <div className="flex items-center justify-between gap-1 px-4 pt-3 pb-1">
+      <div className="flex items-center justify-between gap-1 px-4 pt-4 pb-1">
         <span className="text-sidebar-foreground/60 text-xs font-semibold tracking-wide uppercase">
           {title}
         </span>

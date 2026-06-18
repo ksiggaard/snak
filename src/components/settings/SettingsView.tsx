@@ -64,10 +64,10 @@ export function SettingsView() {
             type="button"
             onClick={() => setActiveId(s.id)}
             className={cn(
-              "shrink-0 rounded-md px-3 py-2 text-left text-sm whitespace-nowrap",
+              "shrink-0 rounded-md px-3 py-2 text-left text-sm whitespace-nowrap transition-all duration-200",
               s.id === activeId
-                ? "bg-accent text-accent-foreground font-medium"
-                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                ? "bg-accent text-accent-foreground font-medium shadow-sm"
+                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground hover:scale-[1.02]",
             )}
           >
             {t(s.label)}
