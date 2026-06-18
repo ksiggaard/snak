@@ -809,6 +809,12 @@ export const en = {
   "workspace.changeCoverImage": "Change cover image",
   "workspace.removeProfileImage": "Remove profile image",
   "workspace.removeCoverImage": "Remove cover image",
+  "composer.replaceImage": "Replace image",
+  "composer.clearImage": "Clear image",
+  "workspace.repositionImage": "Reposition",
+  "workspace.replaceImage": "Replace image",
+  "workspace.clearImage": "Clear image",
+  "workspace.imageZoom": "Zoom",
   "workspace.totalFileSize": "{size} chars total",
 
   // --- Quick actions (empty-screen starters) ---------------------------------
