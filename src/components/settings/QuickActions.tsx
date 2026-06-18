@@ -51,7 +51,7 @@ export function QuickActions() {
   }
 
   return (
-    <Card className="w-full max-w-lg">
+    <Card className="w-full max-w-lg xl:max-w-2xl">
       <CardHeader>
         <CardTitle>{t("quickActions.title")}</CardTitle>
         <CardDescription>{t("quickActions.description")}</CardDescription>

@@ -37,7 +37,7 @@ export function Bots() {
   }
 
   return (
-    <Card className="w-full max-w-lg overflow-visible">
+    <Card className="w-full max-w-lg xl:max-w-2xl overflow-visible">
       <CardHeader>
         <CardTitle>{t("bots.title")}</CardTitle>
         <CardDescription>{t("bots.description")}</CardDescription>

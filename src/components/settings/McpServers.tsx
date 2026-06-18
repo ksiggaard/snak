@@ -211,7 +211,7 @@ export function McpServers() {
   }
 
   return (
-    <Card className="w-full max-w-lg">
+    <Card className="w-full max-w-lg xl:max-w-2xl">
       <CardHeader>
         <CardTitle>{t("mcp.title")}</CardTitle>
         <CardDescription>{t("mcp.description")}</CardDescription>

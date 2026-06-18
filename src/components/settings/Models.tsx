@@ -41,7 +41,7 @@ export function Models() {
   }
 
   return (
-    <Card className="w-full max-w-lg">
+    <Card className="w-full max-w-lg xl:max-w-2xl">
       <CardHeader>
         <CardTitle>{t("models.title")}</CardTitle>
         <CardDescription>{t("models.description")}</CardDescription>

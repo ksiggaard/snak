@@ -48,7 +48,7 @@ export function PlannerModel() {
   });
 
   return (
-    <Card className="w-full max-w-lg overflow-visible">
+    <Card className="w-full max-w-lg xl:max-w-2xl overflow-visible">
       <CardHeader>
         <CardTitle>{t("planner.title")}</CardTitle>
         <CardDescription>{t("planner.description")}</CardDescription>

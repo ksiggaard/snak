@@ -71,7 +71,7 @@ export function Advanced() {
   );
 
   return (
-    <Card className="w-full max-w-lg">
+    <Card className="w-full max-w-lg xl:max-w-2xl">
       <CardHeader>
         <CardTitle>{t("advanced.title")}</CardTitle>
         <CardDescription>{t("advanced.description")}</CardDescription>

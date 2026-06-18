@@ -63,7 +63,7 @@ export function ApiKeys() {
   }
 
   return (
-    <Card className="w-full max-w-lg">
+    <Card className="w-full max-w-lg xl:max-w-2xl">
       <CardHeader>
         <CardTitle>{t("apiKeys.title")}</CardTitle>
         <CardDescription>{t("apiKeys.description")}</CardDescription>

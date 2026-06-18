@@ -74,7 +74,7 @@ export function Skills() {
   const skills = plugins.filter((p) => p.manifest.category === "skill");
 
   return (
-    <Card className="w-full max-w-lg">
+    <Card className="w-full max-w-lg xl:max-w-2xl">
       <CardHeader>
         <CardTitle>{t("skills.title")}</CardTitle>
         <CardDescription>{t("skills.description")}</CardDescription>

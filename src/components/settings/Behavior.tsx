@@ -75,7 +75,7 @@ export function BehaviorSettings() {
   return (
     <div className="flex flex-col gap-4">
       {/* Global Shortcut Card */}
-      <Card className="w-full max-w-lg">
+      <Card className="w-full max-w-lg xl:max-w-2xl">
         <CardHeader>
           <CardTitle>{t("shortcut.title")}</CardTitle>
           <CardDescription>{t("shortcut.description")}</CardDescription>
@@ -108,7 +108,7 @@ export function BehaviorSettings() {
       </Card>
 
       {/* Close to Tray Card */}
-      <Card className="w-full max-w-lg">
+      <Card className="w-full max-w-lg xl:max-w-2xl">
         <CardHeader>
           <CardTitle>{t("tray.title")}</CardTitle>
           <CardDescription>{t("tray.description")}</CardDescription>

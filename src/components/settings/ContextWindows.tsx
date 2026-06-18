@@ -69,7 +69,7 @@ export function ContextWindows() {
   );
 
   return (
-    <Card className="w-full max-w-lg">
+    <Card className="w-full max-w-lg xl:max-w-2xl">
       <CardHeader>
         <CardTitle>{t("contextWindows.title")}</CardTitle>
         <CardDescription>{t("contextWindows.description")}</CardDescription>

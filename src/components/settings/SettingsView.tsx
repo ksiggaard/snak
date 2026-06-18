@@ -1,4 +1,5 @@
 import { useState, type ComponentType } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Models } from "@/components/settings/Models";
 import { Memory } from "@/components/settings/Memory";
 import { Bots } from "@/components/settings/Bots";
@@ -76,7 +77,17 @@ export function SettingsView() {
       </nav>
 
       <div className="min-h-0 flex-1 overflow-y-auto py-1 [&>*]:shrink-0">
-        <Active />
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeId}
+            initial={{ opacity: 0, y: 8, filter: "blur(2px)" }}
+            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+            exit={{ opacity: 0, y: -8, filter: "blur(2px)" }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+          >
+            <Active />
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   );

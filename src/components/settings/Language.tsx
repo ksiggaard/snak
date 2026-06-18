@@ -36,7 +36,7 @@ export function Language() {
   const bundledCodes = new Set(["en", "de", "fr", "pl", "es", "da"]);
 
   return (
-    <Card className="w-full max-w-lg">
+    <Card className="w-full max-w-lg xl:max-w-2xl">
       <CardHeader>
         <CardTitle>{t("language.title")}</CardTitle>
         <CardDescription>{t("language.description")}</CardDescription>

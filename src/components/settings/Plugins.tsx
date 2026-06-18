@@ -347,7 +347,7 @@ export function Plugins() {
     plugins.filter((p) => p.manifest.category === cat);
 
   return (
-    <Card className="w-full max-w-lg">
+    <Card className="w-full max-w-lg xl:max-w-2xl">
       <CardHeader>
         <CardTitle>{t("plugins.title")}</CardTitle>
         <CardDescription>{t("plugins.description")}</CardDescription>
