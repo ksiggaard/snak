@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import {
   Card,
   CardContent,
@@ -196,14 +197,17 @@ function ProviderPluginRow({ p }: { p: PluginInfo }) {
             </span>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Button
-            size="sm"
-            variant={p.enabled ? "default" : "outline"}
-            onClick={() => void setEnabled(id, !p.enabled)}
-          >
-            {p.enabled ? t("common.enabled") : t("common.disabled")}
-          </Button>
+        <div className="flex shrink-0 items-center gap-3">
+          <label className="text-muted-foreground flex cursor-pointer items-center gap-2 text-xs select-none">
+            <Switch
+              checked={p.enabled}
+              onCheckedChange={() => void setEnabled(id, !p.enabled)}
+              aria-label={`${name} ${p.enabled ? t("common.enabled") : t("common.disabled")}`}
+            />
+            <span className="w-12">
+              {p.enabled ? t("common.enabled") : t("common.disabled")}
+            </span>
+          </label>
           {p.source === "user" && (
             <Button
               size="sm"
@@ -286,14 +290,17 @@ function PluginRow({ p }: { p: PluginInfo }) {
             </span>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Button
-            size="sm"
-            variant={p.enabled ? "default" : "outline"}
-            onClick={() => void setEnabled(id, !p.enabled)}
-          >
-            {p.enabled ? t("common.enabled") : t("common.disabled")}
-          </Button>
+        <div className="flex shrink-0 items-center gap-3">
+          <label className="text-muted-foreground flex cursor-pointer items-center gap-2 text-xs select-none">
+            <Switch
+              checked={p.enabled}
+              onCheckedChange={() => void setEnabled(id, !p.enabled)}
+              aria-label={`${name} ${p.enabled ? t("common.enabled") : t("common.disabled")}`}
+            />
+            <span className="w-12">
+              {p.enabled ? t("common.enabled") : t("common.disabled")}
+            </span>
+          </label>
           {p.source === "user" && (
             <Button
               size="sm"

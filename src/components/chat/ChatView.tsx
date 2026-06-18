@@ -248,7 +248,7 @@ export function ChatView() {
         >
           <div
             className="mx-auto flex w-full flex-col gap-4"
-            style={{ maxWidth: chatMaxWidth ?? undefined }}
+            style={{ maxWidth: chatMaxWidth ? chatMaxWidth + 40 : undefined }}
           >
             {error && <p className="text-destructive px-1 text-sm">{error}</p>}
             <PlannerToggleBar />
