@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FileText, Globe, Image as ImageIcon, MessageSquare, Settings2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,6 +45,21 @@ export function WorkspaceDashboard() {
   const [coverPos, setCoverPos] = useState({ x: 0.5, y: 0.5 });
   const coverImgRef = useRef<HTMLImageElement>(null);
 
+  const [coverDragOver, setCoverDragOver] = useState(false);
+  const [profileDragOver, setProfileDragOver] = useState(false);
+
+  useEffect(() => {
+    if (!draggingCover) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setDraggingCover(false);
+        setCoverDrag(null);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [draggingCover]);
+
   const workspace = workspaces.find((w) => w.id === openWorkspaceId);
   if (!workspace) {
     return (
@@ -65,7 +80,16 @@ export function WorkspaceDashboard() {
     if (!list || list.length === 0 || !workspace) return;
     const file = list[0]!;
     const prepared = await prepareImage(file);
-    await setImages(workspace.id, prepared.base64, workspace.cover_image);
+    await setImages(
+      workspace.id,
+      prepared.base64,
+      workspace.cover_image,
+      0.5,
+      0.5,
+      1.0,
+      workspace.cover_image_x,
+      workspace.cover_image_y,
+    );
     if (profileInputRef.current) profileInputRef.current.value = "";
   }
 
@@ -73,18 +97,45 @@ export function WorkspaceDashboard() {
     if (!list || list.length === 0 || !workspace) return;
     const file = list[0]!;
     const prepared = await prepareImage(file);
-    await setImages(workspace.id, workspace.profile_image, prepared.base64);
+    await setImages(
+      workspace.id,
+      workspace.profile_image,
+      prepared.base64,
+      workspace.profile_image_x,
+      workspace.profile_image_y,
+      workspace.profile_image_zoom,
+      0.5,
+      0.5,
+    );
     if (coverInputRef.current) coverInputRef.current.value = "";
   }
 
   async function onRemoveProfileImage() {
     if (!workspace) return;
-    await setImages(workspace.id, null, workspace.cover_image);
+    await setImages(
+      workspace.id,
+      null,
+      workspace.cover_image,
+      0.5,
+      0.5,
+      1.0,
+      workspace.cover_image_x,
+      workspace.cover_image_y,
+    );
   }
 
   async function onRemoveCoverImage() {
     if (!workspace) return;
-    await setImages(workspace.id, workspace.profile_image, null);
+    await setImages(
+      workspace.id,
+      workspace.profile_image,
+      null,
+      workspace.profile_image_x,
+      workspace.profile_image_y,
+      workspace.profile_image_zoom,
+      0.5,
+      0.5,
+    );
   }
 
   const initial = workspace.name.slice(0, 2).toUpperCase();
@@ -185,27 +236,48 @@ export function WorkspaceDashboard() {
                 draggable={false}
               />
             )}
+            <span className="bg-background/60 text-muted-foreground absolute right-1 top-1 rounded px-1.5 py-0.5 text-xs">
+              Esc {t("common.cancel").toLowerCase()}
+            </span>
           </div>
         ) : (
           /* Drop-to-replace + DropdownMenu trigger (from Task 7) wraps the image */
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <div
-                className="h-full w-full cursor-pointer"
-                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                className={`h-full w-full cursor-pointer ${coverDragOver ? "ring-2 ring-primary relative" : ""}`}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setCoverDragOver(true); }}
+                onDragLeave={() => setCoverDragOver(false)}
                 onDrop={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  setCoverDragOver(false);
                   const file = e.dataTransfer.files[0];
                   if (!file || !workspace) return;
                   void (async () => {
                     try {
                       const prepared = await prepareImage(file);
-                      await setImages(workspace.id, workspace.profile_image, prepared.base64);
+                      await setImages(
+                        workspace.id,
+                        workspace.profile_image,
+                        prepared.base64,
+                        workspace.profile_image_x,
+                        workspace.profile_image_y,
+                        workspace.profile_image_zoom,
+                        0.5,
+                        0.5,
+                      );
                     } catch { /* ignore */ }
                   })();
                 }}
               >
+                {coverDragOver && (
+                  <div className="bg-primary/20 absolute inset-0 z-10 flex items-center justify-center">
+                    <span className="text-primary-foreground text-xs font-medium drop-shadow">
+                      {t("workspace.dropToReplace")}
+                    </span>
+                  </div>
+                )}
                 {workspace.cover_image ? (
                   <img
                     src={`data:image/jpeg;base64,${workspace.cover_image}`}
@@ -253,21 +325,39 @@ export function WorkspaceDashboard() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <div
-                className="cursor-pointer"
-                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                className={`cursor-pointer ${profileDragOver ? "ring-2 ring-primary relative rounded-full" : ""}`}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setProfileDragOver(true); }}
+                onDragLeave={() => setProfileDragOver(false)}
                 onDrop={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  setProfileDragOver(false);
                   const file = e.dataTransfer.files[0];
                   if (!file || !workspace) return;
                   void (async () => {
                     try {
                       const prepared = await prepareImage(file);
-                      await setImages(workspace.id, prepared.base64, workspace.cover_image);
+                      await setImages(
+                        workspace.id,
+                        prepared.base64,
+                        workspace.cover_image,
+                        0.5,
+                        0.5,
+                        1.0,
+                        workspace.cover_image_x,
+                        workspace.cover_image_y,
+                      );
                     } catch { /* ignore */ }
                   })();
                 }}
               >
+                {profileDragOver && (
+                  <div className="bg-primary/20 absolute inset-[-4px] z-10 flex items-center justify-center rounded-full">
+                    <span className="text-primary-foreground text-xs font-medium drop-shadow">
+                      {t("workspace.dropToReplace")}
+                    </span>
+                  </div>
+                )}
                 {workspace.profile_image ? (
                   <img
                     src={`data:image/jpeg;base64,${workspace.profile_image}`}

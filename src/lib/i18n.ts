@@ -814,6 +814,7 @@ export const en = {
   "workspace.repositionImage": "Reposition",
   "workspace.replaceImage": "Replace image",
   "workspace.clearImage": "Clear image",
+  "workspace.dropToReplace": "Drop to replace",
   "workspace.imageZoom": "Zoom",
   "workspace.totalFileSize": "{size} chars total",
 

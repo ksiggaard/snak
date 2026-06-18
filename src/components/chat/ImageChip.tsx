@@ -14,6 +14,7 @@ interface ImageChipProps {
   index: number;
   onRemove: (index: number) => void;
   onReplace: (index: number, image: PreparedImage) => void;
+  size?: string;
 }
 
 export function ImageChip({
@@ -21,6 +22,7 @@ export function ImageChip({
   index,
   onRemove,
   onReplace,
+  size = "size-16",
 }: ImageChipProps) {
   const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -54,7 +56,7 @@ export function ImageChip({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className={`block size-16 rounded-md overflow-hidden border-2 transition-colors ${
+            className={`block ${size} rounded-md overflow-hidden border-2 transition-colors ${
               dragOver
                 ? "border-primary"
                 : "border-transparent hover:border-primary/50"

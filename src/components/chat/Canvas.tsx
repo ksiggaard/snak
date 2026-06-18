@@ -136,6 +136,7 @@ export function Canvas({
                   index={i}
                   onRemove={onRemoveImage}
                   onReplace={onReplaceImage}
+                  size="size-10"
                 />
               ))}
             </div>
