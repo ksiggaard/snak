@@ -52,6 +52,7 @@ export function BotEditor({ bot }: { bot: Bot }) {
   const providers = useProviders();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pasteDivRef = useRef<HTMLDivElement>(null);
   const [avatarError, setAvatarError] = useState<"invalid" | "paste" | null>(
     null,
   );
@@ -137,6 +138,18 @@ export function BotEditor({ bot }: { bot: Bot }) {
       }
       setAvatarError("paste");
     } catch {
+      // nop — fallback below
+    }
+    // Fallback for Linux WebKitGTK where navigator.clipboard.read() fails:
+    // focus a hidden contenteditable div and paste into it so the browser
+    // fires a paste event with the image in DataTransfer.items.
+    const div = pasteDivRef.current;
+    if (div) {
+      div.style.display = "block";
+      div.focus();
+      document.execCommand("paste");
+      div.style.display = "none";
+    } else {
       setAvatarError("paste");
     }
   }
@@ -176,12 +189,24 @@ export function BotEditor({ bot }: { bot: Bot }) {
         // A pasted *image* anywhere in the editor becomes the avatar (mirrors
         // the Composer's pasted-files flow). Text pastes carry no files and
         // pass through to the focused field untouched.
-        const image = Array.from(e.clipboardData.files).find((f) =>
+        const files = Array.from(e.clipboardData.files).filter((f) =>
           f.type.startsWith("image/"),
         );
-        if (image) {
+        if (files.length > 0) {
           e.preventDefault();
-          void applyAvatar(image);
+          void applyAvatar(files[0]!);
+          return;
+        }
+        // Linux: clipboard image may be in items instead of files
+        for (const item of e.clipboardData.items) {
+          if (item.kind === "file" && item.type.startsWith("image/")) {
+            const blob = item.getAsFile();
+            if (blob) {
+              e.preventDefault();
+              void applyAvatar(blob);
+              return;
+            }
+          }
         }
       }}
     >
@@ -250,6 +275,13 @@ export function BotEditor({ bot }: { bot: Bot }) {
             accept="image/*"
             className="hidden"
             onChange={(e) => void onPickAvatar(e.target.files)}
+          />
+          <div
+            ref={pasteDivRef}
+            contentEditable
+            className="absolute h-0 w-0 opacity-0 overflow-hidden"
+            aria-hidden
+            tabIndex={-1}
           />
         </div>
         {avatarError !== null && (
