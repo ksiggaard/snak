@@ -24,6 +24,7 @@ export function Models() {
   const models = useModels((s) => s.models);
   const add = useModels((s) => s.add);
   const remove = useModels((s) => s.remove);
+  const updateNotes = useModels((s) => s.updateNotes);
   const error = useModels((s) => s.error);
 
   // Per-provider draft inputs for the add row, keyed by provider id.
@@ -63,18 +64,26 @@ export function Models() {
                 </p>
               )}
               {rows.map((m) => (
-                <div key={m.id} className="flex items-center gap-2">
-                  <span className="flex-1 text-sm">{m.label}</span>
-                  <span className="text-muted-foreground font-mono text-xs">
-                    {m.model_id}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void remove(m.id)}
-                  >
-                    {t("common.remove")}
-                  </Button>
+                <div key={m.id} className="flex flex-col gap-1 rounded-md border p-2">
+                  <div className="flex items-center gap-2">
+                    <span className="flex-1 text-sm">{m.label}</span>
+                    <span className="text-muted-foreground font-mono text-xs">
+                      {m.model_id}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void remove(m.id)}
+                    >
+                      {t("common.remove")}
+                    </Button>
+                  </div>
+                  <Input
+                    value={m.notes}
+                    onChange={(e) => void updateNotes(m.id, e.target.value)}
+                    placeholder={t("models.notesPlaceholder")}
+                    className="h-7 text-xs"
+                  />
                 </div>
               ))}
               <div className="flex items-center gap-2">

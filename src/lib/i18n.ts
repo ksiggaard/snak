@@ -416,6 +416,7 @@ export const en = {
   "settings.nav.mcp": "MCP Servers",
   "settings.nav.skills": "Skills",
   "settings.nav.plugins": "Plugins",
+  "settings.nav.planner": "Planner",
   "settings.nav.bots": "Personas",
   "settings.nav.quickActions": "Quick actions",
   "settings.nav.advanced": "Advanced",
@@ -461,6 +462,28 @@ export const en = {
   "models.noModels": "No models yet — add one below.",
   "models.labelPlaceholder": "Label (e.g. Opus 4.8)",
   "models.idPlaceholder": "model id",
+  "models.notesLabel": "Notes",
+  "models.notesPlaceholder": "What this model is good at (e.g. great for coding)",
+
+  // --- Settings: planner model -----------------------------------------------
+  "planner.title": "Planner model",
+  "planner.description":
+    "Choose a model to orchestrate complex tasks. The planner analyzes your request, decides which model is best suited, and can break work into parallel steps. It acts as the recommended default when enabled.",
+  "planner.modelLabel": "Planner model",
+  "planner.defaultToggle": "Use planner for new chats by default",
+  "planner.needsMoreModels":
+    "A planner is most useful with at least two models configured. Add API keys for more providers to get the most out of it.",
+  "planner.planning": "Planning…",
+  "planner.stepRunning": "Running",
+  "planner.stepDone": "Done",
+  "planner.badge": "Planner",
+  "planner.planTitle": "Plan",
+  "planner.stepLabel": "Step {n}",
+  "planner.synthesisLabel": "Synthesis",
+  "planner.toggleOn": "Planner mode on",
+  "planner.toggleOff": "Planner mode off",
+  "planner.toggleHint":
+    "Let the planner model decide how to handle your requests — routing to the best model or breaking into parallel steps.",
 
   // --- Settings: context windows (T53) -------------------------------------------
   "contextWindows.title": "Context windows",

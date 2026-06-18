@@ -30,6 +30,14 @@ export interface Thread {
    * ids the user has de-selected for this chat. NULL or "[]" = nothing excluded
    * = all files are injected (default all-selected). */
   workspace_files_excluded: string | null;
+  /** 1 = planner mode is active for this thread. Sends are orchestrated by the
+   * planner model instead of going directly to the thread's provider/model. */
+  planner_active: number;
+  /** Saved provider from before planner mode was toggled on, so toggling off
+   * can restore it. NULL = never toggled / not in planner mode. */
+  pre_planner_provider: Provider | null;
+  /** Saved model from before planner mode was toggled on (paired with above). */
+  pre_planner_model: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -124,6 +132,8 @@ export interface Model {
   /** Friendly display label, e.g. "Opus 4.8". */
   label: string;
   sort_order: number;
+  /** Free-text description of what this model is good at, shown in the picker. */
+  notes: string;
 }
 
 /**
@@ -154,6 +164,10 @@ export interface Message {
   /** 1 if this is the selected variant of its group — the only one sent as
    * context. 0 for the other (browsable but un-injected) variants (T54). */
   variant_selected: number;
+  /** Provider that generated this message; NULL = inherited from thread. */
+  provider: Provider | null;
+  /** Model that generated this message; NULL = inherited from thread. */
+  model: string | null;
   created_at: string;
 }
 
@@ -217,7 +231,9 @@ export type AttachmentKind =
   // Transparency captures on an assistant reply: the model's reasoning (plain
   // text) and the raw per-round API trace (JSON). At most one of each.
   | "reasoning"
-  | "api_trace";
+  | "api_trace"
+  // Planner-orchestrated plan: the JSON plan the planner model produced.
+  | "plan";
 
 export interface Attachment {
   id: string;

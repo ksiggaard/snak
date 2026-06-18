@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { addModel, deleteModel, listModels } from "@/lib/db";
+import { addModel, deleteModel, listModels, updateModelNotes } from "@/lib/db";
 import type { Model, Provider } from "@/types/db";
 
 interface ModelsState {
@@ -10,9 +10,11 @@ interface ModelsState {
   /** Load (or reload) the configured models from the db. */
   load: () => Promise<void>;
   /** Add a model for a provider, then reload. */
-  add: (provider: Provider, modelId: string, label: string) => Promise<void>;
+  add: (provider: Provider, modelId: string, label: string, notes?: string) => Promise<void>;
   /** Delete a model by id, then reload. */
   remove: (id: number) => Promise<void>;
+  /** Update the notes field for a model, then reload. */
+  updateNotes: (id: number, notes: string) => Promise<void>;
 }
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -31,9 +33,18 @@ export const useModels = create<ModelsState>((set, get) => ({
     }
   },
 
-  add: async (provider, modelId, label) => {
+  add: async (provider, modelId, label, notes) => {
     try {
-      await addModel({ provider, modelId, label });
+      await addModel({ provider, modelId, label, notes });
+      await get().load();
+    } catch (e) {
+      set({ error: errMsg(e) });
+    }
+  },
+
+  updateNotes: async (id, notes) => {
+    try {
+      await updateModelNotes(id, notes);
       await get().load();
     } catch (e) {
       set({ error: errMsg(e) });

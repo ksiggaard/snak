@@ -159,9 +159,14 @@ export function ModelChooser({
                           selected ? "opacity-100" : "opacity-0",
                         )}
                       />
-                      <span className="flex-1 truncate text-left">
-                        {o.label}
-                      </span>
+                      <div className="flex-1 truncate text-left">
+                        <span>{o.label}</span>
+                        {o.notes && (
+                          <span className="text-muted-foreground block truncate text-xs">
+                            {o.notes}
+                          </span>
+                        )}
+                      </div>
                       {!o.active && (
                         <span className="text-muted-foreground text-xs">
                           {t(

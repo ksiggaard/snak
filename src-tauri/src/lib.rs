@@ -218,6 +218,18 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/026_workspace_images.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 27,
+            description: "model notes: free-text description per model",
+            sql: include_str!("../migrations/027_model_notes.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 28,
+            description: "per-message model tracking + planner-active thread flag",
+            sql: include_str!("../migrations/028_message_model.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

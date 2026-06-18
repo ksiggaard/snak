@@ -18,6 +18,7 @@ const model = (
   model_id: modelId,
   label: modelId,
   sort_order: 0,
+  notes: "",
 });
 
 describe("isValidOllamaModelName", () => {

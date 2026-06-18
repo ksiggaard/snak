@@ -21,6 +21,8 @@ export interface ModelOption {
   /** Why the option is inactive, so the picker can show the right hint.
    *  "offline" = a cloud provider blocked because we're offline. */
   reason?: "offline";
+  /** Free-text description of what this model is good at (from models.notes). */
+  notes?: string;
 }
 
 /**
@@ -54,6 +56,7 @@ export function buildModelOptions(
         display: `${p.label} - ${m.label}`,
         active: !cloudBlocked,
         reason: cloudBlocked ? "offline" : undefined,
+        notes: m.notes || undefined,
       });
     }
   }

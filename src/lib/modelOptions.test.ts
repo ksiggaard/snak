@@ -16,7 +16,7 @@ const model = (
   model_id: string,
   label: string,
   sort_order = 0,
-): Model => ({ id, provider, model_id, label, sort_order });
+): Model => ({ id, provider, model_id, label, sort_order, notes: "" });
 
 const providers = [provider("anthropic", "Anthropic"), provider("openai", "OpenAI")];
 const models = [

@@ -177,6 +177,40 @@ export async function setThreadDeepResearch(
   ]);
 }
 
+/** Turn planner mode on/off for a thread. When turning on, pass the current
+ * provider+model so they can be restored when toggling off. */
+export async function setThreadPlannerActive(
+  id: string,
+  active: boolean,
+  prePlannerProvider?: Provider | null,
+  prePlannerModel?: string | null,
+): Promise<void> {
+  const db = await getDb();
+  if (active) {
+    await db.execute(
+      `UPDATE threads SET planner_active = 1, pre_planner_provider = $2, pre_planner_model = $3 WHERE id = $1`,
+      [id, prePlannerProvider ?? null, prePlannerModel ?? null],
+    );
+  } else {
+    await db.execute(
+      `UPDATE threads SET planner_active = 0, pre_planner_provider = NULL, pre_planner_model = NULL WHERE id = $1`,
+      [id],
+    );
+  }
+}
+
+/** Restore the saved pre-planner provider+model when toggling planner off. */
+export async function restoreThreadPrePlannerModel(id: string): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE threads
+        SET provider = COALESCE(pre_planner_provider, provider),
+            model    = COALESCE(pre_planner_model, model)
+      WHERE id = $1`,
+    [id],
+  );
+}
+
 /** Bump a thread's updated_at (e.g. after a new message). */
 export async function touchThread(id: string): Promise<void> {
   const db = await getDb();
@@ -280,6 +314,10 @@ export async function addMessage(input: {
    * NULL. Pass `null` explicitly to force a standalone, ungrouped row.
    */
   variant_group?: string | null;
+  /** Provider that generated this message (planner/worker attribution). */
+  provider?: Provider | null;
+  /** Model that generated this message (planner/worker attribution). */
+  model?: string | null;
 }): Promise<Message> {
   const db = await getDb();
   const id = newId();
@@ -292,8 +330,8 @@ export async function addMessage(input: {
         ? id
         : null;
   await db.execute(
-    `INSERT INTO messages (id, thread_id, role, content, kind, duration_ms, bot_id, variant_group)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    `INSERT INTO messages (id, thread_id, role, content, kind, duration_ms, bot_id, variant_group, provider, model)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
     [
       id,
       input.thread_id,
@@ -303,6 +341,8 @@ export async function addMessage(input: {
       input.duration_ms ?? null,
       input.bot_id ?? null,
       variantGroup,
+      input.provider ?? null,
+      input.model ?? null,
     ],
   );
   await touchThread(input.thread_id);
@@ -1387,15 +1427,22 @@ export async function addModel(input: {
   provider: Provider;
   modelId: string;
   label: string;
+  notes?: string;
 }): Promise<void> {
   const db = await getDb();
   // Single statement so the sort_order computation and insert can't race.
   await db.execute(
-    `INSERT INTO models (provider, model_id, label, sort_order)
-     SELECT $1, $2, $3, COALESCE(MAX(sort_order), -1) + 1
-       FROM models WHERE provider = $4`,
-    [input.provider, input.modelId, input.label, input.provider],
+    `INSERT INTO models (provider, model_id, label, sort_order, notes)
+     SELECT $1, $2, $3, COALESCE(MAX(sort_order), -1) + 1, $5
+        FROM models WHERE provider = $4`,
+    [input.provider, input.modelId, input.label, input.provider, input.notes ?? ""],
   );
+}
+
+/** Update the notes field for a model. */
+export async function updateModelNotes(id: number, notes: string): Promise<void> {
+  const db = await getDb();
+  await db.execute(`UPDATE models SET notes = $1 WHERE id = $2`, [notes, id]);
 }
 
 /** Delete a model by id. */
