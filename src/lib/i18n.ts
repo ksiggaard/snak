@@ -355,6 +355,22 @@ export const en = {
   "artifact.loadingEditor": "Loading editor…",
   "artifact.fileCount.one": "{n} file",
   "artifact.fileCount.other": "{n} files",
+  "artifact.edit": "Edit",
+  "artifact.saving": "Saving…",
+  "artifact.saveToLibrary": "Save to library",
+  "artifact.savedToLibrary": "Saved to library",
+  "artifact.editFile": "Edit {file}",
+  "artifact.editingFile": "Editing {file}…",
+  "artifact.editNoThreadLibrary":
+    "Open a chat first to use AI editing with a provider.",
+
+  // --- Artifacts Library sidebar -----------------------------------------------
+  "sidebar.artifacts": "Artifacts",
+  "library.empty":
+    "No saved artifacts yet. Save one from a chat or create a new one.",
+  "library.new": "New artifact",
+  "library.deleteTooltip": "Delete artifact",
+  "library.deleteConfirm": "Delete this saved artifact?",
 
   // --- Model chooser -----------------------------------------------------------
   "model.choose": "Choose model",
@@ -484,6 +500,9 @@ export const en = {
   "planner.toggleOff": "Planner mode off",
   "planner.toggleHint":
     "Let the planner model decide how to handle your requests — routing to the best model or breaking into parallel steps.",
+  "planner.instructions": "Instructions",
+  "planner.instructionsPlaceholder":
+    "Tell the planner how to prefer or prioritize models. E.g. \"Use local models whenever it makes sense. Prefer Claude for creative tasks.\"",
 
   // --- Settings: context windows (T53) -------------------------------------------
   "contextWindows.title": "Context windows",
