@@ -282,3 +282,13 @@ export interface Artifact {
   created_at: string;
   updated_at: string;
 }
+
+/** A saved library artifact (migration 030): an independent copy of an
+ *  artifact, untethered from any thread or message. */
+export interface LibraryArtifact {
+  id: string;
+  title: string;
+  files: ArtifactFile[];
+  created_at: string;
+  updated_at: string;
+}
