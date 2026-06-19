@@ -3,6 +3,7 @@ import { buildFtsMatch, searchTerms } from "@/lib/search";
 import type {
   Artifact,
   ArtifactFile,
+  LibraryArtifact,
   Attachment,
   AttachmentKind,
   Bot,
@@ -543,6 +544,114 @@ export async function updateArtifactFiles(
   await db.execute(
     `UPDATE artifacts SET files = $2, updated_at = datetime('now') WHERE id = $1`,
     [id, JSON.stringify(files)],
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Library artifacts (migration 030): saved independent artifact copies
+// ---------------------------------------------------------------------------
+
+interface LibraryArtifactRow {
+  id: string;
+  title: string;
+  files: string;
+  created_at: string;
+  updated_at: string;
+}
+
+function mapLibraryArtifact(row: LibraryArtifactRow): LibraryArtifact {
+  let files: ArtifactFile[] = [];
+  try {
+    const parsed = JSON.parse(row.files);
+    if (Array.isArray(parsed)) files = parsed as ArtifactFile[];
+  } catch {
+    // Corrupt JSON → treat as empty; the viewer shows "no files".
+  }
+  return { ...row, files };
+}
+
+export async function saveLibraryArtifact(
+  title: string,
+  files: ArtifactFile[],
+): Promise<LibraryArtifact> {
+  const db = await getDb();
+  const id = newId();
+  // Auto-suffix duplicate titles: "My App", "My App (2)", etc.
+  const existing = await db.select<{ title: string }[]>(
+    `SELECT title FROM library_artifacts WHERE title = $1 LIMIT 1`,
+    [title],
+  );
+  let finalTitle = title;
+  if (existing.length > 0) {
+    let n = 2;
+    while (true) {
+      const candidate = `${title} (${n})`;
+      const dups = await db.select<{ title: string }[]>(
+        `SELECT title FROM library_artifacts WHERE title = $1 LIMIT 1`,
+        [candidate],
+      );
+      if (dups.length === 0) {
+        finalTitle = candidate;
+        break;
+      }
+      n++;
+    }
+  }
+  await db.execute(
+    `INSERT INTO library_artifacts (id, title, files)
+     VALUES ($1, $2, $3)`,
+    [id, finalTitle, JSON.stringify(files)],
+  );
+  const rows = await db.select<LibraryArtifactRow[]>(
+    `SELECT * FROM library_artifacts WHERE id = $1`,
+    [id],
+  );
+  return mapLibraryArtifact(rows[0]);
+}
+
+export async function getLibraryArtifact(
+  id: string,
+): Promise<LibraryArtifact | null> {
+  const db = await getDb();
+  const rows = await db.select<LibraryArtifactRow[]>(
+    `SELECT * FROM library_artifacts WHERE id = $1`,
+    [id],
+  );
+  return rows.length > 0 ? mapLibraryArtifact(rows[0]) : null;
+}
+
+export async function listLibraryArtifacts(): Promise<LibraryArtifact[]> {
+  const db = await getDb();
+  const rows = await db.select<LibraryArtifactRow[]>(
+    `SELECT * FROM library_artifacts ORDER BY updated_at DESC`,
+  );
+  return rows.map(mapLibraryArtifact);
+}
+
+export async function updateLibraryArtifactFiles(
+  id: string,
+  files: ArtifactFile[],
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE library_artifacts SET files = $2, updated_at = datetime('now') WHERE id = $1`,
+    [id, JSON.stringify(files)],
+  );
+}
+
+export async function deleteLibraryArtifact(id: string): Promise<void> {
+  const db = await getDb();
+  await db.execute(`DELETE FROM library_artifacts WHERE id = $1`, [id]);
+}
+
+export async function renameLibraryArtifact(
+  id: string,
+  title: string,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE library_artifacts SET title = $2, updated_at = datetime('now') WHERE id = $1`,
+    [id, title],
   );
 }
 
