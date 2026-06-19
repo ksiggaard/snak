@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   ARTIFACT_EDITOR_SYSTEM_PROMPT,
+  ARTIFACT_SINGLE_FILE_SYSTEM_PROMPT,
   assembleArtifact,
   extractArtifactBlock,
   parseArtifact,
@@ -33,6 +34,7 @@ import { ArtifactFrame } from "@/components/chat/ArtifactFrame";
 import { useArtifacts } from "@/store/artifacts";
 import { useT } from "@/store/i18n";
 import type { ArtifactFile } from "@/types/db";
+import type { Provider } from "@/types/db";
 
 type ViewMode = "preview" | "split" | "code";
 
@@ -61,12 +63,16 @@ export function ArtifactViewer({
   files: initialFiles,
   initialTab,
   onClose,
+  editProvider,
+  editModel,
 }: {
   artifactId: string | null;
   title: string;
   files: ArtifactFile[];
   initialTab: ViewMode;
   onClose: () => void;
+  editProvider?: Provider;
+  editModel?: string;
 }) {
   const t = useT();
   const update = useArtifacts((s) => s.update);
@@ -104,6 +110,11 @@ export function ArtifactViewer({
   const [prompt, setPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+
+  // Per-file AI editor: targets only the selected file.
+  const [filePrompt, setFilePrompt] = useState("");
+  const [fileGenerating, setFileGenerating] = useState(false);
+  const [fileGenError, setFileGenError] = useState<string | null>(null);
 
   // Close on Escape (exit fullscreen first; ignored mid-generation so a stream
   // isn't orphaned by an accidental close).
@@ -167,6 +178,76 @@ export function ArtifactViewer({
       setGenerating(false);
     }
   }, [prompt, generating, artifactId, title, files, update, t, mode]);
+
+  const runFileEdit = useCallback(async () => {
+    const instruction = filePrompt.trim();
+    if (!instruction || fileGenerating || generating || !artifactId) return;
+    setFileGenError(null);
+    setFileGenerating(true);
+    if (mode === "preview") setMode("split");
+    try {
+      const art = await getArtifact(artifactId);
+      const thread = art ? await getThread(art.thread_id) : null;
+      const provider = editProvider ?? thread?.provider;
+      const model = editModel ?? thread?.model;
+      if (!provider || !model) throw new Error(t("artifact.editNoThread"));
+      const selectedFile = files[selected];
+      if (!selectedFile) throw new Error("No file selected");
+      const messages: ApiMessage[] = [
+        { role: "system", content: ARTIFACT_SINGLE_FILE_SYSTEM_PROMPT },
+        {
+          role: "user",
+          content:
+            `Current file (${selectedFile.path}):\n\n\`\`\`artifact\n` +
+            serializeArtifact(title, [selectedFile]) +
+            `\n\`\`\`\n\nRequested change: ` +
+            instruction,
+        },
+      ];
+      let acc = "";
+      const result = await chatStream(
+        provider,
+        model,
+        messages,
+        (e) => {
+          if (!e.text) return;
+          acc += e.text;
+          const live = parseArtifact(extractArtifactBlock(acc) ?? acc);
+          if (live && live.files.length > 0) {
+            const match = live.files.find((f) => f.path === selectedFile.path);
+            if (match) {
+              setFiles((prev) =>
+                prev.map((f, i) =>
+                  i === selected ? { ...f, content: match.content } : f,
+                ),
+              );
+            }
+          }
+        },
+        thread?.id ?? "",
+      );
+      const parsedFinal = parseArtifact(
+        extractArtifactBlock(result.content) ?? result.content,
+      );
+      if (parsedFinal && parsedFinal.files.length > 0) {
+        const match = parsedFinal.files.find((f) => f.path === selectedFile.path);
+        if (match) {
+          setFiles((prev) => {
+            const next = prev.map((f, i) =>
+              i === selected ? { ...f, content: match.content } : f,
+            );
+            if (artifactId) void update(artifactId, next);
+            return next;
+          });
+          setFilePrompt("");
+        }
+      }
+    } catch (err) {
+      setFileGenError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setFileGenerating(false);
+    }
+  }, [filePrompt, fileGenerating, generating, artifactId, selected, files, title, update, t, mode, editProvider, editModel]);
 
   const editFile = useCallback(
     (content: string) => {
@@ -333,15 +414,71 @@ export function ArtifactViewer({
           <div className="flex min-h-0 flex-1">
             {showsEditor && (
               <div
-                className={cn("min-h-0", mode === "split" ? "w-1/2" : "flex-1")}
+                className={cn(
+                  "flex min-h-0 flex-col",
+                  mode === "split" ? "w-1/2" : "flex-1",
+                )}
               >
-                {active ? (
-                  <ArtifactCodeEditor
-                    path={active.path}
-                    value={active.content}
-                    onChange={editFile}
-                  />
-                ) : null}
+                <div className="min-h-0 flex-1">
+                  {active ? (
+                    <ArtifactCodeEditor
+                      path={active.path}
+                      value={active.content}
+                      onChange={editFile}
+                    />
+                  ) : null}
+                </div>
+                {/* Per-file AI editor: edit only the selected file. */}
+                {artifactId && (
+                  <div className="border-t px-3 py-2">
+                    {fileGenError && (
+                      <p className="text-destructive mb-1.5 text-xs">{fileGenError}</p>
+                    )}
+                    <p className="text-muted-foreground mb-1 text-[11px]">
+                      {t("artifact.editingFile", { file: active?.path ?? "" })}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="text-muted-foreground size-4 shrink-0" />
+                      <input
+                        type="text"
+                        value={filePrompt}
+                        disabled={fileGenerating || generating}
+                        onChange={(e) => setFilePrompt(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            void runFileEdit();
+                          }
+                        }}
+                        placeholder={t("artifact.editFile", { file: active?.path ?? "" })}
+                        className="bg-background min-w-0 flex-1 rounded-md border px-3 py-1.5 text-sm outline-none disabled:opacity-60"
+                      />
+                      {fileGenerating ? (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => void cancelStream()}
+                        >
+                          <Square className="size-3.5" /> {t("artifact.editStop")}
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          disabled={!filePrompt.trim() || generating}
+                          onClick={() => void runFileEdit()}
+                        >
+                          <Send className="size-3.5" /> {t("common.send")}
+                        </Button>
+                      )}
+                    </div>
+                    {fileGenerating && (
+                      <p className="text-muted-foreground mt-1.5 flex items-center gap-1.5 text-xs">
+                        <Loader2 className="size-3 animate-spin" />{" "}
+                        {t("artifact.editingFile", { file: active?.path ?? "" })}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
             {showsPreview && (
