@@ -34,8 +34,10 @@ import { getArtifact, getThread } from "@/lib/db";
 import { ArtifactCodeEditor } from "@/components/chat/ArtifactCodeEditor";
 import { ArtifactFrame } from "@/components/chat/ArtifactFrame";
 import { useArtifacts } from "@/store/artifacts";
+import { useLibrary } from "@/store/library";
 import { useT } from "@/store/i18n";
 import type { ArtifactFile } from "@/types/db";
+import type { Artifact } from "@/types/db";
 import type { Provider } from "@/types/db";
 
 type ViewMode = "preview" | "split" | "code";
@@ -61,6 +63,7 @@ function slug(title: string): string {
  */
 export function ArtifactViewer({
   artifactId,
+  libraryId,
   title,
   files: initialFiles,
   initialTab,
@@ -70,6 +73,7 @@ export function ArtifactViewer({
   onSaveToLibrary,
 }: {
   artifactId: string | null;
+  libraryId?: string | null;
   title: string;
   files: ArtifactFile[];
   initialTab: ViewMode;
@@ -80,6 +84,10 @@ export function ArtifactViewer({
 }) {
   const t = useT();
   const update = useArtifacts((s) => s.update);
+  const updateLibrary = useLibrary((s) => s.update);
+
+  const isLibrary = libraryId != null;
+  const effectiveId = libraryId ?? artifactId;
 
   const [files, setFiles] = useState<ArtifactFile[]>(initialFiles);
   // The preview renders from `previewFiles` (a debounced copy of `files`) so
@@ -138,14 +146,29 @@ export function ArtifactViewer({
 
   const runEdit = useCallback(async () => {
     const instruction = prompt.trim();
-    if (!instruction || generating || !artifactId) return;
+    if (!instruction || generating || !effectiveId) return;
     setGenError(null);
     setGenerating(true);
     if (mode === "code") setMode("split");
     try {
-      const art = await getArtifact(artifactId);
-      const thread = art ? await getThread(art.thread_id) : null;
-      if (!thread) throw new Error(t("artifact.editNoThread"));
+      let provider: Provider;
+      let model: string;
+      let threadId: string | undefined;
+
+      if (isLibrary) {
+        provider = editProvider!;
+        model = editModel!;
+        threadId = undefined;
+      } else {
+        const art = (await getArtifact(effectiveId)) as Artifact | null;
+        const thread = art ? await getThread(art.thread_id) : null;
+        if (!thread || !art) throw new Error(t("artifact.editNoThread"));
+        provider = thread.provider;
+        model = thread.model;
+        threadId = thread.id;
+      }
+      if (!provider || !model) throw new Error(t("artifact.editNoThread"));
+
       const messages: ApiMessage[] = [
         { role: "system", content: ARTIFACT_EDITOR_SYSTEM_PROMPT },
         {
@@ -159,17 +182,16 @@ export function ArtifactViewer({
       ];
       let acc = "";
       const result = await chatStream(
-        thread.provider,
-        thread.model,
+        provider,
+        model,
         messages,
         (e) => {
           if (!e.text) return;
           acc += e.text;
-          // Accept either the ```artifact fence or a bare JSON/delimiter body.
           const live = parseArtifact(extractArtifactBlock(acc) ?? acc);
-          if (live && live.files.length) setFiles(live.files); // live preview
+          if (live && live.files.length) setFiles(live.files);
         },
-        thread.id,
+        threadId ?? "",
       );
       const parsedFinal = parseArtifact(
         extractArtifactBlock(result.content) ?? result.content,
@@ -177,27 +199,41 @@ export function ArtifactViewer({
       if (!parsedFinal || !parsedFinal.files.length)
         throw new Error(t("artifact.editNoArtifact"));
       setFiles(parsedFinal.files);
-      await update(artifactId, parsedFinal.files);
+      if (isLibrary) await updateLibrary(effectiveId!, parsedFinal.files);
+      else await update(effectiveId!, parsedFinal.files);
       setPrompt("");
     } catch (err) {
       setGenError(err instanceof Error ? err.message : String(err));
     } finally {
       setGenerating(false);
     }
-  }, [prompt, generating, artifactId, title, files, update, t, mode]);
+  }, [prompt, generating, effectiveId, isLibrary, title, files, update, updateLibrary, t, mode, editProvider, editModel]);
 
   const runFileEdit = useCallback(async () => {
     const instruction = filePrompt.trim();
-    if (!instruction || fileGenerating || generating || !artifactId) return;
+    if (!instruction || fileGenerating || generating || !effectiveId) return;
     setFileGenError(null);
     setFileGenerating(true);
     if (mode === "preview") setMode("split");
     try {
-      const art = await getArtifact(artifactId);
-      const thread = art ? await getThread(art.thread_id) : null;
-      const provider = editProvider ?? thread?.provider;
-      const model = editModel ?? thread?.model;
+      let provider: Provider;
+      let model: string;
+      let threadId: string | undefined;
+
+      if (isLibrary) {
+        provider = editProvider!;
+        model = editModel!;
+        threadId = undefined;
+      } else {
+        const art = (await getArtifact(effectiveId)) as Artifact | null;
+        const thread = art ? await getThread(art.thread_id) : null;
+        if (!thread || !art) throw new Error(t("artifact.editNoThread"));
+        provider = thread.provider;
+        model = thread.model;
+        threadId = thread.id;
+      }
       if (!provider || !model) throw new Error(t("artifact.editNoThread"));
+
       const selectedFile = files[selected];
       if (!selectedFile) throw new Error("No file selected");
       const messages: ApiMessage[] = [
@@ -231,7 +267,7 @@ export function ArtifactViewer({
             }
           }
         },
-        thread?.id ?? "",
+        threadId ?? "",
       );
       const parsedFinal = parseArtifact(
         extractArtifactBlock(result.content) ?? result.content,
@@ -243,7 +279,10 @@ export function ArtifactViewer({
             const next = prev.map((f, i) =>
               i === selected ? { ...f, content: match.content } : f,
             );
-            if (artifactId) void update(artifactId, next);
+            if (effectiveId) {
+              if (isLibrary) void updateLibrary(effectiveId, next);
+              else void update(effectiveId, next);
+            }
             return next;
           });
           setFilePrompt("");
@@ -254,7 +293,7 @@ export function ArtifactViewer({
     } finally {
       setFileGenerating(false);
     }
-  }, [filePrompt, fileGenerating, generating, artifactId, selected, files, title, update, t, mode, editProvider, editModel]);
+  }, [filePrompt, fileGenerating, generating, effectiveId, isLibrary, selected, files, title, update, updateLibrary, t, mode, editProvider, editModel]);
 
   const editFile = useCallback(
     (content: string) => {
@@ -262,11 +301,14 @@ export function ArtifactViewer({
         const next = prev.map((f, i) =>
           i === selected ? { ...f, content } : f,
         );
-        if (artifactId) void update(artifactId, next);
+        if (effectiveId) {
+          if (isLibrary) void updateLibrary(effectiveId, next);
+          else void update(effectiveId, next);
+        }
         return next;
       });
     },
-    [selected, artifactId, update],
+    [selected, effectiveId, isLibrary, update, updateLibrary],
   );
 
   const onExport = useCallback(async () => {
@@ -461,7 +503,7 @@ export function ArtifactViewer({
                   ) : null}
                 </div>
                 {/* Per-file AI editor: edit only the selected file. */}
-                {artifactId && (
+                {effectiveId && (
                   <div className="border-t px-3 py-2">
                     {fileGenError && (
                       <p className="text-destructive mb-1.5 text-xs">{fileGenError}</p>
@@ -542,7 +584,7 @@ export function ArtifactViewer({
             <input
               type="text"
               value={prompt}
-              disabled={generating || !artifactId}
+              disabled={generating || !effectiveId}
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
@@ -551,7 +593,7 @@ export function ArtifactViewer({
                 }
               }}
               placeholder={
-                artifactId
+                effectiveId
                   ? t("artifact.editPlaceholder")
                   : t("artifact.saving")
               }
@@ -568,7 +610,7 @@ export function ArtifactViewer({
             ) : (
               <Button
                 size="sm"
-                disabled={!prompt.trim() || !artifactId}
+                disabled={!prompt.trim() || !effectiveId}
                 onClick={() => void runEdit()}
               >
                 <Send className="size-3.5" /> {t("common.send")}
