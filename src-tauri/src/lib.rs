@@ -236,6 +236,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/029_image_position.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 30,
+            description: "library_artifacts: saved independent artifact copies",
+            sql: include_str!("../migrations/030_library_artifacts.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
