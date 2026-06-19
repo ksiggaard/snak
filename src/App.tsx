@@ -12,6 +12,7 @@ import { SettingsView } from "@/components/settings/SettingsView";
 import { ChatView } from "@/components/chat/ChatView";
 import { WorkspacePage } from "@/components/workspaces/WorkspacePage";
 import { BotView } from "@/components/bots/BotView";
+import { LibraryArtifactView } from "@/components/chat/LibraryArtifactView";
 import { UsageView } from "@/components/usage/UsageView";
 import { SearchOverlay } from "@/components/search/SearchOverlay";
 import { Sidebar } from "@/components/sidebar/Sidebar";
@@ -39,6 +40,7 @@ import {
 import { useThreads } from "@/store/threads";
 import { useWorkspaces } from "@/store/workspaces";
 import { useBots } from "@/store/bots";
+import { useLibrary } from "@/store/library";
 import { usePlugins } from "@/store/plugins";
 import { useI18n, useT } from "@/store/i18n";
 import { useModels } from "@/store/models";
@@ -68,6 +70,7 @@ function App() {
   const loadUserLanguagePacks = useI18n((s) => s.loadUserPacks);
   const openWorkspaceId = useWorkspaces((s) => s.openWorkspaceId);
   const openBotId = useBots((s) => s.openBotId);
+  const openLibraryId = useLibrary((s) => s.openId);
   const view = useView((s) => s.view);
   const sidebarOpen = useLayout((s) => s.sidebarOpen);
   const tier = useLayout((s) => s.tier);
@@ -302,9 +305,11 @@ function App() {
                     ? view
                     : openBotId
                       ? `bot:${openBotId}`
-                      : openWorkspaceId
-                        ? `workspace:${openWorkspaceId}`
-                        : "chat"
+                      : openLibraryId
+                        ? `library:${openLibraryId}`
+                        : openWorkspaceId
+                          ? `workspace:${openWorkspaceId}`
+                          : "chat"
                 }
                 initial={{ opacity: 0, y: 10, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -318,6 +323,8 @@ function App() {
                   <UsageView />
                 ) : openBotId ? (
                   <BotView />
+                ) : openLibraryId ? (
+                  <LibraryArtifactView />
                 ) : openWorkspaceId ? (
                   <WorkspacePage />
                 ) : (
