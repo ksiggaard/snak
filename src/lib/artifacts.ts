@@ -53,6 +53,19 @@ export const ARTIFACT_EDITOR_SYSTEM_PROMPT = [
   "- Output only the artifact block — no explanation before or after it.",
 ].join("\n");
 
+/** System text for the per-file AI editor: instruct the model to return only
+ *  the updated contents of a single file in artifact block format. */
+export const ARTIFACT_SINGLE_FILE_SYSTEM_PROMPT = [
+  "You are editing a single file inside a multi-file web artifact.",
+  "Apply the user's requested change and return ONLY that file's updated " +
+    "content as a fenced code block tagged `artifact` containing just that " +
+    "one file.",
+  "Rules:",
+  "- Return the file in full — never abbreviate or use placeholders.",
+  '- Use the format: `--- <path> ---` followed by the complete file contents.',
+  "- Output only the artifact block — no explanation before or after it.",
+].join("\n");
+
 const DELIMITER = /^\s*---\s*(.+?)\s*---\s*$/;
 const TITLE_LINE = /^\s*title\s*[:=]\s*(.+?)\s*$/i;
 
