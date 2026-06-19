@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  BookmarkPlus,
+  Check,
   Code2,
   Columns2,
   Download,
@@ -65,6 +67,7 @@ export function ArtifactViewer({
   onClose,
   editProvider,
   editModel,
+  onSaveToLibrary,
 }: {
   artifactId: string | null;
   title: string;
@@ -73,6 +76,7 @@ export function ArtifactViewer({
   onClose: () => void;
   editProvider?: Provider;
   editModel?: string;
+  onSaveToLibrary?: () => Promise<void>;
 }) {
   const t = useT();
   const update = useArtifacts((s) => s.update);
@@ -88,6 +92,9 @@ export function ArtifactViewer({
   const [showAddress, setShowAddress] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">(
+    "idle",
+  );
 
   const showsPreview = mode === "preview" || mode === "split";
   const showsEditor = mode === "code" || mode === "split";
@@ -364,6 +371,31 @@ export function ArtifactViewer({
             >
               <ExternalLink className="size-4" />
             </Button>
+            {onSaveToLibrary && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t("artifact.saveToLibrary")}
+                title={t("artifact.saveToLibrary")}
+                disabled={saveStatus !== "idle"}
+                onClick={async () => {
+                  setSaveStatus("saving");
+                  try {
+                    await onSaveToLibrary();
+                    setSaveStatus("saved");
+                    setTimeout(() => setSaveStatus("idle"), 2000);
+                  } catch {
+                    setSaveStatus("idle");
+                  }
+                }}
+              >
+                {saveStatus === "saved" ? (
+                  <Check className="size-4 text-green-600 dark:text-green-500" />
+                ) : (
+                  <BookmarkPlus className="size-4" />
+                )}
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon-sm"

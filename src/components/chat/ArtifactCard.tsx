@@ -1,5 +1,6 @@
 import {
   useContext,
+  useCallback,
   useEffect,
   useId,
   useMemo,
@@ -7,6 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
+  BookmarkPlus,
   Check,
   Code2,
   FileCode,
@@ -22,6 +24,7 @@ import { ArtifactContext } from "@/components/chat/artifactContext";
 import { ArtifactFrame } from "@/components/chat/ArtifactFrame";
 import { ArtifactViewer } from "@/components/chat/ArtifactViewer";
 import { useArtifacts } from "@/store/artifacts";
+import { useLibrary } from "@/store/library";
 import { useT, useTp } from "@/store/i18n";
 
 // The inline preview height is a user preference shared by all cards, persisted
@@ -72,6 +75,8 @@ export function ArtifactCard({ code }: { code: string }) {
   // iframe so a performance-intensive artifact (animation/game loop) stops
   // consuming CPU in the chat. The fullscreen viewer still runs on demand.
   const [running, setRunning] = useState(true);
+  const [saved, setSaved] = useState(false);
+  const saveToLibrary = useLibrary((s) => s.save);
   const [height, setHeight] = useState(initialPreviewHeight);
 
   // Drag the bottom handle to resize the preview; persist the final height as
@@ -103,6 +108,17 @@ export function ArtifactCard({ code }: { code: string }) {
   };
 
   const parsed = useMemo(() => parseArtifact(code), [code]);
+
+  const handleSaveToLibrary = useCallback(async () => {
+    if (!parsed) return;
+    try {
+      await saveToLibrary(parsed.title, parsed.files);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      // Best-effort; failure is invisible.
+    }
+  }, [saveToLibrary, parsed]);
 
   useEffect(() => {
     if (!parsed || !ctx.messageId || !ctx.threadId) return;
@@ -220,6 +236,23 @@ export function ArtifactCard({ code }: { code: string }) {
             className={HEADER_ACTION_CLASS}
           >
             <Pencil className="size-3" /> {t("artifact.edit")}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSaveToLibrary()}
+            className={HEADER_ACTION_CLASS}
+          >
+            {saved ? (
+              <>
+                <Check className="size-3 text-green-600 dark:text-green-500" />{" "}
+                {t("artifact.savedToLibrary")}
+              </>
+            ) : (
+              <>
+                <BookmarkPlus className="size-3" />{" "}
+                {t("artifact.saveToLibrary")}
+              </>
+            )}
           </button>
           <button
             type="button"
