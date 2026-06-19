@@ -13,6 +13,7 @@ import {
   GripHorizontal,
   Loader2,
   Pause,
+  Pencil,
   Play,
   SquareArrowOutUpRight,
 } from "lucide-react";
@@ -66,7 +67,7 @@ export function ArtifactCard({ code }: { code: string }) {
   const stored = useArtifacts((s) =>
     artifactId ? s.byId[artifactId] : undefined,
   );
-  const [view, setView] = useState<"preview" | "code" | null>(null);
+  const [view, setView] = useState<"preview" | "split" | "code" | null>(null);
   // The inline thumbnail runs the artifact's scripts live; pausing unmounts the
   // iframe so a performance-intensive artifact (animation/game loop) stops
   // consuming CPU in the chat. The fullscreen viewer still runs on demand.
@@ -212,6 +213,13 @@ export function ArtifactCard({ code }: { code: string }) {
             className={HEADER_ACTION_CLASS}
           >
             <Code2 className="size-3" /> {t("artifact.code")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setView("split")}
+            className={HEADER_ACTION_CLASS}
+          >
+            <Pencil className="size-3" /> {t("artifact.edit")}
           </button>
           <button
             type="button"
