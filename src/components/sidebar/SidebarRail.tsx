@@ -1,4 +1,4 @@
-import { Bot, Folder, MessagesSquare, type LucideIcon } from "lucide-react";
+import { Bot, Folder, Library, MessagesSquare, type LucideIcon } from "lucide-react";
 import { motion } from "framer-motion";
 import {
   Tooltip,
@@ -23,6 +23,7 @@ const SECTIONS: SidebarSection[] = [
   { id: "chats", labelKey: "sidebar.chats", Icon: MessagesSquare },
   { id: "projects", labelKey: "sidebar.workspaces", Icon: Folder },
   { id: "bots", labelKey: "sidebar.bots", Icon: Bot },
+  { id: "artifacts", labelKey: "sidebar.artifacts", Icon: Library },
 ];
 
 /** Vertical, fully left-aligned icon rail (VS Code / Teams activity bar). Top

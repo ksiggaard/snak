@@ -8,9 +8,11 @@ import {
 import { ChatsPane } from "./ChatsPane";
 import { WorkspacesPane } from "./WorkspacesPane";
 import { BotsPane } from "./BotsPane";
+import { ArtifactsPane } from "./ArtifactsPane";
 import { useThreads } from "@/store/threads";
 import { useWorkspaces } from "@/store/workspaces";
 import { useBots } from "@/store/bots";
+import { useLibrary } from "@/store/library";
 import { useSearch } from "@/store/search";
 import { useView } from "@/store/view";
 import { useLayout } from "@/store/layout";
@@ -29,6 +31,8 @@ export function SidebarPane() {
   const createBot = useBots((s) => s.create);
   const openBot = useBots((s) => s.open);
   const closeBot = useBots((s) => s.close);
+  const saveLibrary = useLibrary((s) => s.save);
+  const setLibraryOpenId = useLibrary((s) => s.setOpenId);
   const clearSearch = useSearch((s) => s.clear);
   const showChat = useView((s) => s.showChat);
 
@@ -56,12 +60,55 @@ export function SidebarPane() {
     openBot(b.id);
   };
 
+  const SCAFFOLD_HTML = [
+    "<!doctype html>",
+    '<html lang="en">',
+    "<head>",
+    '  <meta charset="utf-8">',
+    "  <title>Untitled Artifact</title>",
+    '  <link rel="stylesheet" href="style.css">',
+    "</head>",
+    "<body>",
+    "  <h1>Hello</h1>",
+    '  <script type="module" src="script.js"></script>',
+    "</body>",
+    "</html>",
+  ].join("\n");
+
+  const onNewArtifact = async () => {
+    showChat();
+    clearSearch();
+    closeWorkspace();
+    closeBot();
+    const item = await saveLibrary("Untitled Artifact", [
+      { path: "index.html", content: SCAFFOLD_HTML },
+      {
+        path: "style.css",
+        content: [
+          "body {",
+          "  font-family: system-ui, sans-serif;",
+          "  max-width: 800px;",
+          "  margin: 2rem auto;",
+          "  padding: 0 1rem;",
+          "}",
+        ].join("\n"),
+      },
+      {
+        path: "script.js",
+        content: "console.log('Hello from script.js');\n",
+      },
+    ]);
+    setLibraryOpenId(item.id);
+  };
+
   const title =
     mode === "chats"
       ? t("sidebar.chats")
       : mode === "projects"
         ? t("sidebar.workspaces")
-        : t("sidebar.bots");
+        : mode === "bots"
+          ? t("sidebar.bots")
+          : t("sidebar.artifacts");
 
   return (
     <>
@@ -92,12 +139,19 @@ export function SidebarPane() {
             >
               <FolderPlus className="size-4" />
             </PaneAction>
-          ) : (
+          ) : mode === "bots" ? (
             <PaneAction
               label={t("sidebar.newBot")}
               onClick={() => void onNewBot()}
             >
               <Bot className="size-4" />
+            </PaneAction>
+          ) : (
+            <PaneAction
+              label={t("library.new")}
+              onClick={() => void onNewArtifact()}
+            >
+              <Plus className="size-4" />
             </PaneAction>
           )}
         </div>
@@ -108,8 +162,10 @@ export function SidebarPane() {
           <ChatsPane />
         ) : mode === "projects" ? (
           <WorkspacesPane />
-        ) : (
+        ) : mode === "bots" ? (
           <BotsPane />
+        ) : (
+          <ArtifactsPane />
         )}
       </div>
     </>
