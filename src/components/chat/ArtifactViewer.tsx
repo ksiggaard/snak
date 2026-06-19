@@ -364,53 +364,55 @@ export function ArtifactViewer({
 
         {/* AI editor: edit/expand/update the artifact by prompting the model.
             The current artifact is sent each turn, so changes build up. */}
-        {artifactId && (
-          <div className="border-t px-3 py-2">
-            {genError && (
-              <p className="text-destructive mb-1.5 text-xs">{genError}</p>
-            )}
-            <div className="flex items-center gap-2">
-              <Sparkles className="text-muted-foreground size-4 shrink-0" />
-              <input
-                type="text"
-                value={prompt}
-                disabled={generating}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    void runEdit();
-                  }
-                }}
-                placeholder={t("artifact.editPlaceholder")}
-                className="bg-background min-w-0 flex-1 rounded-md border px-3 py-1.5 text-sm outline-none disabled:opacity-60"
-              />
-              {generating ? (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => void cancelStream()}
-                >
-                  <Square className="size-3.5" /> {t("artifact.editStop")}
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  disabled={!prompt.trim()}
-                  onClick={() => void runEdit()}
-                >
-                  <Send className="size-3.5" /> {t("common.send")}
-                </Button>
-              )}
-            </div>
-            {generating && (
-              <p className="text-muted-foreground mt-1.5 flex items-center gap-1.5 text-xs">
-                <Loader2 className="size-3 animate-spin" />{" "}
-                {t("artifact.editing")}
-              </p>
+        <div className="border-t px-3 py-2">
+          {genError && (
+            <p className="text-destructive mb-1.5 text-xs">{genError}</p>
+          )}
+          <div className="flex items-center gap-2">
+            <Sparkles className="text-muted-foreground size-4 shrink-0" />
+            <input
+              type="text"
+              value={prompt}
+              disabled={generating || !artifactId}
+              onChange={(e) => setPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void runEdit();
+                }
+              }}
+              placeholder={
+                artifactId
+                  ? t("artifact.editPlaceholder")
+                  : t("artifact.saving")
+              }
+              className="bg-background min-w-0 flex-1 rounded-md border px-3 py-1.5 text-sm outline-none disabled:opacity-60"
+            />
+            {generating ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void cancelStream()}
+              >
+                <Square className="size-3.5" /> {t("artifact.editStop")}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                disabled={!prompt.trim() || !artifactId}
+                onClick={() => void runEdit()}
+              >
+                <Send className="size-3.5" /> {t("common.send")}
+              </Button>
             )}
           </div>
-        )}
+          {generating && (
+            <p className="text-muted-foreground mt-1.5 flex items-center gap-1.5 text-xs">
+              <Loader2 className="size-3 animate-spin" />{" "}
+              {t("artifact.editing")}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
