@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Brain, Check, ChevronsUpDown } from "lucide-react";
 import { useModels } from "@/store/models";
 import { useKeys } from "@/store/keys";
 import { useIsOffline } from "@/store/connectivity";
@@ -24,6 +24,15 @@ interface ModelChooserProps {
    *  enabled provider IDs to show all models regardless of saved API keys
    *  (used by the Default Model settings card). */
   keyed?: Set<Provider>;
+  /** Planner entry shown at the top of the dropdown (separated by a divider).
+   *  When active, the button display changes to "Planner" instead of the
+   *  current model label. */
+  plannerEntry?: {
+    active: boolean;
+    providerLabel: string;
+    modelLabel: string;
+    onSelect: () => void;
+  };
 }
 
 export function ModelChooser({
@@ -33,6 +42,7 @@ export function ModelChooser({
   align = "end",
   className,
   keyed: keyedProp,
+  plannerEntry,
 }: ModelChooserProps) {
   const t = useT();
   const models = useModels((s) => s.models);
@@ -43,6 +53,14 @@ export function ModelChooser({
     provider,
     model,
   );
+
+  // When planner is active the button shows the planner label instead of the
+  // current model — the underlying provider/model are the planner model (swapped
+  // by setUsePlanner), so showing "Planner" communicates the mode clearly.
+  const displayLabel = plannerEntry?.active ? t("planner.title") : label;
+  const tooltipLabel = plannerEntry?.active
+    ? `${plannerEntry.providerLabel} · ${plannerEntry.modelLabel}`
+    : `${currentProviderLabel} · ${model}`;
 
   const present = useKeys((s) => s.present);
   const keysLoaded = useKeys((s) => s.loaded);
@@ -105,12 +123,12 @@ export function ModelChooser({
               className,
             )}
           >
-            <span className="text-foreground max-w-40 truncate">{label}</span>
+            <span className="text-foreground max-w-40 truncate">{displayLabel}</span>
             <ChevronsUpDown className="size-3 shrink-0 opacity-60" />
           </button>
         </TooltipTrigger>
         <TooltipContent side="top">
-          {currentProviderLabel} · {model}
+          {tooltipLabel}
         </TooltipContent>
       </Tooltip>
 
@@ -129,7 +147,39 @@ export function ModelChooser({
               {t("common.loading")}
             </div>
           ) : (
-            groups.map((g, gi) => (
+            <>
+              {plannerEntry && (
+                <>
+                  <button
+                    role="option"
+                    aria-selected={plannerEntry.active}
+                    type="button"
+                    onClick={() => {
+                      plannerEntry.onSelect();
+                      setOpen(false);
+                    }}
+                    className="hover:bg-accent hover:text-accent-foreground flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-sm"
+                  >
+                    <Check
+                      className={cn(
+                        "size-4 shrink-0",
+                        plannerEntry.active ? "opacity-100" : "opacity-0",
+                      )}
+                    />
+                    <Brain className="size-4 shrink-0" />
+                    <div className="flex-1 truncate text-left">
+                      <span>{t("planner.title")}</span>
+                      <span className="text-muted-foreground block truncate text-xs">
+                        {plannerEntry.providerLabel} · {plannerEntry.modelLabel}
+                      </span>
+                    </div>
+                  </button>
+                  {groups.length > 0 && (
+                    <div className="bg-border -mx-1 my-1 h-px" />
+                  )}
+                </>
+              )}
+              {groups.map((g, gi) => (
               <div key={g.providerLabel}>
                 {gi > 0 && <div className="bg-border -mx-1 my-1 h-px" />}
                 <div className="text-muted-foreground px-1.5 py-1 text-xs font-medium">
@@ -137,7 +187,9 @@ export function ModelChooser({
                 </div>
                 {g.items.map((o) => {
                   const selected =
-                    o.provider === provider && o.modelId === model;
+                    !plannerEntry?.active &&
+                    o.provider === provider &&
+                    o.modelId === model;
                   return (
                     <button
                       key={`${o.provider}:${o.modelId}`}
@@ -180,7 +232,8 @@ export function ModelChooser({
                   );
                 })}
               </div>
-            ))
+              ))}
+              </>
           )}
         </div>
       )}

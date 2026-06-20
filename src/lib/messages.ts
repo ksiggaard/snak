@@ -1,6 +1,7 @@
 import type { StreamEvent, ToolSource } from "@/lib/chat";
 import { listAttachments, listMessages } from "@/lib/db";
 import { planVariants } from "@/lib/variations";
+import type { Plan } from "@/lib/planner";
 import type { Message } from "@/types/db";
 
 export interface MessageImage {
@@ -103,7 +104,7 @@ export interface MessageView extends Message {
    * UI shows the carousel + regenerate controls only when this is present. */
   variantIds?: string[];
   /** Planner-orchestrated plan for this message (parsed from a `plan` attachment). */
-  plan?: Record<string, unknown>;
+  plan?: Plan;
 }
 
 /**
@@ -391,9 +392,9 @@ export async function loadThreadMessages(
       const apiTrace = apiTraceRaw ? parseApiTrace(apiTraceRaw) : undefined;
       // Planner plan attachment (JSON).
       const planRaw = attachments.find((a) => a.kind === "plan")?.data;
-      let plan: Record<string, unknown> | undefined;
+      let plan: Plan | undefined;
       if (planRaw) {
-        try { plan = JSON.parse(planRaw); } catch { /* ignore */ }
+        try { plan = JSON.parse(planRaw) as Plan; } catch { /* ignore */ }
       }
       return {
         ...m,

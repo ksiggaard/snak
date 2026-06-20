@@ -77,7 +77,7 @@ export function SidebarRail({
                   {active && (
                     <motion.span
                       layoutId="rail-indicator"
-                      className="bg-primary absolute top-1.5 bottom-1.5 -left-2 w-0.5 rounded-full"
+                      className="bg-primary absolute top-1.5 bottom-1.5 -left-2 w-0.5 rounded-full will-change-transform"
                     />
                   )}
                   <Icon className="size-5" />

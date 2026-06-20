@@ -1,18 +1,19 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Brain, Ghost, PanelRight, ShieldAlert } from "lucide-react";
+import { Ghost, PanelRight, ShieldAlert } from "lucide-react";
 import { MessageList } from "@/components/chat/MessageList";
 import { Composer } from "@/components/chat/Composer";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { Button } from "@/components/ui/button";
 import { useThreads } from "@/store/threads";
 import { useBots } from "@/store/bots";
-import { useKeys } from "@/store/keys";
 import { useAppearance } from "@/store/appearance";
 import { useT } from "@/store/i18n";
 import { isKeylessProvider, useProviders } from "@/lib/providers";
 import { CHAT_X_PADDING } from "@/lib/appearance";
 import { cn } from "@/lib/utils";
+import type { PreparedImage } from "@/lib/image";
+import type { PendingDocument } from "@/lib/documents";
 
 /** Pre-first-message explainer for an incognito chat (T36): states what the
  * mode does (session-only, purged on exit) and — just as importantly — what
@@ -99,49 +100,6 @@ function ApprovalGate({
   );
 }
 
-/** Planner mode toggle bar: shown above the composer when at least two distinct
- *  models are available. Lets the user toggle planner orchestration on/off for
- *  the current chat. */
-function PlannerToggleBar() {
-  const t = useT();
-  const currentThreadId = useThreads((s) => s.currentThreadId);
-  const threads = useThreads((s) => s.threads);
-  const draftUsePlanner = useThreads((s) => s.draftUsePlanner);
-  const setUsePlanner = useThreads((s) => s.setUsePlanner);
-  const providers = useProviders();
-  const present = useKeys((s) => s.present);
-
-  // Only show when ≥2 distinct providers are keyed (planner needs choices).
-  const keyedCount = providers.filter(
-    (p) => isKeylessProvider(p.id) || present.has(p.id),
-  ).length;
-  if (keyedCount < 2) return null;
-
-  const thread = threads.find((t) => t.id === currentThreadId);
-  const plannerActive = currentThreadId
-    ? (thread?.planner_active ?? 0) !== 0
-    : draftUsePlanner;
-
-  return (
-    <div className="flex items-center justify-center">
-      <button
-        type="button"
-        onClick={() => void setUsePlanner(!plannerActive)}
-        className={cn(
-          "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition-colors",
-          plannerActive
-            ? "bg-primary/10 text-primary hover:bg-primary/15"
-            : "text-muted-foreground hover:bg-accent hover:text-foreground",
-        )}
-        title={t(plannerActive ? "planner.toggleOn" : "planner.toggleOff")}
-      >
-        <Brain className="size-3.5 shrink-0" />
-        <span>{t("planner.title")}</span>
-      </button>
-    </div>
-  );
-}
-
 export function ChatView() {
   const t = useT();
   // Right-side chat panel (media / scroll spy / in-chat search / token
@@ -152,6 +110,11 @@ export function ChatView() {
   const error = useThreads((s) => s.error);
   const send = useThreads((s) => s.send);
   const cancel = useThreads((s) => s.cancel);
+  const onSend = useCallback(
+    (text: string, images: PreparedImage[], documents: PendingDocument[]) =>
+      void send(text, images, documents),
+    [send],
+  );
   const currentThreadId = useThreads((s) => s.currentThreadId);
   const threads = useThreads((s) => s.threads);
   const draftProvider = useThreads((s) => s.draftProvider);
@@ -210,7 +173,6 @@ export function ChatView() {
   return (
     <div className="relative flex flex-1 flex-row gap-4 overflow-hidden">
       <motion.div
-        layout
         className={cn(
           "flex min-w-0 flex-1 flex-col gap-4 overflow-hidden",
           // Incognito identity (T36): the whole chat surface reads as a
@@ -251,12 +213,9 @@ export function ChatView() {
             style={{ maxWidth: chatMaxWidth ? chatMaxWidth + 40 : undefined }}
           >
             {error && <p className="text-destructive px-1 text-sm">{error}</p>}
-            <PlannerToggleBar />
             <ApprovalGate providerLabel={providerLabel} local={providerLocal} />
             <Composer
-              onSend={(text, images, documents) =>
-                void send(text, images, documents)
-              }
+              onSend={onSend}
               onCancel={() => void cancel()}
               busy={busy}
               provider={provider}
@@ -271,7 +230,6 @@ export function ChatView() {
         {!panelOpen && (
           <motion.div
             key="panel-toggle"
-            layout
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

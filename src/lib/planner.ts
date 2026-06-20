@@ -39,10 +39,12 @@ export interface StepResult {
 // Planner system prompt
 // ---------------------------------------------------------------------------
 
-/** Build the planner's system prompt, listing available models with their notes. */
+/** Build the planner's system prompt, listing available models with their notes.
+ *  If `instructions` is non-empty it is appended as a user preference block. */
 export function buildPlannerSystemPrompt(
   models: Model[],
   providerMetas: ProviderMeta[],
+  instructions?: string,
 ): string {
   const modelLines = models.map((m) => {
     const p = providerMetas.find((pm) => pm.id === m.provider);
@@ -86,7 +88,11 @@ For delegation or multi-step plans, fill in the steps array. Each step has:
 - Use "route" when exactly one other model should handle the task — the routing step is the only step.
 - Keep step prompts self-contained — include all necessary context.
 - Never include a step that calls yourself (the planner).
-- Only output ONE JSON code block — it contains the entire plan.`;
+- Only output ONE JSON code block — it contains the entire plan.${
+  instructions
+    ? `\n\n## User Preferences\n${instructions}`
+    : ""
+}`;
 }
 
 // ---------------------------------------------------------------------------

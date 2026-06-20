@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { LayoutGroup } from "framer-motion";
+import { useCallback, useState } from "react";
 import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import { useThreads } from "@/store/threads";
 import { confirmDialog } from "@/store/confirm";
@@ -33,12 +32,26 @@ export function ChatsPane() {
 
   // Selecting a chat returns the main pane to the chat view (clear search,
   // close any open workspace/bot editor, leave settings/usage).
-  const select = (id: string) => {
-    clearSearch();
-    closeWorkspace();
-    closeBot();
-    showChat();
-    void selectThread(id);
+  const select = useCallback(
+    (id: string) => {
+      clearSearch();
+      closeWorkspace();
+      closeBot();
+      showChat();
+      void selectThread(id);
+    },
+    [clearSearch, closeWorkspace, closeBot, showChat, selectThread],
+  );
+
+  // Stable per-thread callbacks so React.memo on ThreadRow works.
+  const [selectCallbacks] = useState(() => new Map<string, () => void>());
+  const getSelect = (id: string) => {
+    let cb = selectCallbacks.get(id);
+    if (!cb) {
+      cb = () => select(id);
+      selectCallbacks.set(id, cb);
+    }
+    return cb;
   };
 
   if (threads.length === 0) {
@@ -59,8 +72,7 @@ export function ChatsPane() {
   const archived = threads.filter((t) => !!t.archived);
 
   return (
-    <LayoutGroup>
-      <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2">
       {favorites.length > 0 && (
         <section className="stagger-container">
           <p className="text-muted-foreground px-2 py-1 text-xs font-medium">
@@ -71,7 +83,7 @@ export function ChatsPane() {
               key={t.id}
               thread={t}
               active={t.id === currentId}
-              onSelect={() => select(t.id)}
+              onSelect={getSelect(t.id)}
               snippet={snippets.get(t.id)}
             />
           ))}
@@ -88,7 +100,7 @@ export function ChatsPane() {
             key={t.id}
             thread={t}
             active={t.id === currentId}
-            onSelect={() => select(t.id)}
+              onSelect={getSelect(t.id)}
             snippet={snippets.get(t.id)}
           />
         ))}
@@ -137,13 +149,12 @@ export function ChatsPane() {
                 key={t.id}
                 thread={t}
                 active={t.id === currentId}
-                onSelect={() => select(t.id)}
+                onSelect={getSelect(t.id)}
                 snippet={snippets.get(t.id)}
               />
             ))}
         </section>
       )}
     </div>
-    </LayoutGroup>
   );
 }

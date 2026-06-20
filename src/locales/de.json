@@ -98,6 +98,11 @@
     "sidebar.deleteThreadTitle": "„{title}“ löschen?",
     "sidebar.navigation": "Navigation",
     "sidebar.resize": "Seitenleiste in der Breite anpassen",
+    "sidebar.artifacts": "Artefakte",
+    "library.empty": "Noch keine gespeicherten Artefakte. Speichere eines aus einem Chat oder erstelle ein neues.",
+    "library.new": "Neues Artefakt",
+    "library.deleteTooltip": "Artefakt löschen",
+    "library.deleteConfirm": "Dieses gespeicherte Artefakt löschen?",
     "chat.empty": "Sende eine Nachricht, um die Unterhaltung zu beginnen.",
     "chat.thinking": "Denkt nach…",
     "chat.loading.0": "Denkt nach…",
@@ -252,6 +257,13 @@
     "artifact.loadingEditor": "Editor wird geladen…",
     "artifact.fileCount.one": "{n} Datei",
     "artifact.fileCount.other": "{n} Dateien",
+    "artifact.edit": "Bearbeiten",
+    "artifact.saving": "Wird gespeichert…",
+    "artifact.saveToLibrary": "In Bibliothek speichern",
+    "artifact.savedToLibrary": "In Bibliothek gespeichert",
+    "artifact.editFile": "{file} bearbeiten",
+    "artifact.editingFile": "Bearbeite {file}…",
+    "artifact.editNoThreadLibrary": "Öffne zuerst einen Chat mit einem Anbieter, um KI-Bearbeitung zu nutzen.",
     "model.choose": "Modell wählen",
     "model.aria": "Modell",
     "model.unavailable": "nicht verfügbar",
@@ -616,6 +628,7 @@
     "workspace.clearImage": "Bild entfernen",
     "workspace.imageZoom": "Zoom",
     "workspace.totalFileSize": "{size} Zeichen gesamt",
+    "workspace.dropToReplace": "Zum Ersetzen ablegen",
     "quickActions.title": "Schnellaktionen",
     "quickActions.description": "Starter mit einem Tipp auf dem leeren Bildschirm für neue Chats. Eine Vorausfüll-Aktion setzt ihren Prompt in das Eingabefeld; eine Sende-Aktion schickt ihn sofort ab.",
     "quickActions.empty": "Keine Schnellaktionen. Füge eine hinzu oder setze auf die Standardwerte zurück.",
@@ -671,6 +684,8 @@
     "planner.synthesisLabel": "Zusammenfassung",
     "planner.toggleOn": "Planer-Modus ein",
     "planner.toggleOff": "Planer-Modus aus",
-    "planner.toggleHint": "Das Planer-Modell entscheidet, wie Anfragen bearbeitet werden — Weiterleitung oder parallele Schritte."
+    "planner.toggleHint": "Das Planer-Modell entscheidet, wie Anfragen bearbeitet werden — Weiterleitung oder parallele Schritte.",
+    "planner.instructions": "Anweisungen",
+    "planner.instructionsPlaceholder": "Weise den Planer an, wie Modelle priorisiert werden sollen. Z.B. \"Nutze lokale Modelle, wann immer es sinnvoll ist. Bevorzuge Claude für kreative Aufgaben.\""
   }
 }

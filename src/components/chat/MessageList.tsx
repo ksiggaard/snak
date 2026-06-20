@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "framer-motion";
+import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import {
   BookOpenText,
   Brain,
@@ -401,7 +401,6 @@ function ApiTracePanel({ trace }: { trace: ApiTraceEntry[] }) {
 function AssistantMeta({
   createdAt,
   durationMs,
-  now,
   content,
   trailing,
   onToggleWide,
@@ -409,7 +408,6 @@ function AssistantMeta({
 }: {
   createdAt: string;
   durationMs: number | null;
-  now: number;
   /** The reply's raw Markdown, copied verbatim. */
   content: string;
   /** Inline controls rendered after the copy button (T54 variation controls). */
@@ -420,6 +418,7 @@ function AssistantMeta({
   wide?: boolean;
 }) {
   const t = useT();
+  const now = useNow();
   // Active-locale formatting (T32): labels + Intl locale follow the language.
   const locale = useIntlLocale();
   const [copied, setCopied] = useState(false);
@@ -660,14 +659,13 @@ function VariationControls({ m }: { m: MessageView }) {
 }
 
 /** One normal (non-summary) chat message, rendered per the active chat style.
- * Presentation only — images, tool chips, Markdown body, and the assistant
- * meta footer are identical across styles. */
-function ChatMessage({
+ *  Presentation only — images, tool chips, Markdown body, and the assistant
+ *  meta footer are identical across styles. */
+const ChatMessage = memo(function ChatMessage({
   m,
   chatStyle,
   flashed,
-  now,
-  innerRef,
+  messageRefs,
   bot,
   mentionBot,
   latestReply,
@@ -680,8 +678,7 @@ function ChatMessage({
   m: MessageView;
   chatStyle: ChatStyle;
   flashed: boolean;
-  now: number;
-  innerRef: (el: HTMLDivElement | null) => void;
+  messageRefs: React.RefObject<Map<string, HTMLDivElement> | null>;
   bot?: Bot | null;
   /** Count of images in the thread before this message — its i-th image is
    *  labeled `imageLabel(imageLabelStart + i)` (T-image-refs). */
@@ -705,6 +702,17 @@ function ChatMessage({
 }) {
   const t = useT();
   const isUser = m.role === "user";
+  // Self-register the root DOM element for scroll-to-message.
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const refs = messageRefs.current;
+    if (containerRef.current) {
+      refs?.set(m.id, containerRef.current);
+    }
+    return () => {
+      refs?.delete(m.id);
+    };
+  }, [m.id, messageRefs]);
   // Bot persona: an @-mentioned author (T43, per-message) wins over the
   // thread's bot (T38); assistant messages show the persona's avatar + name
   // instead of the generic "ai" label. A deleted mention persona falls back
@@ -878,7 +886,7 @@ function ChatMessage({
   // Planner plan panel: shown above the message body when a plan exists.
   const planPanel =
     m.role === "assistant" && m.plan ? (
-      <PlanPanel plan={m.plan as unknown as import("@/lib/planner").Plan} />
+      <PlanPanel plan={m.plan} />
     ) : null;
   // Model attribution: collapsible detail showing which model generated this
   // message (useful for planner/worker-step attribution).
@@ -905,7 +913,6 @@ function ChatMessage({
     <AssistantMeta
       createdAt={m.created_at}
       durationMs={m.duration_ms}
-      now={now}
       content={m.content}
       trailing={
         variations || requestSourcesBtn ? (
@@ -939,7 +946,7 @@ function ChatMessage({
     // margins are tightened by the `.chat-style-compact` rules in index.css.
     return (
       <div
-        ref={innerRef}
+        ref={containerRef}
         data-mid={m.id}
         className="mx-auto flex w-full scroll-mt-4"
         style={{ maxWidth }}
@@ -998,7 +1005,7 @@ function ChatMessage({
     // each message, everything left-aligned.
     return (
       <div
-        ref={innerRef}
+        ref={containerRef}
         data-mid={m.id}
         className="mx-auto flex w-full scroll-mt-4 gap-2.5"
         style={{ maxWidth }}
@@ -1056,7 +1063,7 @@ function ChatMessage({
     // compact.
     return (
       <div
-        ref={innerRef}
+        ref={containerRef}
         data-mid={m.id}
         className="mx-auto flex w-full scroll-mt-4"
         style={{ maxWidth }}
@@ -1106,7 +1113,7 @@ function ChatMessage({
   const { row, content } = styleClasses(chatStyle, isUser);
   return (
     <div
-      ref={innerRef}
+      ref={containerRef}
       data-mid={m.id}
       className={cn("mx-auto flex w-full scroll-mt-4", row)}
       style={{ maxWidth }}
@@ -1134,6 +1141,18 @@ function ChatMessage({
       </div>
     </div>
   );
+});
+
+/** Drives re-render of relative timestamps so "2m ago" advances on its own.
+ *  Separate from the message-list state so only AssistantMeta re-renders on
+ *  the tick, not the entire message list every 30 seconds. */
+function useNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  return now;
 }
 
 export function MessageList({ messages, pending, bot }: MessageListProps) {
@@ -1141,7 +1160,7 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
   // Persona roster for @-mention attribution (T43): a message with `bot_id`
   // set renders that persona's avatar + name regardless of the thread's bot.
   const bots = useBots((s) => s.bots);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
   const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const scrollToMessageId = useSearch((s) => s.scrollToMessageId);
   const consumeScroll = useSearch((s) => s.consumeScroll);
@@ -1166,13 +1185,6 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
   // Message briefly highlighted after jumping to it from a search result.
   const [flashId, setFlashId] = useState<string | null>(null);
 
-  // Drives re-render of relative timestamps so "2m ago" advances on its own.
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(t);
-  }, []);
-
   // T57 — rotating loading messages. The interval fires every 2.2 s while
   // `pending` is true, bumping a counter that selects the next phrase.
   // setState is only called from the timer callback (not synchronously in the
@@ -1189,31 +1201,30 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
   ) as MessageKey;
 
   // When a search-result / chat-panel jump targets a message, scroll to +
-  // flash it instead of the bottom. Consuming the target re-runs this effect
-  // with null — skipNextBottom keeps that re-run from yanking the view back
-  // down to the bottom (the in-thread scroll-spy case).
-  const skipNextBottom = useRef(false);
+  // flash it via Virtuoso's scrollToIndex.
   useEffect(() => {
     if (scrollToMessageId) {
-      const el = messageRefs.current.get(scrollToMessageId);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      const idx = messages.findIndex((m) => m.id === scrollToMessageId);
+      if (idx !== -1) {
+        virtuosoRef.current?.scrollToIndex({ index: idx, align: "center", behavior: "smooth" });
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- flash is a direct side-effect of the scroll target arriving
         setFlashId(scrollToMessageId);
         const t = setTimeout(() => setFlashId(null), 2000);
-        skipNextBottom.current = true;
         consumeScroll();
         return () => clearTimeout(t);
       }
-      // Target not found (e.g. messages still loading) — consume to avoid a
-      // stale jump on the next render.
       consumeScroll();
     }
-    if (skipNextBottom.current) {
-      skipNextBottom.current = false;
-      return;
+  }, [scrollToMessageId, messages, consumeScroll]);
+
+  // Auto-scroll to bottom on thread switch / initial load.
+  const prevMessagesRef = useRef(messages);
+  useEffect(() => {
+    if (prevMessagesRef.current !== messages && messages.length > 0) {
+      prevMessagesRef.current = messages;
+      virtuosoRef.current?.scrollToIndex({ index: "LAST", behavior: "auto" });
     }
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, pending, scrollToMessageId, consumeScroll]);
+  }, [messages]);
 
   // The thread's most recent assistant reply gets the variation controls (T54).
   // Includes the streaming placeholder (no variantIds → renders nothing), which
@@ -1234,6 +1245,26 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
   );
   const { imageOffsets, videoOffsets } = mediaLabelOffsets(messages, ytEnabled);
 
+  // Stable lookup map for mention-bot resolution (avoids .find() per message
+  // which would defeat React.memo by returning new object references).
+  const botsById = useMemo(() => {
+    const m = new Map<string, Bot>();
+    for (const b of bots) m.set(b.id, b);
+    return m;
+  }, [bots]);
+
+  // Stable onToggleWide callbacks per message so React.memo on ChatMessage works.
+  const [toggleWideCallbacks] = useState(() => new Map<string, () => void>());
+  const getToggleWide = (id: string): (() => void) | undefined => {
+    if (!capped) return undefined;
+    let cb = toggleWideCallbacks.get(id);
+    if (!cb) {
+      cb = () => toggleWide(id);
+      toggleWideCallbacks.set(id, cb);
+    }
+    return cb;
+  };
+
   if (messages.length === 0 && !pending) {
     // Empty chat: a persona greets with its own starters (T38); a plain new
     // chat shows configurable quick actions + persona starters.
@@ -1241,35 +1272,16 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
   }
 
   return (
-    <div
-      // data-chat-scroll: the chat panel's scroll spy uses this container as
-      // its IntersectionObserver root (src/components/chat/ChatPanel.tsx).
-      data-chat-scroll
-      className={cn(
-        "flex flex-1 flex-col overflow-y-auto",
-        // Always reserve the vertical scrollbar's gutter (even when not
-        // scrolling) so this container's content box has a stable width — the
-        // composer mirrors that reserved width on its right edge (ChatView, via
-        // `--snak-scrollbar-width`) so the two columns line up. A classic
-        // (space-taking) scrollbar would otherwise narrow this box only while
-        // scrolling, shifting the alignment. Overlay scrollbars reserve 0, so
-        // this is a no-op for them.
-        "[scrollbar-gutter:stable]",
-        // Style hook consumed by the T34 rules in index.css (bubble break-out,
-        // compact/terminal Markdown spacing).
-        `chat-style-${chatStyle}`,
-        CHAT_CONTAINER_CLASSES[chatStyle],
-      )}
-    >
-      <AnimatePresence mode="popLayout">
-        {messages.map((m, idx) =>
-          m.kind === "summary" ? (
-            <motion.div
-              key={m.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ type: "spring", stiffness: 300, damping: 25, mass: 0.8 }}
+    <Virtuoso
+      ref={virtuosoRef}
+      className="flex flex-1 flex-col"
+      data={messages}
+      computeItemKey={(_, m) => m.id}
+      followOutput={pending ? "smooth" : false}
+      itemContent={(idx, m) => {
+        if (m.kind === "summary") {
+          return (
+            <div
               ref={(el: HTMLDivElement | null) => {
                 if (el) messageRefs.current.set(m.id, el);
                 else messageRefs.current.delete(m.id);
@@ -1294,72 +1306,82 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
                 </details>
                 <div className="bg-border h-px flex-1" />
               </div>
-            </motion.div>
-          ) : (
-            <motion.div
-              key={m.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ type: "spring", stiffness: 300, damping: 25, mass: 0.8 }}
+            </div>
+          );
+        }
+        return (
+          <ChatMessage
+            m={m}
+            chatStyle={chatStyle}
+            flashed={flashId === m.id}
+            messageRefs={messageRefs}
+            bot={bot}
+            latestReply={idx === lastAssistantIndex}
+            imageLabelStart={imageOffsets[idx]}
+            videoLabelStart={videoOffsets[idx]}
+            mentionBot={
+              m.bot_id ? (botsById.get(m.bot_id) ?? null) : null
+            }
+            maxWidth={capped && !wideIds.has(m.id) ? chatMaxWidth : undefined}
+            wide={wideIds.has(m.id)}
+            onToggleWide={getToggleWide(m.id)}
+          />
+        );
+      }}
+      components={{
+        Scroller: forwardRef<
+          HTMLDivElement,
+          React.HTMLAttributes<HTMLDivElement>
+        >(function Scroller(props, ref) {
+          return (
+            <div
+              {...props}
+              ref={ref}
+              data-chat-scroll
+              className={cn(
+                props.className,
+                "overflow-x-hidden",
+                "[scrollbar-gutter:stable]",
+                `chat-style-${chatStyle}`,
+                CHAT_CONTAINER_CLASSES[chatStyle],
+              )}
+            />
+          );
+        }),
+        Footer: () => {
+          if (!pending) return null;
+          return (
+            <div
+              className="mx-auto flex w-full justify-start"
+              style={{ maxWidth: chatMaxWidth ?? undefined }}
             >
-              <ChatMessage
-                m={m}
-                chatStyle={chatStyle}
-                flashed={flashId === m.id}
-                now={now}
-                bot={bot}
-                latestReply={idx === lastAssistantIndex}
-                imageLabelStart={imageOffsets[idx]}
-                videoLabelStart={videoOffsets[idx]}
-                mentionBot={
-                  m.bot_id ? (bots.find((b) => b.id === m.bot_id) ?? null) : null
-                }
-                innerRef={(el) => {
-                  if (el) messageRefs.current.set(m.id, el);
-                  else messageRefs.current.delete(m.id);
-                }}
-                maxWidth={capped && !wideIds.has(m.id) ? chatMaxWidth : undefined}
-                wide={wideIds.has(m.id)}
-                onToggleWide={capped ? () => toggleWide(m.id) : undefined}
-              />
-            </motion.div>
-          ),
-        )}
-      </AnimatePresence>
-      {pending && (
-        <div
-          className="mx-auto flex w-full justify-start"
-          style={{ maxWidth: chatMaxWidth ?? undefined }}
-        >
-          <div className="text-muted-foreground flex items-center gap-1.5 text-sm">
-            <span
-              key={animations ? loadingKey : undefined}
-              className={animations ? "snak-loading-message" : undefined}
-            >
-              {t(loadingKey)}
-            </span>
-            {animations ? (
-              <motion.span
-                aria-hidden
-                className="bg-muted-foreground/30 inline-block h-3 w-8 rounded-full"
-                animate={{ opacity: [0.3, 0.7, 0.3] }}
-                transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
-              />
-            ) : (
-              <span aria-hidden className="flex gap-0.5">
-                {[0, 0.2, 0.4].map((_delay, i) => (
+              <div className="text-muted-foreground flex items-center gap-1.5 text-sm">
+                <span
+                  key={animations ? loadingKey : undefined}
+                  className={animations ? "snak-loading-message" : undefined}
+                >
+                  {t(loadingKey)}
+                </span>
+                {animations ? (
                   <span
-                    key={i}
-                    className="bg-muted-foreground inline-block size-1 rounded-full opacity-30"
+                    aria-hidden
+                    className="bg-muted-foreground/30 inline-block h-3 w-8 animate-pulse rounded-full"
                   />
-                ))}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-      <div ref={bottomRef} />
-    </div>
+                ) : (
+                  <span aria-hidden className="flex gap-0.5">
+                    {[0, 0.2, 0.4].map((_delay, i) => (
+                      <span
+                        key={i}
+                        className="bg-muted-foreground inline-block size-1 rounded-full opacity-30"
+                      />
+                    ))}
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        },
+      }}
+    />
   );
 }

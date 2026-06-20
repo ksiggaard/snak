@@ -98,12 +98,11 @@ export function ChatPanel({
 
   return (
     <motion.aside
-      layout
       initial={{ x: 20, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: 20, opacity: 0 }}
-      transition={{ type: "spring", stiffness: 350, damping: 30, mass: 0.8 }}
-      className="bg-background shadow-sm flex w-72 shrink-0 flex-col overflow-hidden rounded-2xl border md:flex"
+      transition={{ duration: 0.2, ease: "easeOut" }}
+      className="bg-background shadow-sm flex w-72 shrink-0 flex-col overflow-hidden rounded-2xl border md:flex will-change-[transform,opacity]"
     >
       <div className="flex items-center gap-2 border-b p-2">
         <Input

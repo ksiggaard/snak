@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useDeferredValue, useMemo, useRef, useState } from "react";
 import {
   Camera,
   FileText,
@@ -261,7 +261,7 @@ export function Composer({
   const compact = useThreads((s) => s.compact);
   const compacting = useThreads((s) => s.compacting);
   const currentThreadId = useThreads((s) => s.currentThreadId);
-  const threadMessages = useThreads((s) => s.messages);
+  const threadMessages = useDeferredValue(useThreads((s) => s.messages));
   const compactEnabled =
     currentThreadId !== null &&
     !busy &&

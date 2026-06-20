@@ -669,6 +669,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   },
 
   startNewChatInWorkspace: (workspaceId) => {
+    const usePlanner = get().plannerDefault;
     set({
       currentThreadId: null,
       messages: [],
@@ -680,6 +681,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       draftBotId: null,
       draftProvider: get().defaultProvider,
       draftModel: get().defaultModel,
+      draftUsePlanner: usePlanner,
     });
     void get().refreshSystemTokens();
     // Move focus to the Composer so the user can start typing immediately (T64).
@@ -692,6 +694,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     // draft starts on the app default, like any new chat.
     const hasDefault =
       bot.default_provider !== null && bot.default_model !== null;
+    const usePlanner = get().plannerDefault;
     set({
       currentThreadId: null,
       messages: [],
@@ -703,6 +706,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       draftBotId: bot.id,
       draftProvider: hasDefault ? bot.default_provider! : get().defaultProvider,
       draftModel: hasDefault ? bot.default_model! : get().defaultModel,
+      draftUsePlanner: usePlanner,
     });
     void get().refreshSystemTokens();
     // Move focus to the Composer so the user can start typing immediately (T64).
@@ -731,8 +735,16 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   setProviderModel: async (provider, model) => {
     const id = get().currentThreadId;
     if (!id) {
-      set({ draftProvider: provider, draftModel: model });
+      // Selecting a direct model turns planner off for the draft.
+      set({ draftProvider: provider, draftModel: model, draftUsePlanner: false });
       return;
+    }
+    const thread = get().threads.find((t) => t.id === id);
+    // If planner is active, restore the pre-planner model first so switching
+    // to a direct model doesn't leave stale pre-planner state behind.
+    if (thread && thread.planner_active) {
+      await restoreThreadPrePlannerModel(id);
+      await setThreadPlannerActive(id, false);
     }
     await setThreadProviderModel(id, provider, model);
     await get().refreshThreads();
@@ -1006,7 +1018,13 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       ) => {
         const { plannerProvider, plannerModel } = get();
         const allModels = useModels.getState().models;
-        const plannerPrompt = buildPlannerSystemPrompt(allModels, PROVIDERS);
+        const plannerInstructions =
+          (await getSetting("planner_instructions")) ?? undefined;
+        const plannerPrompt = buildPlannerSystemPrompt(
+          allModels,
+          PROVIDERS,
+          plannerInstructions,
+        );
 
         // Build API history: planner system prompt first, then shared context,
         // then the conversation history.

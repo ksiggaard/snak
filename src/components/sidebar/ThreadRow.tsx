@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { memo, useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { motion } from "framer-motion";
 import {
   FolderInput,
@@ -46,7 +46,7 @@ interface ThreadRowProps {
 /** One thread entry in the sidebar: select, double-click-to-rename, favorite
  *  star, and delete. Shared by the Chats and Workspaces panes. What the row
  *  shows below the title follows the Appearance "Chat list" style (T35). */
-export function ThreadRow({
+export const ThreadRow = memo(function ThreadRow({
   thread,
   active,
   onSelect,
@@ -161,10 +161,9 @@ export function ThreadRow({
         <motion.div
           initial={{ opacity: 0, x: -6 }}
           animate={{ opacity: 1, x: 0 }}
-          whileHover={{ x: 3 }}
-          transition={{ type: "spring", stiffness: 400, damping: 30, mass: 0.7 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
           className={cn(
-            "group relative flex items-center gap-1 rounded-md px-3",
+            "group relative flex items-center gap-1 rounded-md px-3 transition-transform hover:translate-x-[3px] will-change-[transform,opacity]",
             compact ? "py-1" : "py-2",
             active
               ? "bg-primary/10 hover:bg-primary/15"
@@ -180,8 +179,7 @@ export function ThreadRow({
               glance in any theme, where the `bg-sidebar-accent` tint alone is
               too close to the sidebar background to spot the active chat. */}
           {active && (
-            <motion.span
-              layoutId="active-indicator"
+            <span
               aria-hidden
               className="bg-primary absolute inset-y-1 left-0 w-[3px] rounded-r-full"
             />
@@ -355,4 +353,4 @@ export function ThreadRow({
       </ContextMenuContent>
     </ContextMenu>
   );
-}
+});
