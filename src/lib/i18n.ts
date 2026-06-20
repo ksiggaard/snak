@@ -504,6 +504,17 @@ export const en = {
   "planner.instructionsPlaceholder":
     "Tell the planner how to prefer or prioritize models. E.g. \"Use local models whenever it makes sense. Prefer Claude for creative tasks.\"",
 
+  // Planner progress pills
+  "planner.pill.planning": "Breaking down task\u2026",
+  "planner.pill.dispatching": "Spawning {n} sub-agents",
+  "planner.pill.executing": "Running {n} steps",
+  "planner.pill.completing": "Finalising answer",
+  "planner.pill.direct": "Delegating to {model}",
+  "planner.pill.directSelf": "Answered directly",
+  "planner.pill.stepPending": "Waiting",
+  "planner.pill.stepRunning": "Running",
+  "planner.pill.stepDone": "Done",
+
   // --- Settings: context windows (T53) -------------------------------------------
   "contextWindows.title": "Context windows",
   "contextWindows.description":
