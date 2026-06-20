@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Ghost, PanelRight, ShieldAlert } from "lucide-react";
 import { MessageList } from "@/components/chat/MessageList";
 import { Composer } from "@/components/chat/Composer";
+import { PlannerProgress } from "@/components/chat/PlannerProgress";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { Button } from "@/components/ui/button";
 import { useThreads } from "@/store/threads";
@@ -213,6 +214,7 @@ export function ChatView() {
             style={{ maxWidth: chatMaxWidth ? chatMaxWidth + 40 : undefined }}
           >
             {error && <p className="text-destructive px-1 text-sm">{error}</p>}
+            <PlannerProgress />
             <ApprovalGate providerLabel={providerLabel} local={providerLocal} />
             <Composer
               onSend={onSend}
