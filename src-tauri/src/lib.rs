@@ -247,12 +247,19 @@ fn migrations() -> Vec<Migration> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // WebKitGTK (Linux) paints elements promoted to their own compositing layer
-    // — e.g. Radix popovers/dropdowns, which are positioned with a `transform` —
-    // with washed-out colors on some GPU/driver combos, while the normally
-    // painted page renders fine. Forcing off the DMABuf renderer routes those
-    // layers through a path that paints them correctly. Must be set before the
-    // webview (and thus WebKitGTK) initializes; respect an explicit override.
+    // WebKitGTKDMABuf renderer uses GBM (Generic Buffer Management) for
+    // zero-copy GPU buffer sharing. This requires Mesa's GBM implementation,
+    // which is unavailable or broken on:
+    //   - NVIDIA proprietary drivers (no GBM support — crashes with "Failed to
+    //     create GBM buffer")
+    //   - Some Mesa/Intel/AMD combos (washed-out colors on composited layers
+    //     like Radix popovers positioned with `transform`)
+    // Disabling DMABuf routes composited layers through a CPU fallback path
+    // that works everywhere, at the cost of GPU compositing performance.
+    // Animations should use `will-change` hints (frontend) and prefer CSS
+    // easing over JS-driven spring physics to compensate.
+    // Must be set before the webview (and thus WebKitGTK) initializes;
+    // respect an explicit override.
     if cfg!(target_os = "linux") && std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
         std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     }
