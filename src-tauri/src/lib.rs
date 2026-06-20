@@ -247,20 +247,17 @@ fn migrations() -> Vec<Migration> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // WebKitGTKDMABuf renderer uses GBM (Generic Buffer Management) for
-    // zero-copy GPU buffer sharing. This requires Mesa's GBM implementation,
-    // which is unavailable or broken on:
-    //   - NVIDIA proprietary drivers (no GBM support — crashes with "Failed to
-    //     create GBM buffer")
-    //   - Some Mesa/Intel/AMD combos (washed-out colors on composited layers
-    //     like Radix popovers positioned with `transform`)
-    // Disabling DMABuf routes composited layers through a CPU fallback path
-    // that works everywhere, at the cost of GPU compositing performance.
-    // Animations should use `will-change` hints (frontend) and prefer CSS
-    // easing over JS-driven spring physics to compensate.
-    // Must be set before the webview (and thus WebKitGTK) initializes;
-    // respect an explicit override.
-    if cfg!(target_os = "linux") && std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+    // NVIDIA's proprietary driver does not implement Mesa's GBM API, so
+    // WebKitGTKDMABuf buffer allocation fails with "Failed to create GBM
+    // buffer". Disable DMABuf when the nvidia kernel module is present
+    // (harmless false-positive on hybrid laptops — the Intel/AMD side's
+    // Mesa GBM still works, but the net effect is just lower FPS, not a
+    // crash). Everyone else (Mesa, Windows, macOS) gets GPU compositing.
+    // Respect an explicit env-var override in either direction.
+    if cfg!(target_os = "linux")
+        && std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none()
+        && std::path::Path::new("/sys/module/nvidia").exists()
+    {
         std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     }
 
