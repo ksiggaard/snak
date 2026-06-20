@@ -76,6 +76,8 @@ import {
   buildPlannerSystemPrompt,
   parsePlan,
   resolveStepVariables,
+  topologicalSort,
+  type PlanStep,
 } from "@/lib/planner";
 import {
   buildGlobalSystemText,
@@ -84,6 +86,7 @@ import {
 import { mcpCloseThreadSessions } from "@/lib/mcp";
 import { t } from "@/store/i18n";
 import { isKeylessProvider, PROVIDERS } from "@/lib/providers";
+import { createGate } from "@/lib/concurrency";
 import { deriveOffline, useConnectivity } from "@/store/connectivity";
 import type { PreparedImage } from "@/lib/image";
 import type { PendingDocument } from "@/lib/documents";
@@ -100,6 +103,21 @@ export const PLANNER_DEFAULT_KEY = "planner_default";
 // renderer can tell a not-yet-persisted placeholder from a real message (e.g.
 // artifacts only persist once their message has a real id).
 export const STREAM_ID = "__streaming__";
+export const STREAM_STEP_PREFIX = "__stream__";
+
+export interface StepProgress {
+  id: string;
+  description: string;
+  provider: Provider;
+  model: string;
+  status: "pending" | "running" | "done";
+}
+
+export interface PlannerProgress {
+  phase: "planning" | "dispatching" | "executing" | "completing";
+  steps: StepProgress[];
+  directModel?: string;
+}
 
 /** Cap on the persisted API trace (serialized), so a long multi-round trace
  * can't bloat the message row. The base64/document bodies are already elided
@@ -193,6 +211,9 @@ interface ThreadsState {
   plannerDefault: boolean;
   /** Whether the current draft (or thread) should use planner orchestration. */
   draftUsePlanner: boolean;
+  /** Live planner orchestration progress — drives the PlannerProgress pill strip.
+   *  Null when the planner is not active. Ephemeral (never persisted). */
+  plannerProgress: PlannerProgress | null;
   /** Workspace a new (draft) chat will be created in, or null for none. */
   draftWorkspaceId: string | null;
   /** Workspace-file ids excluded from context for the current draft chat (T61).
@@ -275,6 +296,9 @@ interface ThreadsState {
   setPlannerModel: (provider: Provider, model: string) => Promise<void>;
   /** Persist whether planner mode is the default for new chats. */
   setPlannerDefault: (on: boolean) => Promise<void>;
+  /** Update the live planner progress (phase + steps). Internal — not exposed
+   *  via a public setter; callers use the raw set. */
+  _setPlannerProgress: (p: PlannerProgress | null) => void;
   /** Toggle planner mode on/off for the current thread (or draft). */
   setUsePlanner: (on: boolean) => Promise<void>;
   /** Recompute `systemTokens` for the current thread/draft (skills + global +
@@ -566,6 +590,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   plannerModel: PROVIDERS[0].defaultModel,
   plannerDefault: false,
   draftUsePlanner: false,
+  plannerProgress: null,
   draftWorkspaceId: null,
   draftExcludedFileIds: [],
   draftIncognito: false,
@@ -793,6 +818,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     await setSetting(PLANNER_DEFAULT_KEY, on ? "1" : "0");
     set({ plannerDefault: on });
   },
+
+  _setPlannerProgress: (p) => set({ plannerProgress: p }),
 
   setUsePlanner: async (on) => {
     const id = get().currentThreadId;
@@ -1039,6 +1066,9 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           ),
         ];
 
+        // Show the planning phase pill immediately.
+        set({ plannerProgress: { phase: "planning", steps: [] } });
+
         // Stream the planner's output into a placeholder.
         let plannerAcc = "";
         const plannerToolCalls: MessageToolCall[] = [];
@@ -1175,31 +1205,56 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             // Reload messages so the planner message + plan are visible.
             set({ messages: await loadThreadMessages(tid) });
 
-            // Execute steps sequentially (for streaming simplicity — each step
-            // gets its own placeholder and message). Parallelism is internal to
-            // future waves but the UX is sequential for now.
+            // Transition to dispatching phase — show step pills.
+            const steps: StepProgress[] = plan.steps.map((s) => ({
+              id: s.id,
+              description: s.description,
+              provider: s.provider,
+              model: s.model,
+              status: "pending" as const,
+            }));
+            set({
+              plannerProgress: {
+                phase: "dispatching",
+                steps,
+              },
+            });
+
+            // Execute steps in dependency waves via Promise.all (cloud models
+            // run unrestricted; local/Ollama steps serialize through a gate).
             const stepResults = new Map<string, string>();
-            for (const step of plan.steps) {
-              if (get().cancelling) break;
+            const gate = createGate();
 
-              // Resolve placeholders from completed steps.
-              const resolvedPrompt = resolveStepVariables(
-                step.prompt,
-                stepResults,
-              );
+            const runStep = async (step: PlanStep, resolvedPrompt: string) => {
+              if (get().cancelling)
+                return { stepId: step.id, description: step.description, provider: step.provider, model: step.model, content: "", usage: { input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0 } };
 
-              // Stream the worker step into a new placeholder.
+              // Mark step as running.
+              set((s) => ({
+                plannerProgress: s.plannerProgress
+                  ? {
+                      ...s.plannerProgress,
+                      phase: "executing" as const,
+                      steps: s.plannerProgress.steps.map((sp) =>
+                        sp.id === step.id ? { ...sp, status: "running" as const } : sp,
+                      ),
+                    }
+                  : null,
+              }));
+
+              // Stream the step into its own placeholder with per-step ID.
+              const streamId = `${STREAM_STEP_PREFIX}${step.id}`;
               let stepAcc = "";
               const stepOnDelta = (event: StreamEvent) => {
                 if (event.text) stepAcc += event.text;
                 set((s) => {
-                  const exists = s.messages.some((m) => m.id === STREAM_ID);
+                  const exists = s.messages.some((m) => m.id === streamId);
                   const base = exists
                     ? s.messages
                     : [
                         ...s.messages,
                         {
-                          id: STREAM_ID,
+                          id: streamId,
                           thread_id: tid,
                           role: "assistant" as const,
                           content: "",
@@ -1219,7 +1274,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                       ];
                   return {
                     messages: base.map((m) =>
-                      m.id === STREAM_ID
+                      m.id === streamId
                         ? { ...m, content: stepAcc }
                         : m,
                     ),
@@ -1229,13 +1284,17 @@ export const useThreads = create<ThreadsState>((set, get) => ({
               };
 
               const stepStarted = Date.now();
-              const stepResult = await chatStream(
-                step.provider,
-                step.model,
-                [{ role: "user", content: resolvedPrompt, images: [] }],
-                stepOnDelta,
-                tid,
-                false,
+              const stepResult = await gate(
+                isKeylessProvider(step.provider),
+                () =>
+                  chatStream(
+                    step.provider,
+                    step.model,
+                    [{ role: "user", content: resolvedPrompt, images: [] }],
+                    stepOnDelta,
+                    tid,
+                    false,
+                  ),
               );
 
               if (stepResult.content.length > 0) {
@@ -1269,11 +1328,67 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                   });
                 }
               }
+
+              // Mark step as done.
+              set((s) => ({
+                plannerProgress: s.plannerProgress
+                  ? {
+                      ...s.plannerProgress,
+                      steps: s.plannerProgress.steps.map((sp) =>
+                        sp.id === step.id ? { ...sp, status: "done" as const } : sp,
+                      ),
+                    }
+                  : null,
+              }));
+
+              return {
+                stepId: step.id,
+                description: step.description,
+                provider: step.provider,
+                model: step.model,
+                content: stepResult.content,
+                usage: stepResult.usage ?? { input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0 },
+              };
+            };
+
+            // Run waves. The last wave gets the "completing" phase.
+            const waves = topologicalSort(plan.steps);
+            for (let wi = 0; wi < waves.length; wi++) {
+              if (get().cancelling) break;
+              if (wi === waves.length - 1) {
+                set((s) => ({
+                  plannerProgress: s.plannerProgress
+                    ? { ...s.plannerProgress, phase: "completing" }
+                    : null,
+                }));
+              }
+              await Promise.all(
+                waves[wi].map((step) =>
+                  runStep(step, resolveStepVariables(step.prompt, stepResults)),
+                ),
+              );
             }
+          } else if (plan?.strategy === "direct") {
+            // Direct strategy: show which model was chosen (or "answered directly").
+            const directModel =
+              plan.steps.length === 1
+                ? `${plan.steps[0].provider}:${plan.steps[0].model}`
+                : undefined;
+            set({
+              plannerProgress: {
+                phase: "completing",
+                steps: [],
+                directModel,
+              },
+            });
           }
 
           // Reload messages to replace all placeholders and show final state.
-          set({ messages: await loadThreadMessages(tid) });
+          // Clear planner progress — orchestration is complete.
+          set({
+            messages: await loadThreadMessages(tid),
+            plannerProgress: null,
+          });
           await get().refreshThreads();
         }
       };
@@ -2220,7 +2335,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     } catch (e) {
       set({ error: friendlyError(e) });
     } finally {
-      set({ busy: false, compacting: false, cancelling: false });
+      set({ busy: false, compacting: false, cancelling: false, plannerProgress: null });
     }
   },
 
@@ -2228,7 +2343,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     if (!get().busy || get().cancelling) return;
     // Clear any pending approval card — `cancel_stream` drains pending
     // approvals on the backend (declining them), unblocking a gated stream.
-    set({ cancelling: true, pendingApproval: null });
+    set({ cancelling: true, pendingApproval: null, plannerProgress: null });
     try {
       await cancelStream();
     } catch {
