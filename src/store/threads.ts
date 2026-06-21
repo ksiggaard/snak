@@ -2168,12 +2168,38 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         (content): ApiMessage => ({ role: "user", content, images: [] }),
       );
 
+      // Seed streaming state.
+      set({
+        streamingContent: "",
+        streamingToolCalls: [],
+        streamingSubagents: [],
+        streamingImages: [],
+        streamingReasoning: "",
+        streamingApiTrace: [],
+        streamingBotId: attributeBotId,
+        streamingProvider: replyProvider,
+        streamingModel: replyModel,
+      });
       let acc = "";
       const toolCalls: MessageToolCall[] = [];
       const subagents: MessageSubagent[] = [];
       const foundImages: MessageImage[] = [];
       let reasoning = "";
       const apiTrace: ApiTraceEntry[] = [];
+      let lastFlush = 0;
+      const flushStreamingState = () => {
+        set({
+          streamingContent: acc,
+          streamingToolCalls: [...toolCalls],
+          streamingSubagents: [...subagents],
+          streamingImages: [...foundImages],
+          streamingReasoning: reasoning,
+          streamingApiTrace: [...apiTrace],
+          streamingProvider: replyProvider,
+          streamingModel: replyModel,
+          ...(acc.length > 0 ? { awaitingModel: false } : {}),
+        });
+      };
       const onDelta = (event: StreamEvent) => {
         if (event.approvalRequest) {
           const req = event.approvalRequest;
@@ -2199,52 +2225,12 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           }
         }
         if (event.text) acc += event.text;
-        set((s) => {
-          if (get().currentThreadId !== id) return {};
-          const exists = s.messages.some((m) => m.id === STREAM_ID);
-          const base = exists
-            ? s.messages
-            : [
-                ...s.messages,
-                {
-                  id: STREAM_ID,
-                  thread_id: id,
-                  role: "assistant" as const,
-                  content: "",
-                  kind: "normal" as const,
-                  duration_ms: null,
-                  bot_id: attributeBotId,
-                  variant_group: groupId,
-                  variant_selected: 1,
-                  created_at: "",
-                  provider: null,
-                  model: null,
-                  images: [],
-                  documents: [],
-                  toolCalls: [],
-                  subagents: [],
-                },
-              ];
-          return {
-            messages: base.map((m) =>
-              m.id === STREAM_ID
-                ? {
-                    ...m,
-                    content: acc,
-                    toolCalls: [...toolCalls],
-                    subagents: [...subagents],
-                    images: [...foundImages],
-                    reasoning: reasoning || undefined,
-                    apiTrace: apiTrace.length ? [...apiTrace] : undefined,
-                  }
-                : m,
-            ),
-            ...(event.toolDone || event.subagent
-              ? { awaitingModel: true }
-              : {}),
-            ...(isModelOutput(event) ? { awaitingModel: false } : {}),
-          };
-        });
+        if (event.toolDone || event.subagent) set({ awaitingModel: true });
+        const now = performance.now();
+        if (now - lastFlush > 100) {
+          lastFlush = now;
+          flushStreamingState();
+        }
       };
 
       const started = Date.now();
@@ -2256,13 +2242,13 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         id,
         thread.deep_research !== 0,
       );
+      flushStreamingState();
       if (
         result.content.length > 0 ||
         toolCalls.length > 0 ||
         subagents.length > 0 ||
         foundImages.length > 0
       ) {
-        // New variant joins the existing group, then becomes the selected one.
         const variantMsg = await addMessage({
           thread_id: id,
           role: "assistant",
@@ -2271,32 +2257,34 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           bot_id: attributeBotId,
           variant_group: groupId,
         });
-        for (const tc of toolCalls) {
-          await addAttachment({
-            message_id: variantMsg.id,
-            kind: "tool_call",
-            media_type: "application/json",
-            data: JSON.stringify(persistableToolCall(tc)),
-          });
-        }
-        for (const s of subagents) {
-          await addAttachment({
-            message_id: variantMsg.id,
-            kind: "subagent",
-            media_type: "application/json",
-            data: JSON.stringify(persistableSubagent(s)),
-          });
-        }
-        for (const img of foundImages) {
-          await addAttachment({
-            message_id: variantMsg.id,
-            kind: "image",
-            media_type: img.media_type,
-            data: img.data,
-            filename: img.source,
-          });
-        }
-        await persistTransparency(variantMsg.id, reasoning, apiTrace);
+        await Promise.all([
+          ...toolCalls.map((tc) =>
+            addAttachment({
+              message_id: variantMsg.id,
+              kind: "tool_call",
+              media_type: "application/json",
+              data: JSON.stringify(persistableToolCall(tc)),
+            }),
+          ),
+          ...subagents.map((s) =>
+            addAttachment({
+              message_id: variantMsg.id,
+              kind: "subagent",
+              media_type: "application/json",
+              data: JSON.stringify(persistableSubagent(s)),
+            }),
+          ),
+          ...foundImages.map((img) =>
+            addAttachment({
+              message_id: variantMsg.id,
+              kind: "image",
+              media_type: img.media_type,
+              data: img.data,
+              filename: img.source,
+            }),
+          ),
+          persistTransparency(variantMsg.id, reasoning, apiTrace),
+        ]);
         const u = result.usage;
         if (
           u &&
@@ -2318,6 +2306,17 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         }
         await dbSelectVariant(groupId, variantMsg.id);
       }
+      set({
+        streamingContent: null,
+        streamingToolCalls: [],
+        streamingSubagents: [],
+        streamingImages: [],
+        streamingReasoning: "",
+        streamingApiTrace: [],
+        streamingBotId: null,
+        streamingProvider: null,
+        streamingModel: null,
+      });
       {
         const msgs = await loadThreadMessages(id);
         if (get().currentThreadId === id) set({ messages: msgs });
@@ -2343,6 +2342,15 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           pendingApproval: null,
           autoApproveSysTools: false,
           awaitingModel: false,
+          streamingContent: null,
+          streamingToolCalls: [],
+          streamingSubagents: [],
+          streamingImages: [],
+          streamingReasoning: "",
+          streamingApiTrace: [],
+          streamingBotId: null,
+          streamingProvider: null,
+          streamingModel: null,
         };
       });
       void get().refreshSystemTokens();
@@ -2450,12 +2458,38 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         (content): ApiMessage => ({ role: "user", content, images: [] }),
       );
 
+      // Seed streaming state.
+      set({
+        streamingContent: "",
+        streamingToolCalls: [],
+        streamingSubagents: [],
+        streamingImages: [],
+        streamingReasoning: "",
+        streamingApiTrace: [],
+        streamingBotId: attributeBotId,
+        streamingProvider: replyProvider,
+        streamingModel: replyModel,
+      });
       let acc = "";
       const toolCalls: MessageToolCall[] = [];
       const subagents: MessageSubagent[] = [];
       const foundImages: MessageImage[] = [];
       let reasoning = "";
       const apiTrace: ApiTraceEntry[] = [];
+      let lastFlush = 0;
+      const flushStreamingState = () => {
+        set({
+          streamingContent: acc,
+          streamingToolCalls: [...toolCalls],
+          streamingSubagents: [...subagents],
+          streamingImages: [...foundImages],
+          streamingReasoning: reasoning,
+          streamingApiTrace: [...apiTrace],
+          streamingProvider: replyProvider,
+          streamingModel: replyModel,
+          ...(acc.length > 0 ? { awaitingModel: false } : {}),
+        });
+      };
       const onDelta = (event: StreamEvent) => {
         if (event.approvalRequest) {
           const req = event.approvalRequest;
@@ -2481,52 +2515,12 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           }
         }
         if (event.text) acc += event.text;
-        set((s) => {
-          if (get().currentThreadId !== id) return {};
-          const exists = s.messages.some((m) => m.id === STREAM_ID);
-          const base = exists
-            ? s.messages
-            : [
-                ...s.messages,
-                {
-                  id: STREAM_ID,
-                  thread_id: id,
-                  role: "assistant" as const,
-                  content: "",
-                  kind: "normal" as const,
-                  duration_ms: null,
-                  bot_id: attributeBotId,
-                  variant_group: null,
-                  variant_selected: 1,
-                  created_at: "",
-                  provider: null,
-                  model: null,
-                  images: [],
-                  documents: [],
-                  toolCalls: [],
-                  subagents: [],
-                },
-              ];
-          return {
-            messages: base.map((m) =>
-              m.id === STREAM_ID
-                ? {
-                    ...m,
-                    content: acc,
-                    toolCalls: [...toolCalls],
-                    subagents: [...subagents],
-                    images: [...foundImages],
-                    reasoning: reasoning || undefined,
-                    apiTrace: apiTrace.length ? [...apiTrace] : undefined,
-                  }
-                : m,
-            ),
-            ...(event.toolDone || event.subagent
-              ? { awaitingModel: true }
-              : {}),
-            ...(isModelOutput(event) ? { awaitingModel: false } : {}),
-          };
-        });
+        if (event.toolDone || event.subagent) set({ awaitingModel: true });
+        const now = performance.now();
+        if (now - lastFlush > 100) {
+          lastFlush = now;
+          flushStreamingState();
+        }
       };
 
       const started = Date.now();
@@ -2538,15 +2532,13 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         id,
         thread.deep_research !== 0,
       );
+      flushStreamingState();
       if (
         result.content.length > 0 ||
         toolCalls.length > 0 ||
         subagents.length > 0 ||
         foundImages.length > 0
       ) {
-        // Persist as a new standalone assistant message (not in a variant group)
-        // appended after the target reply. variant_group is null so it renders
-        // without variation controls.
         const sourcesMsg = await addMessage({
           thread_id: id,
           role: "assistant",
@@ -2555,32 +2547,34 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           bot_id: attributeBotId,
           variant_group: null,
         });
-        for (const tc of toolCalls) {
-          await addAttachment({
-            message_id: sourcesMsg.id,
-            kind: "tool_call",
-            media_type: "application/json",
-            data: JSON.stringify(persistableToolCall(tc)),
-          });
-        }
-        for (const s of subagents) {
-          await addAttachment({
-            message_id: sourcesMsg.id,
-            kind: "subagent",
-            media_type: "application/json",
-            data: JSON.stringify(persistableSubagent(s)),
-          });
-        }
-        for (const img of foundImages) {
-          await addAttachment({
-            message_id: sourcesMsg.id,
-            kind: "image",
-            media_type: img.media_type,
-            data: img.data,
-            filename: img.source,
-          });
-        }
-        await persistTransparency(sourcesMsg.id, reasoning, apiTrace);
+        await Promise.all([
+          ...toolCalls.map((tc) =>
+            addAttachment({
+              message_id: sourcesMsg.id,
+              kind: "tool_call",
+              media_type: "application/json",
+              data: JSON.stringify(persistableToolCall(tc)),
+            }),
+          ),
+          ...subagents.map((s) =>
+            addAttachment({
+              message_id: sourcesMsg.id,
+              kind: "subagent",
+              media_type: "application/json",
+              data: JSON.stringify(persistableSubagent(s)),
+            }),
+          ),
+          ...foundImages.map((img) =>
+            addAttachment({
+              message_id: sourcesMsg.id,
+              kind: "image",
+              media_type: img.media_type,
+              data: img.data,
+              filename: img.source,
+            }),
+          ),
+          persistTransparency(sourcesMsg.id, reasoning, apiTrace),
+        ]);
         const u = result.usage;
         if (
           u &&
@@ -2601,6 +2595,17 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           });
         }
       }
+      set({
+        streamingContent: null,
+        streamingToolCalls: [],
+        streamingSubagents: [],
+        streamingImages: [],
+        streamingReasoning: "",
+        streamingApiTrace: [],
+        streamingBotId: null,
+        streamingProvider: null,
+        streamingModel: null,
+      });
       {
         const msgs = await loadThreadMessages(id);
         if (get().currentThreadId === id) set({ messages: msgs });
@@ -2626,6 +2631,15 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           pendingApproval: null,
           autoApproveSysTools: false,
           awaitingModel: false,
+          streamingContent: null,
+          streamingToolCalls: [],
+          streamingSubagents: [],
+          streamingImages: [],
+          streamingReasoning: "",
+          streamingApiTrace: [],
+          streamingBotId: null,
+          streamingProvider: null,
+          streamingModel: null,
         };
       });
       void get().refreshSystemTokens();
