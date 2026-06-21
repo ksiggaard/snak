@@ -109,7 +109,6 @@ export const CRITIC_MODEL_KEY = "critic_model";
 // renderer can tell a not-yet-persisted placeholder from a real message (e.g.
 // artifacts only persist once their message has a real id).
 export const STREAM_ID = "__streaming__";
-export const STREAM_STEP_PREFIX = "__stream__";
 
 export interface StepProgress {
   id: string;
@@ -1321,8 +1320,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           }
 
           if (plan && (plan.strategy === "route" || plan.strategy === "multi_step")) {
-            // Helper: stream a model response into the STREAM_ID placeholder,
-            // persist it, and reload messages so the UI shows the real row.
+            // Helper: stream a model response, persist it, and reload messages
+            // so the UI shows the real row.
             const writeReply = async (
               provider: Provider,
               model: string,
