@@ -427,6 +427,7 @@ export const en = {
   // --- Settings: section nav ------------------------------------------------------------
   "settings.nav.apiKeys": "API Keys",
   "settings.nav.models": "Models",
+  "settings.nav.defaultModel": "Default Model",
   "settings.nav.memory": "Memory",
   "settings.nav.behavior": "Behavior",
   "settings.nav.appearance": "Appearance",

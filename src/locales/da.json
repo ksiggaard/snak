@@ -309,6 +309,7 @@
     "usage.responseCount.other": "{n} svar",
     "settings.nav.apiKeys": "API-nøgler",
     "settings.nav.models": "Modeller",
+    "settings.nav.defaultModel": "Standardmodel",
     "settings.nav.memory": "Hukommelse",
     "settings.nav.behavior": "Funktionsmåde",
     "settings.nav.appearance": "Udseende",

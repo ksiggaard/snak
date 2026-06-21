@@ -1,6 +1,7 @@
 import { useState, type ComponentType } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Models } from "@/components/settings/Models";
+import { DefaultModel } from "@/components/settings/DefaultModel";
 import { Memory } from "@/components/settings/Memory";
 import { Bots } from "@/components/settings/Bots";
 import { QuickActions } from "@/components/settings/QuickActions";
@@ -30,6 +31,11 @@ const SECTIONS: Section[] = [
     id: "models",
     label: "settings.nav.models",
     Component: Models,
+  },
+  {
+    id: "default-model",
+    label: "settings.nav.defaultModel",
+    Component: DefaultModel,
   },
   { id: "memory", label: "settings.nav.memory", Component: Memory },
   { id: "bots", label: "settings.nav.bots", Component: Bots },

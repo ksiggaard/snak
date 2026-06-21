@@ -319,6 +319,7 @@
     "usage.responseCount.other": "{n} odpowiedzi",
     "settings.nav.apiKeys": "Klucze API",
     "settings.nav.models": "Modele",
+    "settings.nav.defaultModel": "Model domyślny",
     "settings.nav.memory": "Pamięć",
     "settings.nav.behavior": "Zachowanie",
     "settings.nav.appearance": "Wygląd",
