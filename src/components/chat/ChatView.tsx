@@ -107,7 +107,9 @@ export function ChatView() {
   // spend). Hidden by default, per-session only — not persisted.
   const [panelOpen, setPanelOpen] = useState(false);
   const messages = useThreads((s) => s.messages);
-  const busy = useThreads((s) => s.busy);
+  const currentThreadId = useThreads((s) => s.currentThreadId);
+  const runningStreams = useThreads((s) => s.runningStreams);
+  const busy = currentThreadId ? runningStreams.has(currentThreadId) : false;
   const error = useThreads((s) => s.error);
   const send = useThreads((s) => s.send);
   const cancel = useThreads((s) => s.cancel);
@@ -116,7 +118,6 @@ export function ChatView() {
       void send(text, images, documents),
     [send],
   );
-  const currentThreadId = useThreads((s) => s.currentThreadId);
   const threads = useThreads((s) => s.threads);
   const draftProvider = useThreads((s) => s.draftProvider);
   const draftModel = useThreads((s) => s.draftModel);
@@ -169,7 +170,11 @@ export function ChatView() {
   // post-tool round doesn't look like the persona stopped responding.
   const last = messages[messages.length - 1];
   const awaitingModel = useThreads((s) => s.awaitingModel);
-  const pending = busy && (!last || last.role === "user" || awaitingModel);
+  const streamingContent = useThreads((s) => s.streamingContent);
+  const pending =
+    busy &&
+    (!last || last.role === "user" || awaitingModel) &&
+    (!streamingContent || awaitingModel);
 
   return (
     <div className="relative flex flex-1 flex-row gap-4 overflow-hidden">

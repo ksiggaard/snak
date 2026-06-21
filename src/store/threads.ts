@@ -727,6 +727,19 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         savedMessages: { ...s.savedMessages, [oldId]: s.messages },
       }));
     }
+    // Clear any streaming state from the previous thread — the bubble
+    // lives in store fields now, not inside messages[].
+    set({
+      streamingContent: null,
+      streamingToolCalls: [],
+      streamingSubagents: [],
+      streamingImages: [],
+      streamingReasoning: "",
+      streamingApiTrace: [],
+      streamingBotId: null,
+      streamingProvider: null,
+      streamingModel: null,
+    });
     // Restore from saved cache if available (e.g. the thread had an active
     // stream and its messages were saved when we switched away), otherwise
     // load fresh from the DB.
