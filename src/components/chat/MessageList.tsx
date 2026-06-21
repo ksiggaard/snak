@@ -554,7 +554,10 @@ function DirectionModal({
  */
 function RequestSourcesButton({ messageId }: { messageId: string }) {
   const t = useT();
-  const busy = useThreads((s) => s.busy);
+  const busy = useThreads((s) => {
+    const id = s.currentThreadId;
+    return id ? s.runningStreams.has(id) : false;
+  });
   const requestSources = useThreads((s) => s.requestSources);
   return (
     <button
@@ -579,7 +582,10 @@ function RequestSourcesButton({ messageId }: { messageId: string }) {
  */
 function VariationControls({ m }: { m: MessageView }) {
   const t = useT();
-  const busy = useThreads((s) => s.busy);
+  const busy = useThreads((s) => {
+    const id = s.currentThreadId;
+    return id ? s.runningStreams.has(id) : false;
+  });
   const regenerate = useThreads((s) => s.regenerate);
   const selectVariant = useThreads((s) => s.selectVariant);
   const [open, setOpen] = useState(false);
@@ -948,7 +954,7 @@ const ChatMessage = memo(function ChatMessage({
       <div
         ref={containerRef}
         data-mid={m.id}
-        className="mx-auto flex w-full scroll-mt-4"
+        className={cn("mx-auto flex w-full scroll-mt-4", isUser && "mb-5")}
         style={{ maxWidth }}
       >
         <div
@@ -1007,7 +1013,7 @@ const ChatMessage = memo(function ChatMessage({
       <div
         ref={containerRef}
         data-mid={m.id}
-        className="mx-auto flex w-full scroll-mt-4 gap-2.5"
+        className={cn("mx-auto flex w-full scroll-mt-4 gap-2.5", isUser && "mb-5")}
         style={{ maxWidth }}
       >
         {asBot ? (
@@ -1065,7 +1071,7 @@ const ChatMessage = memo(function ChatMessage({
       <div
         ref={containerRef}
         data-mid={m.id}
-        className="mx-auto flex w-full scroll-mt-4"
+        className={cn("mx-auto flex w-full scroll-mt-4", isUser && "mb-5")}
         style={{ maxWidth }}
       >
         <div
@@ -1115,7 +1121,7 @@ const ChatMessage = memo(function ChatMessage({
     <div
       ref={containerRef}
       data-mid={m.id}
-      className={cn("mx-auto flex w-full scroll-mt-4", row)}
+      className={cn("mx-auto flex w-full scroll-mt-4", row, isUser && "mb-5")}
       style={{ maxWidth }}
     >
       <div
@@ -1184,6 +1190,48 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
   const capped = chatMaxWidth != null;
   // Message briefly highlighted after jumping to it from a search result.
   const [flashId, setFlashId] = useState<string | null>(null);
+  // Live streaming bubble state (throttled, moved out of messages[] for perf).
+  const streamingContent = useThreads((s) => s.streamingContent);
+  const streamingToolCalls = useThreads((s) => s.streamingToolCalls);
+  const streamingSubagents = useThreads((s) => s.streamingSubagents);
+  const streamingImages = useThreads((s) => s.streamingImages);
+  const streamingBotId = useThreads((s) => s.streamingBotId);
+  const streamingProvider = useThreads((s) => s.streamingProvider);
+  const streamingModel = useThreads((s) => s.streamingModel);
+  // Augment messages with a live streaming bubble when one is active.
+  const displayItems = useMemo(() => {
+    if (streamingContent === null) return messages;
+    return [
+      ...messages,
+      {
+        id: STREAM_ID,
+        thread_id: messages[0]?.thread_id ?? "",
+        role: "assistant" as const,
+        content: streamingContent,
+        kind: "normal" as const,
+        duration_ms: null,
+        bot_id: streamingBotId,
+        variant_group: null,
+        variant_selected: 1,
+        created_at: "",
+        provider: streamingProvider,
+        model: streamingModel,
+        images: streamingImages,
+        documents: [],
+        toolCalls: streamingToolCalls,
+        subagents: streamingSubagents,
+      } as MessageView,
+    ];
+  }, [
+    messages,
+    streamingContent,
+    streamingToolCalls,
+    streamingSubagents,
+    streamingImages,
+    streamingBotId,
+    streamingProvider,
+    streamingModel,
+  ]);
 
   // T57 — rotating loading messages. The interval fires every 2.2 s while
   // `pending` is true, bumping a counter that selects the next phrase.
@@ -1230,8 +1278,8 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
   // Includes the streaming placeholder (no variantIds → renders nothing), which
   // correctly suppresses controls on the prior reply while a reply is in flight.
   let lastAssistantIndex = -1;
-  for (let k = 0; k < messages.length; k++) {
-    if (messages[k].role === "assistant" && messages[k].kind === "normal")
+  for (let k = 0; k < displayItems.length; k++) {
+    if (displayItems[k].role === "assistant" && displayItems[k].kind === "normal")
       lastAssistantIndex = k;
   }
 
@@ -1243,7 +1291,7 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
   const ytEnabled = usePlugins((s) =>
     hasRenderer(selectRegistry(s), "youtube"),
   );
-  const { imageOffsets, videoOffsets } = mediaLabelOffsets(messages, ytEnabled);
+  const { imageOffsets, videoOffsets } = mediaLabelOffsets(displayItems, ytEnabled);
 
   // Stable lookup map for mention-bot resolution (avoids .find() per message
   // which would defeat React.memo by returning new object references).
@@ -1265,7 +1313,7 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
     return cb;
   };
 
-  if (messages.length === 0 && !pending) {
+  if (displayItems.length === 0 && !pending) {
     // Empty chat: a persona greets with its own starters (T38); a plain new
     // chat shows configurable quick actions + persona starters.
     return <EmptySuggestions bot={bot} />;
@@ -1275,7 +1323,7 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
     <Virtuoso
       ref={virtuosoRef}
       className="flex flex-1 flex-col"
-      data={messages}
+      data={displayItems}
       computeItemKey={(_, m) => m.id}
       followOutput={pending ? "smooth" : false}
       itemContent={(idx, m) => {
