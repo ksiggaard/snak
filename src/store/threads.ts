@@ -74,8 +74,12 @@ import { useKeys } from "@/store/keys";
 import { useModels } from "@/store/models";
 import {
   buildPlannerSystemPrompt,
+  buildCriticSystemPrompt,
+  buildCriticRequest,
   parsePlan,
+  parseCriticResponse,
   resolveStepVariables,
+  stripPlanJsonFence,
   topologicalSort,
   type PlanStep,
 } from "@/lib/planner";
@@ -98,6 +102,8 @@ export const DEFAULT_MODEL_KEY = "default_model";
 export const PLANNER_PROVIDER_KEY = "planner_provider";
 export const PLANNER_MODEL_KEY = "planner_model";
 export const PLANNER_DEFAULT_KEY = "planner_default";
+export const CRITIC_PROVIDER_KEY = "critic_provider";
+export const CRITIC_MODEL_KEY = "critic_model";
 // Sentinel id for the in-progress assistant message shown while streaming;
 // replaced by the persisted DB row once the stream completes. Exported so the
 // renderer can tell a not-yet-persisted placeholder from a real message (e.g.
@@ -114,9 +120,13 @@ export interface StepProgress {
 }
 
 export interface PlannerProgress {
-  phase: "planning" | "dispatching" | "executing" | "completing";
+  phase: "planning" | "critiquing" | "revising" | "dispatching" | "executing" | "completing";
   steps: StepProgress[];
   directModel?: string;
+  /** Current critique round (1-based), set during critiquing/revising phases. */
+  round?: number;
+  /** Maximum critique rounds (always 10). */
+  maxRounds?: number;
 }
 
 /** Cap on the persisted API trace (serialized), so a long multi-round trace
@@ -211,9 +221,25 @@ interface ThreadsState {
   plannerDefault: boolean;
   /** Whether the current draft (or thread) should use planner orchestration. */
   draftUsePlanner: boolean;
-  /** Live planner orchestration progress — drives the PlannerProgress pill strip.
-   *  Null when the planner is not active. Ephemeral (never persisted). */
-  plannerProgress: PlannerProgress | null;
+  /** Critic model: reviews plans before execution (null = use planner's). */
+  criticProvider: Provider | null;
+  /** Critic model id (null = use planner's). */
+  criticModel: string | null;
+  /** Live planner orchestration progress — per-thread, keyed by thread id.
+   *  Drives the PlannerProgress pill strip. Null = planner not active.
+   *  Ephemeral (never persisted). */
+  threadPlannerProgress: Record<string, PlannerProgress>;
+  /** Threads with an active stream (send/regenerate/compact/etc.) — per-thread
+   *  so the user can switch between threads while streams run in the background.
+   *  Derived `busy` = runningStreams.has(currentThreadId). */
+  runningStreams: Set<string>;
+  /** Threads whose stream completed while the user was viewing a different
+   *  thread. Cleared when the user selects the thread. Drives sidebar indicator. */
+  unreadThreads: Set<string>;
+  /** Per-thread message cache — saved when switching away from a thread that
+   *  has an active stream, restored when switching back, so streaming
+   *  placeholders aren't lost. Keyed by thread id. */
+  savedMessages: Record<string, MessageView[]>;
   /** Workspace a new (draft) chat will be created in, or null for none. */
   draftWorkspaceId: string | null;
   /** Workspace-file ids excluded from context for the current draft chat (T61).
@@ -227,8 +253,7 @@ interface ThreadsState {
   draftDeepResearch: boolean;
   /** Bot (T38) a new (draft) chat will belong to, or null for none. */
   draftBotId: string | null;
-  busy: boolean;
-  /** A compaction summarization call is in flight (T28; busy is also set). */
+  /** A compaction summarization call is in flight (T28). */
   compacting: boolean;
   /** True between requesting a cancel and the stream actually stopping. */
   cancelling: boolean;
@@ -258,6 +283,18 @@ interface ThreadsState {
   composerFocus: { nonce: number } | null;
   error: string | null;
   initialized: boolean;
+  /** Live streaming placeholder text (null = no active stream). Updated at most
+   *  every 100ms during streaming. The messages array is untouched — the
+   *  rendering layer augments displayItems with this. */
+  streamingContent: string | null;
+  streamingToolCalls: MessageToolCall[];
+  streamingSubagents: MessageSubagent[];
+  streamingImages: MessageImage[];
+  streamingReasoning: string;
+  streamingApiTrace: ApiTraceEntry[];
+  streamingBotId: string | null;
+  streamingProvider: Provider | null;
+  streamingModel: string | null;
 
   init: () => Promise<void>;
   refreshThreads: () => Promise<void>;
@@ -296,9 +333,11 @@ interface ThreadsState {
   setPlannerModel: (provider: Provider, model: string) => Promise<void>;
   /** Persist whether planner mode is the default for new chats. */
   setPlannerDefault: (on: boolean) => Promise<void>;
-  /** Update the live planner progress (phase + steps). Internal — not exposed
-   *  via a public setter; callers use the raw set. */
-  _setPlannerProgress: (p: PlannerProgress | null) => void;
+  /** Persist the critic provider+model (null = use planner's). */
+  setCriticModel: (
+    provider: Provider | null,
+    model: string | null,
+  ) => Promise<void>;
   /** Toggle planner mode on/off for the current thread (or draft). */
   setUsePlanner: (on: boolean) => Promise<void>;
   /** Recompute `systemTokens` for the current thread/draft (skills + global +
@@ -590,13 +629,17 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   plannerModel: PROVIDERS[0].defaultModel,
   plannerDefault: false,
   draftUsePlanner: false,
-  plannerProgress: null,
+  criticProvider: null,
+  criticModel: null,
+  threadPlannerProgress: {},
+  runningStreams: new Set(),
+  unreadThreads: new Set(),
+  savedMessages: {},
   draftWorkspaceId: null,
   draftExcludedFileIds: [],
   draftIncognito: false,
   draftDeepResearch: false,
   draftBotId: null,
-  busy: false,
   compacting: false,
   cancelling: false,
   pendingApproval: null,
@@ -607,6 +650,15 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   composerFocus: null,
   error: null,
   initialized: false,
+  streamingContent: null,
+  streamingToolCalls: [],
+  streamingSubagents: [],
+  streamingImages: [],
+  streamingReasoning: "",
+  streamingApiTrace: [],
+  streamingBotId: null,
+  streamingProvider: null,
+  streamingModel: null,
 
   init: async () => {
     if (get().initialized) return;
@@ -633,6 +685,13 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     ]);
     const plannerDef = resolveDefault(pp, pm);
     const plannerDefault = pdRaw === "1";
+    // Load critic settings (null = fall back to planner model).
+    const [cp, cm] = await Promise.all([
+      getSetting(CRITIC_PROVIDER_KEY),
+      getSetting(CRITIC_MODEL_KEY),
+    ]);
+    const criticProvider = (cp as Provider | null) ?? null;
+    const criticModel = cm ?? null;
     set({
       defaultProvider: def.provider,
       defaultModel: def.model,
@@ -642,6 +701,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       plannerModel: plannerDef.model,
       plannerDefault,
       draftUsePlanner: plannerDefault,
+      criticProvider,
+      criticModel,
     });
     const lastId = await getSetting(LAST_THREAD_KEY);
     if (lastId && threads.some((t) => t.id === lastId)) {
@@ -658,8 +719,25 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   },
 
   selectThread: async (id) => {
-    const messages = await loadThreadMessages(id);
-    set({ currentThreadId: id, messages, error: null });
+    const oldId = get().currentThreadId;
+    // Save the current thread's messages before switching away, so streaming
+    // placeholders are preserved if we switch back while a stream is active.
+    if (oldId && oldId !== id) {
+      set((s) => ({
+        savedMessages: { ...s.savedMessages, [oldId]: s.messages },
+      }));
+    }
+    // Restore from saved cache if available (e.g. the thread had an active
+    // stream and its messages were saved when we switched away), otherwise
+    // load fresh from the DB.
+    const saved = get().savedMessages[id];
+    const messages = saved ?? (await loadThreadMessages(id));
+    // Clear the unread flag for this thread — the user is now viewing it.
+    set((s) => {
+      const unread = new Set(s.unreadThreads);
+      unread.delete(id);
+      return { currentThreadId: id, messages, unreadThreads: unread, error: null };
+    });
     const thread = get().threads.find((t) => t.id === id);
     // Tabs metaphor: opening an archived chat promotes it back to open.
     if (thread?.archived) {
@@ -819,7 +897,16 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     set({ plannerDefault: on });
   },
 
-  _setPlannerProgress: (p) => set({ plannerProgress: p }),
+  setCriticModel: async (provider, model) => {
+    if (provider !== null && model !== null) {
+      await setSetting(CRITIC_PROVIDER_KEY, provider);
+      await setSetting(CRITIC_MODEL_KEY, model);
+    } else {
+      await setSetting(CRITIC_PROVIDER_KEY, "");
+      await setSetting(CRITIC_MODEL_KEY, "");
+    }
+    set({ criticProvider: provider ?? null, criticModel: model ?? null });
+  },
 
   setUsePlanner: async (on) => {
     const id = get().currentThreadId;
@@ -889,7 +976,12 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     // Ignore empty/whitespace-only sends with no attachments.
     if (!content.trim() && images.length === 0 && documents.length === 0)
       return;
-    if (get().busy) return;
+    // Per-thread busy gate: block a send only when this thread already has
+    // an active stream (a different thread's stream does not block this one).
+    {
+      const tid = get().currentThreadId;
+      if (tid && get().runningStreams.has(tid)) return;
+    }
 
     // Offline backstop: a cloud provider can't be reached. The Composer already
     // blocks this in the UI, but the QuickInput overlay submits straight through
@@ -914,18 +1006,9 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       }
     }
 
-    set({
-      busy: true,
-      cancelling: false,
-      pendingApproval: null,
-      autoApproveSysTools: false,
-      // Show "Thinking…" from the moment we start until the model's first
-      // visible output. Cleared in onDelta by `isModelOutput`; not by the
-      // pre-request API-trace event, which would otherwise hide the loader
-      // through a slow first token (esp. local models' long prompt-eval).
-      awaitingModel: true,
-      error: null,
-    });
+    // runningId is captured before try so the finally block can remove this
+    // thread from runningStreams regardless of which thread is currently viewed.
+    let runningId: string | null = null;
     try {
       let id = get().currentThreadId;
       let provider: Provider;
@@ -937,6 +1020,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       let excludedFileIds: string[] | null;
 
       if (!id) {
+        const usePlanner = get().draftUsePlanner;
         provider = get().draftProvider;
         model = get().draftModel;
         workspaceId = get().draftWorkspaceId;
@@ -961,7 +1045,16 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           botId,
         });
         id = thread.id;
-        set({ currentThreadId: id });
+        // Persist planner state on the new thread so the ModelPicker reflects it
+        // and subsequent sends run the planner without relying on draftUsePlanner.
+        if (usePlanner) {
+          await setThreadPlannerActive(id, true, provider, model);
+          await setThreadProviderModel(
+            id,
+            get().plannerProvider,
+            get().plannerModel,
+          );
+        }
         // Carry the draft's deep-research mode onto the new thread row (T55) so
         // it persists like incognito/workspace do.
         if (deepResearch) await setThreadDeepResearch(id, true);
@@ -972,6 +1065,9 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         // Incognito threads never become last_thread_id (T29).
         if (!ephemeral) await setSetting(LAST_THREAD_KEY, id);
         await get().refreshThreads();
+        // Set currentThreadId after refreshThreads so ModelPicker sees the
+        // thread with correct data immediately — no flash of fallback draft values.
+        set({ currentThreadId: id, draftUsePlanner: false });
       } else {
         const t = get().threads.find((x) => x.id === id)!;
         provider = t.provider;
@@ -982,6 +1078,16 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         deepResearch = t.deep_research !== 0;
         excludedFileIds = parseExcludedFileIds(t.workspace_files_excluded);
       }
+
+      runningId = id;
+      set((s) => ({
+        runningStreams: new Set([...s.runningStreams, id]),
+        cancelling: false,
+        pendingApproval: null,
+        autoApproveSysTools: false,
+        awaitingModel: true,
+        error: null,
+      }));
 
       const userMsg = await addMessage({
         thread_id: id,
@@ -1024,6 +1130,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       // Cached key presence (no keychain read) for per-persona model resolution.
       const keyed = useKeys.getState().present;
       const hasKey = (p: Provider) => isKeylessProvider(p) || keyed.has(p);
+      // Providers usable for plan step dispatch (has key or is keyless).
+      const keyedProviders = new Set(PROVIDERS.map((p) => p.id).filter(hasKey));
 
       // System context shared by every reply of this send (skills/global/
       // workspace); the persona block is per-reply and slots in between.
@@ -1036,7 +1144,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       const threadPlannerActive =
         (get().threads.find((t) => t.id === threadId)?.planner_active ?? 0) !==
         0;
-      const usePlanner = threadPlannerActive || get().draftUsePlanner;
+      const usePlanner = threadPlannerActive;
 
       const runPlannerOrchestration = async (
         tid: string,
@@ -1067,7 +1175,9 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         ];
 
         // Show the planning phase pill immediately.
-        set({ plannerProgress: { phase: "planning", steps: [] } });
+        set((s) => ({
+          threadPlannerProgress: { ...s.threadPlannerProgress, [tid]: { phase: "planning", steps: [] } },
+        }));
 
         // Stream the planner's output into a placeholder.
         let plannerAcc = "";
@@ -1083,6 +1193,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           if (event.reasoning) plannerReasoning += event.reasoning.text;
           if (event.text) plannerAcc += event.text;
           set((s) => {
+            if (get().currentThreadId !== tid) return {};
             const exists = s.messages.some((m) => m.id === STREAM_ID);
             const base = exists
               ? s.messages
@@ -1135,6 +1246,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           onDelta,
           tid,
           false,
+          true,
         );
 
         // Persist planner message.
@@ -1143,10 +1255,26 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           plannerToolCalls.length > 0 ||
           plannerSubagents.length > 0
         ) {
+          // Parse plan with model validation. Do this before persistence so we
+          // can strip the raw JSON fence from the displayed message content.
+          const parseResult = parsePlan(plannerResult.content, allModels, PROVIDERS, keyedProviders);
+          let plan = parseResult?.plan ?? null;
+
+          // Strip the JSON fence from the planner output so the raw JSON isn't
+          // displayed redundantly alongside the structured PlanPanel.
+          const displayContent = stripPlanJsonFence(plannerResult.content);
+
+          // Update the live STREAM_ID placeholder to show the cleaned content.
+          set((s) => ({
+            messages: s.messages.map((m) =>
+              m.id === STREAM_ID ? { ...m, content: displayContent } : m,
+            ),
+          }));
+
           const plannerMsg = await addMessage({
             thread_id: tid,
             role: "assistant",
-            content: plannerResult.content,
+            content: displayContent,
             duration_ms: Math.round(Date.now() - started),
             provider: plannerProvider,
             model: plannerModel,
@@ -1190,183 +1318,360 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             });
           }
 
-          // Parse plan from the planner's output.
-          const plan = parsePlan(plannerResult.content);
+          // Post any model corrections as a note.
+          if (parseResult && parseResult.warnings.length > 0) {
+            await get().postNote(
+              `Model corrections in plan:\n${parseResult.warnings.map((w) => `- ${w}`).join("\n")}`,
+            );
+          }
 
           if (plan && (plan.strategy === "route" || plan.strategy === "multi_step")) {
-            // Persist the plan as an attachment so the UI can render it.
+            // Helper: stream a model response into the STREAM_ID placeholder,
+            // persist it, and reload messages so the UI shows the real row.
+            const writeReply = async (
+              provider: Provider,
+              model: string,
+              messages: ApiMessage[],
+            ): Promise<{
+              content: string;
+              model: string;
+              usage: { input_tokens: number; output_tokens: number; cache_creation_tokens: number; cache_read_tokens: number };
+              msgId: string;
+            }> => {
+              let acc = "";
+              const onDelta = (event: StreamEvent) => {
+                if (event.text) acc += event.text;
+                set((s) => {
+                  if (get().currentThreadId !== tid) return {};
+                  const exists = s.messages.some((m) => m.id === STREAM_ID);
+                  const base = exists
+                    ? s.messages
+                    : [...s.messages, {
+                        id: STREAM_ID, thread_id: tid, role: "assistant" as const,
+                        content: "", kind: "normal" as const, duration_ms: null,
+                        bot_id: null, variant_group: null, variant_selected: 1,
+                        created_at: "", provider, model,
+                        images: [], documents: [], toolCalls: [], subagents: [],
+                      } as MessageView];
+                  return {
+                    messages: base.map((m) =>
+                      m.id === STREAM_ID ? { ...m, content: acc } : m,
+                    ),
+                    ...(isModelOutput(event) ? { awaitingModel: false } : {}),
+                  };
+                });
+              };
+              const result = await chatStream(provider, model, messages, onDelta, tid, false);
+              if (result.content.length > 0) {
+                const msg = await addMessage({
+                  thread_id: tid, role: "assistant", content: result.content,
+                  provider, model,
+                });
+                {
+                  const msgs = await loadThreadMessages(tid);
+                  if (get().currentThreadId === tid) set({ messages: msgs });
+                }
+                return { ...result, msgId: msg.id };
+              }
+              {
+                const msgs = await loadThreadMessages(tid);
+                if (get().currentThreadId === tid) set({ messages: msgs });
+              }
+              return { ...result, msgId: "" };
+            };
+
+            // Save initial plan attachment.
             await addAttachment({
               message_id: plannerMsg.id,
               kind: "plan",
               media_type: "application/json",
               data: JSON.stringify(plan),
             });
+            {
+              const msgs = await loadThreadMessages(tid);
+              if (get().currentThreadId === tid) set({ messages: msgs });
+            }
 
-            // Reload messages so the planner message + plan are visible.
-            set({ messages: await loadThreadMessages(tid) });
+            // Critique loop — up to 10 rounds.
+            const MAX_ROUNDS = 10;
+            let approved = false;
+            let round: number;
+            const { criticProvider: cProvider, criticModel: cModel } = get();
+            const criticProvider = (cProvider ?? plannerProvider) as Provider;
+            const criticModel = cModel ?? plannerModel;
 
-            // Transition to dispatching phase — show step pills.
-            const steps: StepProgress[] = plan.steps.map((s) => ({
-              id: s.id,
-              description: s.description,
-              provider: s.provider,
-              model: s.model,
-              status: "pending" as const,
-            }));
-            set({
-              plannerProgress: {
-                phase: "dispatching",
-                steps,
-              },
-            });
+            for (round = 1; round <= MAX_ROUNDS; round++) {
+              if (get().cancelling) break;
 
-            // Execute steps in dependency waves via Promise.all (cloud models
-            // run unrestricted; local/Ollama steps serialize through a gate).
-            const stepResults = new Map<string, string>();
-            const gate = createGate();
-
-            const runStep = async (step: PlanStep, resolvedPrompt: string) => {
-              if (get().cancelling)
-                return { stepId: step.id, description: step.description, provider: step.provider, model: step.model, content: "", usage: { input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0 } };
-
-              // Mark step as running.
+              // Critique phase.
               set((s) => ({
-                plannerProgress: s.plannerProgress
-                  ? {
-                      ...s.plannerProgress,
-                      phase: "executing" as const,
-                      steps: s.plannerProgress.steps.map((sp) =>
-                        sp.id === step.id ? { ...sp, status: "running" as const } : sp,
-                      ),
-                    }
-                  : null,
+                threadPlannerProgress: {
+                  ...s.threadPlannerProgress,
+                  [tid]: { phase: "critiquing", steps: [], round, maxRounds: MAX_ROUNDS },
+                },
               }));
 
-              // Stream the step into its own placeholder with per-step ID.
-              const streamId = `${STREAM_STEP_PREFIX}${step.id}`;
-              let stepAcc = "";
-              const stepOnDelta = (event: StreamEvent) => {
-                if (event.text) stepAcc += event.text;
-                set((s) => {
-                  const exists = s.messages.some((m) => m.id === streamId);
-                  const base = exists
-                    ? s.messages
-                    : [
-                        ...s.messages,
-                        {
-                          id: streamId,
-                          thread_id: tid,
-                          role: "assistant" as const,
-                          content: "",
-                          kind: "normal" as const,
-                          duration_ms: null,
-                          bot_id: null,
-                          variant_group: null,
-                          variant_selected: 1,
-                          created_at: "",
-                          provider: step.provider,
-                          model: step.model,
-                          images: [],
-                          documents: [],
-                          toolCalls: [],
-                          subagents: [],
-                        } as MessageView,
-                      ];
-                  return {
-                    messages: base.map((m) =>
-                      m.id === streamId
-                        ? { ...m, content: stepAcc }
-                        : m,
-                    ),
-                    ...(isModelOutput(event) ? { awaitingModel: false } : {}),
-                  };
-                });
-              };
+              const criticMessages: ApiMessage[] = [
+                { role: "system", content: buildCriticSystemPrompt(), images: [] },
+                { role: "user", content: buildCriticRequest(content, plan!), images: [] },
+              ];
+              const criticResult = await writeReply(criticProvider, criticModel, criticMessages);
+              const criticVerdict = parseCriticResponse(criticResult.content);
 
-              const stepStarted = Date.now();
-              const stepResult = await gate(
-                isKeylessProvider(step.provider),
-                () =>
-                  chatStream(
-                    step.provider,
-                    step.model,
-                    [{ role: "user", content: resolvedPrompt, images: [] }],
-                    stepOnDelta,
-                    tid,
-                    false,
-                  ),
-              );
+              if (criticVerdict?.approved) {
+                approved = true;
+                break;
+              }
 
-              if (stepResult.content.length > 0) {
-                const stepMsg = await addMessage({
-                  thread_id: tid,
-                  role: "assistant",
-                  content: stepResult.content,
-                  duration_ms: Math.round(Date.now() - stepStarted),
-                  provider: step.provider,
-                  model: step.model,
+              if (round === MAX_ROUNDS) break;
+
+              // Re-planning phase.
+              set((s) => ({
+                threadPlannerProgress: {
+                  ...s.threadPlannerProgress,
+                  [tid]: { phase: "revising", steps: [], round: round + 1, maxRounds: MAX_ROUNDS },
+                },
+              }));
+
+              const issues = criticVerdict
+                ? criticVerdict.issues.join("\n")
+                : "The plan has issues that need to be addressed.";
+              const replanHistory: ApiMessage[] = [
+                { role: "system", content: plannerPrompt, images: [] },
+                ...sysBlocks.head,
+                ...sysBlocks.tail,
+                ...compactHistory(
+                  rows,
+                  { selfBotId: null, roster: {}, baseLabel: "Assistant" },
+                  hasRenderer(selectRegistry(usePlugins.getState()), "youtube"),
+                ),
+                { role: "assistant", content: `Previous plan:\n\`\`\`json\n${JSON.stringify(plan)}\n\`\`\``, images: [] },
+                { role: "user", content: `Critique:\n${issues}\n\nPlease revise the plan to address these issues. Only use model IDs exactly as listed in the available models.`, images: [] },
+              ];
+              const revisedResult = await writeReply(plannerProvider, plannerModel, replanHistory);
+              const revisedParse = parsePlan(revisedResult.content, allModels, PROVIDERS, keyedProviders);
+              if (!revisedParse) continue; // Couldn't parse the revision — try again.
+              plan = revisedParse.plan;
+
+              // Save revised plan attachment on the revision message.
+              if (revisedResult.msgId) {
+                await addAttachment({
+                  message_id: revisedResult.msgId,
+                  kind: "plan",
+                  media_type: "application/json",
+                  data: JSON.stringify(plan),
                 });
-                stepResults.set(step.id, stepResult.content);
-                // Record usage for this step.
-                const su = stepResult.usage;
-                if (
-                  su &&
-                  (su.input_tokens > 0 ||
-                    su.output_tokens > 0 ||
-                    su.cache_creation_tokens > 0 ||
-                    su.cache_read_tokens > 0)
-                ) {
-                  await addUsage({
-                    message_id: stepMsg.id,
-                    thread_id: tid,
-                    provider: step.provider,
-                    model: stepResult.model || step.model,
-                    input_tokens: su.input_tokens,
-                    output_tokens: su.output_tokens,
-                    cache_creation_tokens: su.cache_creation_tokens,
-                    cache_read_tokens: su.cache_read_tokens,
-                  });
+                {
+                  const msgs = await loadThreadMessages(tid);
+                  if (get().currentThreadId === tid) set({ messages: msgs });
                 }
               }
 
-              // Mark step as done.
+              if (revisedParse.warnings.length > 0) {
+                await get().postNote(
+                  `Model corrections in revised plan:\n${revisedParse.warnings.map((w) => `- ${w}`).join("\n")}`,
+                );
+              }
+            }
+
+            if (!approved) {
+              // Max rounds reached — fall back to direct answer.
+              await get().postNote(
+                `Planner reached maximum critique rounds (${MAX_ROUNDS}). Answering directly.`,
+              );
               set((s) => ({
-                plannerProgress: s.plannerProgress
-                  ? {
-                      ...s.plannerProgress,
-                      steps: s.plannerProgress.steps.map((sp) =>
-                        sp.id === step.id ? { ...sp, status: "done" as const } : sp,
-                      ),
-                    }
-                  : null,
+                threadPlannerProgress: {
+                  ...s.threadPlannerProgress,
+                  [tid]: {
+                    phase: "completing",
+                    steps: [],
+                    directModel: `${plannerProvider}:${plannerModel}`,
+                  },
+                },
+              }));
+            } else {
+              // Plan approved — dispatch steps.
+              const steps: StepProgress[] = plan!.steps.map((s) => ({
+                id: s.id,
+                description: s.description,
+                provider: s.provider,
+                model: s.model,
+                status: "pending" as const,
+              }));
+              set((s) => ({
+                threadPlannerProgress: {
+                  ...s.threadPlannerProgress,
+                  [tid]: {
+                    phase: "dispatching",
+                    steps,
+                  },
+                },
               }));
 
-              return {
-                stepId: step.id,
-                description: step.description,
-                provider: step.provider,
-                model: step.model,
-                content: stepResult.content,
-                usage: stepResult.usage ?? { input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0 },
-              };
-            };
+              // Execute steps in dependency waves via Promise.all (cloud models
+              // run unrestricted; local/Ollama steps serialize through a gate).
+              const stepResults = new Map<string, string>();
+              const gate = createGate();
 
-            // Run waves. The last wave gets the "completing" phase.
-            const waves = topologicalSort(plan.steps);
-            for (let wi = 0; wi < waves.length; wi++) {
-              if (get().cancelling) break;
-              if (wi === waves.length - 1) {
-                set((s) => ({
-                  plannerProgress: s.plannerProgress
-                    ? { ...s.plannerProgress, phase: "completing" }
-                    : null,
-                }));
+              const runStep = async (step: PlanStep, resolvedPrompt: string) => {
+                if (get().cancelling)
+                  return { stepId: step.id, description: step.description, provider: step.provider, model: step.model, content: "", usage: { input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0 } };
+
+                // Mark step as running.
+                set((s) => {
+                  const pp = s.threadPlannerProgress[tid];
+                  if (!pp) return {};
+                  return {
+                    threadPlannerProgress: {
+                      ...s.threadPlannerProgress,
+                      [tid]: {
+                        ...pp,
+                        phase: "executing" as const,
+                        steps: pp.steps.map((sp) =>
+                          sp.id === step.id ? { ...sp, status: "running" as const } : sp,
+                        ),
+                      },
+                    },
+                  };
+                });
+
+                // Stream the step into its own placeholder with per-step ID.
+                const streamId = `${STREAM_STEP_PREFIX}${step.id}`;
+                let stepAcc = "";
+                const stepOnDelta = (event: StreamEvent) => {
+                  if (event.text) stepAcc += event.text;
+                  set((s) => {
+                    if (get().currentThreadId !== tid) return {};
+                    const exists = s.messages.some((m) => m.id === streamId);
+                    const base = exists
+                      ? s.messages
+                      : [
+                          ...s.messages,
+                          {
+                            id: streamId,
+                            thread_id: tid,
+                            role: "assistant" as const,
+                            content: "",
+                            kind: "normal" as const,
+                            duration_ms: null,
+                            bot_id: null,
+                            variant_group: null,
+                            variant_selected: 1,
+                            created_at: "",
+                            provider: step.provider,
+                            model: step.model,
+                            images: [],
+                            documents: [],
+                            toolCalls: [],
+                            subagents: [],
+                          } as MessageView,
+                        ];
+                    return {
+                      messages: base.map((m) =>
+                        m.id === streamId
+                          ? { ...m, content: stepAcc }
+                          : m,
+                      ),
+                      ...(isModelOutput(event) ? { awaitingModel: false } : {}),
+                    };
+                  });
+                };
+
+                const stepStarted = Date.now();
+                const stepResult = await gate(
+                  isKeylessProvider(step.provider),
+                  () =>
+                    chatStream(
+                      step.provider,
+                      step.model,
+                      [{ role: "user", content: resolvedPrompt, images: [] }],
+                      stepOnDelta,
+                      tid,
+                      false,
+                    ),
+                );
+
+                if (stepResult.content.length > 0) {
+                  const stepMsg = await addMessage({
+                    thread_id: tid,
+                    role: "assistant",
+                    content: stepResult.content,
+                    duration_ms: Math.round(Date.now() - stepStarted),
+                    provider: step.provider,
+                    model: step.model,
+                  });
+                  stepResults.set(step.id, stepResult.content);
+                  // Record usage for this step.
+                  const su = stepResult.usage;
+                  if (
+                    su &&
+                    (su.input_tokens > 0 ||
+                      su.output_tokens > 0 ||
+                      su.cache_creation_tokens > 0 ||
+                      su.cache_read_tokens > 0)
+                  ) {
+                    await addUsage({
+                      message_id: stepMsg.id,
+                      thread_id: tid,
+                      provider: step.provider,
+                      model: stepResult.model || step.model,
+                      input_tokens: su.input_tokens,
+                      output_tokens: su.output_tokens,
+                      cache_creation_tokens: su.cache_creation_tokens,
+                      cache_read_tokens: su.cache_read_tokens,
+                    });
+                  }
+                }
+
+                // Mark step as done.
+                set((s) => {
+                  const pp = s.threadPlannerProgress[tid];
+                  if (!pp) return {};
+                  return {
+                    threadPlannerProgress: {
+                      ...s.threadPlannerProgress,
+                      [tid]: {
+                        ...pp,
+                        steps: pp.steps.map((sp) =>
+                          sp.id === step.id ? { ...sp, status: "done" as const } : sp,
+                        ),
+                      },
+                    },
+                  };
+                });
+
+                return {
+                  stepId: step.id,
+                  description: step.description,
+                  provider: step.provider,
+                  model: step.model,
+                  content: stepResult.content,
+                  usage: stepResult.usage ?? { input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0 },
+                };
+              };
+
+              // Run waves. The last wave gets the "completing" phase.
+              const waves = topologicalSort(plan!.steps);
+              for (let wi = 0; wi < waves.length; wi++) {
+                if (get().cancelling) break;
+                if (wi === waves.length - 1) {
+                  set((s) => {
+                    const pp = s.threadPlannerProgress[tid];
+                    if (!pp) return {};
+                    return {
+                      threadPlannerProgress: {
+                        ...s.threadPlannerProgress,
+                        [tid]: { ...pp, phase: "completing" },
+                      },
+                    };
+                  });
+                }
+                await Promise.all(
+                  waves[wi].map((step) =>
+                    runStep(step, resolveStepVariables(step.prompt, stepResults)),
+                  ),
+                );
               }
-              await Promise.all(
-                waves[wi].map((step) =>
-                  runStep(step, resolveStepVariables(step.prompt, stepResults)),
-                ),
-              );
             }
           } else if (plan?.strategy === "direct") {
             // Direct strategy: show which model was chosen (or "answered directly").
@@ -1374,21 +1679,36 @@ export const useThreads = create<ThreadsState>((set, get) => ({
               plan.steps.length === 1
                 ? `${plan.steps[0].provider}:${plan.steps[0].model}`
                 : undefined;
-            set({
-              plannerProgress: {
-                phase: "completing",
-                steps: [],
-                directModel,
+            set((s) => ({
+              threadPlannerProgress: {
+                ...s.threadPlannerProgress,
+                [tid]: {
+                  phase: "completing",
+                  steps: [],
+                  directModel,
+                },
               },
-            });
+            }));
           }
 
           // Reload messages to replace all placeholders and show final state.
           // Clear planner progress — orchestration is complete.
-          set({
-            messages: await loadThreadMessages(tid),
-            plannerProgress: null,
-          });
+          {
+            const msgs = await loadThreadMessages(tid);
+            if (get().currentThreadId === tid) {
+              set((s) => {
+                const updated = { ...s.threadPlannerProgress };
+                delete updated[tid];
+                return { messages: msgs, threadPlannerProgress: updated };
+              });
+            } else {
+              set((s) => {
+                const updated = { ...s.threadPlannerProgress };
+                delete updated[tid];
+                return { savedMessages: { ...s.savedMessages, [tid]: msgs }, threadPlannerProgress: updated };
+              });
+            }
+          }
           await get().refreshThreads();
         }
       };
@@ -1504,6 +1824,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           }
           if (event.text) acc += event.text;
           set((s) => {
+            if (get().currentThreadId !== threadId) return {};
             const exists = s.messages.some((m) => m.id === STREAM_ID);
             const base = exists
               ? s.messages
@@ -1643,7 +1964,10 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           }
         }
         // Replace the placeholder with the persisted rows.
-        set({ messages: await loadThreadMessages(threadId) });
+        {
+          const msgs = await loadThreadMessages(threadId);
+          if (get().currentThreadId === threadId) set({ messages: msgs });
+        }
         // updated_at changed → reorder sidebar.
         await get().refreshThreads();
         return result;
@@ -1696,16 +2020,31 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     } catch (e) {
       set({ error: friendlyError(e) });
       const id = get().currentThreadId;
-      if (id) set({ messages: await loadThreadMessages(id) });
+      if (id) {
+        const msgs = await loadThreadMessages(id);
+        if (get().currentThreadId === id) set({ messages: msgs });
+      }
     } finally {
-      set({
-        busy: false,
-        cancelling: false,
-        pendingApproval: null,
-        autoApproveSysTools: false,
-        awaitingModel: false,
-      });
-      // Persona auto-memory may have grown during this send → re-estimate.
+      if (runningId) {
+        const wasViewing = get().currentThreadId === runningId;
+        set((s) => {
+          const next = new Set(s.runningStreams);
+          next.delete(runningId!);
+          const updated = { ...s.threadPlannerProgress };
+          delete updated[runningId!];
+          const unread = new Set(s.unreadThreads);
+          if (!wasViewing) unread.add(runningId!);
+          return {
+            runningStreams: next,
+            threadPlannerProgress: updated,
+            unreadThreads: unread,
+            cancelling: false,
+            pendingApproval: null,
+            autoApproveSysTools: false,
+            awaitingModel: false,
+          };
+        });
+      }
       void get().refreshSystemTokens();
     }
   },
@@ -1724,7 +2063,6 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         botId: get().draftBotId,
       });
       id = thread.id;
-      set({ currentThreadId: id });
       // Incognito threads never become last_thread_id (T29).
       if (!ephemeral) await setSetting(LAST_THREAD_KEY, id);
     }
@@ -1735,14 +2073,19 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       content,
       variant_group: null,
     });
-    set({ messages: await loadThreadMessages(id) });
+    {
+      const msgs = await loadThreadMessages(id);
+      if (get().currentThreadId === id) set({ messages: msgs });
+    }
     await get().refreshThreads();
+    // Set currentThreadId after refreshThreads so the new thread is visible
+    // to selectors reading the threads array immediately.
+    set({ currentThreadId: id });
   },
 
   regenerate: async (messageId, direction) => {
-    if (get().busy) return;
     const id = get().currentThreadId;
-    if (!id) return;
+    if (!id || get().runningStreams.has(id)) return;
     const msgs = get().messages;
     const i = msgs.findIndex((m) => m.id === messageId);
     if (i < 0) return;
@@ -1761,18 +2104,14 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       workspace_files_excluded: workspaceFilesExcluded,
     } = thread;
 
-    set({
-      busy: true,
+    set((s) => ({
+      runningStreams: new Set([...s.runningStreams, id]),
       cancelling: false,
       pendingApproval: null,
       autoApproveSysTools: false,
-      // Show "Thinking…" from the moment we start until the model's first
-      // visible output. Cleared in onDelta by `isModelOutput`; not by the
-      // pre-request API-trace event, which would otherwise hide the loader
-      // through a slow first token (esp. local models' long prompt-eval).
       awaitingModel: true,
       error: null,
-    });
+    }));
     try {
       // System context, exactly as a fresh reply would assemble it. The reply's
       // own persona (an @-mention author wins over the thread persona) provides
@@ -1874,6 +2213,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         }
         if (event.text) acc += event.text;
         set((s) => {
+          if (get().currentThreadId !== id) return {};
           const exists = s.messages.some((m) => m.id === STREAM_ID);
           const base = exists
             ? s.messages
@@ -1991,18 +2331,32 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         }
         await dbSelectVariant(groupId, variantMsg.id);
       }
-      set({ messages: await loadThreadMessages(id) });
+      {
+        const msgs = await loadThreadMessages(id);
+        if (get().currentThreadId === id) set({ messages: msgs });
+      }
       await get().refreshThreads();
     } catch (e) {
       set({ error: friendlyError(e) });
-      set({ messages: await loadThreadMessages(id) });
+      {
+        const msgs = await loadThreadMessages(id);
+        if (get().currentThreadId === id) set({ messages: msgs });
+      }
     } finally {
-      set({
-        busy: false,
-        cancelling: false,
-        pendingApproval: null,
-        autoApproveSysTools: false,
-        awaitingModel: false,
+      const wasViewing = get().currentThreadId === id;
+      set((s) => {
+        const next = new Set(s.runningStreams);
+        next.delete(id);
+        const unread = new Set(s.unreadThreads);
+        if (!wasViewing) unread.add(id);
+        return {
+          runningStreams: next,
+          unreadThreads: unread,
+          cancelling: false,
+          pendingApproval: null,
+          autoApproveSysTools: false,
+          awaitingModel: false,
+        };
       });
       void get().refreshSystemTokens();
     }
@@ -2010,15 +2364,17 @@ export const useThreads = create<ThreadsState>((set, get) => ({
 
   selectVariant: async (groupId, messageId) => {
     const id = get().currentThreadId;
-    if (!id || get().busy) return;
+    if (!id || get().runningStreams.has(id)) return;
     await dbSelectVariant(groupId, messageId);
-    set({ messages: await loadThreadMessages(id) });
+    {
+      const msgs = await loadThreadMessages(id);
+      if (get().currentThreadId === id) set({ messages: msgs });
+    }
   },
 
   requestSources: async (messageId) => {
-    if (get().busy) return;
     const id = get().currentThreadId;
-    if (!id) return;
+    if (!id || get().runningStreams.has(id)) return;
     const msgs = get().messages;
     const i = msgs.findIndex((m) => m.id === messageId);
     if (i < 0) return;
@@ -2035,18 +2391,14 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       workspace_files_excluded: workspaceFilesExcludedSrc,
     } = thread;
 
-    set({
-      busy: true,
+    set((s) => ({
+      runningStreams: new Set([...s.runningStreams, id]),
       cancelling: false,
       pendingApproval: null,
       autoApproveSysTools: false,
-      // Show "Thinking…" from the moment we start until the model's first
-      // visible output. Cleared in onDelta by `isModelOutput`; not by the
-      // pre-request API-trace event, which would otherwise hide the loader
-      // through a slow first token (esp. local models' long prompt-eval).
       awaitingModel: true,
       error: null,
-    });
+    }));
     try {
       // Build system context the same way a normal reply would.
       const shared = await loadSharedSystemBlocks(
@@ -2143,6 +2495,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         }
         if (event.text) acc += event.text;
         set((s) => {
+          if (get().currentThreadId !== id) return {};
           const exists = s.messages.some((m) => m.id === STREAM_ID);
           const base = exists
             ? s.messages
@@ -2261,18 +2614,32 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           });
         }
       }
-      set({ messages: await loadThreadMessages(id) });
+      {
+        const msgs = await loadThreadMessages(id);
+        if (get().currentThreadId === id) set({ messages: msgs });
+      }
       await get().refreshThreads();
     } catch (e) {
       set({ error: friendlyError(e) });
-      set({ messages: await loadThreadMessages(id) });
+      {
+        const msgs = await loadThreadMessages(id);
+        if (get().currentThreadId === id) set({ messages: msgs });
+      }
     } finally {
-      set({
-        busy: false,
-        cancelling: false,
-        pendingApproval: null,
-        autoApproveSysTools: false,
-        awaitingModel: false,
+      const wasViewing = get().currentThreadId === id;
+      set((s) => {
+        const next = new Set(s.runningStreams);
+        next.delete(id);
+        const unread = new Set(s.unreadThreads);
+        if (!wasViewing) unread.add(id);
+        return {
+          runningStreams: next,
+          unreadThreads: unread,
+          cancelling: false,
+          pendingApproval: null,
+          autoApproveSysTools: false,
+          awaitingModel: false,
+        };
       });
       void get().refreshSystemTokens();
     }
@@ -2280,12 +2647,10 @@ export const useThreads = create<ThreadsState>((set, get) => ({
 
   compact: async () => {
     const id = get().currentThreadId;
-    if (!id || get().busy || get().compacting) return;
+    if (!id || get().runningStreams.has(id) || get().compacting) return;
     const thread = get().threads.find((t) => t.id === id);
     if (!thread) return;
-    // `busy` is set too so sends are blocked and Stop can cancel the call —
-    // the same in-flight conventions as a normal stream.
-    set({ busy: true, compacting: true, cancelling: false, error: null });
+    set((s) => ({ runningStreams: new Set([...s.runningStreams, id]), compacting: true, cancelling: false, error: null }));
     try {
       const request = buildCompactionRequest(get().messages);
       // No streaming placeholder: the summary isn't a chat bubble; it lands as
@@ -2330,20 +2695,43 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           cache_read_tokens: u.cache_read_tokens,
         });
       }
-      set({ messages: await loadThreadMessages(id) });
+      {
+        const msgs = await loadThreadMessages(id);
+        if (get().currentThreadId === id) set({ messages: msgs });
+      }
       await get().refreshThreads();
     } catch (e) {
       set({ error: friendlyError(e) });
     } finally {
-      set({ busy: false, compacting: false, cancelling: false, plannerProgress: null });
+      const wasViewing = get().currentThreadId === id;
+      set((s) => {
+        const next = new Set(s.runningStreams);
+        next.delete(id);
+        const updated = { ...s.threadPlannerProgress };
+        delete updated[id];
+        const unread = new Set(s.unreadThreads);
+        if (!wasViewing) unread.add(id);
+        return {
+          runningStreams: next,
+          threadPlannerProgress: updated,
+          unreadThreads: unread,
+          compacting: false,
+          cancelling: false,
+        };
+      });
     }
   },
 
   cancel: async () => {
-    if (!get().busy || get().cancelling) return;
+    const tid = get().currentThreadId;
+    if (!tid || !get().runningStreams.has(tid) || get().cancelling) return;
     // Clear any pending approval card — `cancel_stream` drains pending
     // approvals on the backend (declining them), unblocking a gated stream.
-    set({ cancelling: true, pendingApproval: null, plannerProgress: null });
+    set((s) => {
+      const updated = { ...s.threadPlannerProgress };
+      delete updated[tid];
+      return { cancelling: true, pendingApproval: null, threadPlannerProgress: updated };
+    });
     try {
       await cancelStream();
     } catch {
