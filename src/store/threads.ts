@@ -1774,27 +1774,44 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           ),
         ];
 
+        // Seed streaming state so the render layer shows the bubble immediately
+        // (empty string — the "Thinking…" spinner hides on the first token).
+        set({
+          streamingContent: "",
+          streamingToolCalls: [],
+          streamingSubagents: [],
+          streamingImages: [],
+          streamingReasoning: "",
+          streamingApiTrace: [],
+          streamingBotId: attributeBotId,
+          streamingProvider: replyProvider,
+          streamingModel: replyModel,
+        });
+
         // Stream the reply, appending a placeholder assistant bubble on the
         // first event and growing it as chunks arrive. Text arrives as content
         // deltas; tool calls arrive as structured events and render as chips.
         // The placeholder carries `bot_id` so a mentioned persona's
         // attribution renders while it is still streaming.
-        let acc = "";
+        let streamAcc = "";
         const toolCalls: MessageToolCall[] = [];
-        // Research subagents dispatched this reply (deep research, T55): rendered
-        // live as cards, then persisted as `subagent` attachments below.
         const subagents: MessageSubagent[] = [];
-        // Images fetched by `search_images`/`fetch_images` this reply: rendered
-        // live on the placeholder, then persisted as image attachments below.
         const foundImages: MessageImage[] = [];
-        // Transparency capture (global settings): the model's reasoning text and
-        // the raw per-round API trace. Empty unless the user opted in.
         let reasoning = "";
         const apiTrace: ApiTraceEntry[] = [];
+        let lastFlush = 0;
+        const flushStreamingState = () => {
+          set({
+            streamingContent: streamAcc,
+            streamingToolCalls: [...toolCalls],
+            streamingSubagents: [...subagents],
+            streamingImages: [...foundImages],
+            streamingReasoning: reasoning,
+            streamingApiTrace: [...apiTrace],
+            ...(streamAcc.length > 0 ? { awaitingModel: false } : {}),
+          });
+        };
         const onDelta = (event: StreamEvent) => {
-          // A gated (system-diagnostics) call needs explicit approval. The Rust
-          // loop is blocked awaiting our reply. Auto-approve if the user chose
-          // "Approve all this chat"; otherwise surface the approval card.
           if (event.approvalRequest) {
             const req = event.approvalRequest;
             if (get().autoApproveSysTools) {
@@ -1804,12 +1821,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             }
             return;
           }
-          // Fold tool-lifecycle events (started / live output / finished) into
-          // the accumulator so the live activity panel updates as they arrive.
           applyToolEvent(event, toolCalls);
-          // Fold subagent lifecycle (dispatched/running/done) into its cards.
           applySubagentEvent(event, subagents);
-          // Fold API-trace events into the developer/inspect panel.
           applyTraceEvent(event, apiTrace);
           if (event.reasoning) reasoning += event.reasoning.text;
           if (event.toolImages) {
@@ -1822,56 +1835,13 @@ export const useThreads = create<ThreadsState>((set, get) => ({
               });
             }
           }
-          if (event.text) acc += event.text;
-          set((s) => {
-            if (get().currentThreadId !== threadId) return {};
-            const exists = s.messages.some((m) => m.id === STREAM_ID);
-            const base = exists
-              ? s.messages
-              : [
-                  ...s.messages,
-                    {
-                      id: STREAM_ID,
-                      thread_id: threadId,
-                      role: "assistant" as const,
-                      content: "",
-                      kind: "normal" as const,
-                      duration_ms: null,
-                      bot_id: attributeBotId,
-                      variant_group: null,
-                      variant_selected: 1,
-                      created_at: "",
-                      provider: null,
-                      model: null,
-                      images: [],
-                      documents: [],
-                      toolCalls: [],
-                      subagents: [],
-                    },
-                ];
-            return {
-              messages: base.map((m) =>
-                m.id === STREAM_ID
-                  ? {
-                      ...m,
-                      content: acc,
-                      toolCalls: [...toolCalls],
-                      subagents: [...subagents],
-                      images: [...foundImages],
-                      reasoning: reasoning || undefined,
-                      apiTrace: apiTrace.length ? [...apiTrace] : undefined,
-                    }
-                  : m,
-              ),
-              // A tool finished or a subagent is in flight → show "thinking"
-              // until the model's next token; a token arrived → clear it. Other
-              // events leave it unchanged.
-              ...(event.toolDone || event.subagent
-                ? { awaitingModel: true }
-                : {}),
-              ...(isModelOutput(event) ? { awaitingModel: false } : {}),
-            };
-          });
+          if (event.text) streamAcc += event.text;
+          if (event.toolDone || event.subagent) set({ awaitingModel: true });
+          const now = performance.now();
+          if (now - lastFlush > 100) {
+            lastFlush = now;
+            flushStreamingState();
+          }
         };
 
         // On cancellation this still resolves with the partial text
@@ -1886,6 +1856,9 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           threadId,
           deepResearch,
         );
+        // Final flush — push any trailing tokens that arrived within the last
+        // 100ms window, unfiltered.
+        flushStreamingState();
         // Persist the assistant turn when it produced text, invoked a tool,
         // dispatched a subagent, or fetched images. (Skip a truly empty row,
         // e.g. cancelled before any token/tool call.)
@@ -1902,47 +1875,36 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             duration_ms: Math.round(Date.now() - started),
             bot_id: attributeBotId,
           });
-          // Persist each tool call as a structured attachment so it survives
-          // reload and renders as a distinct chip — never as model-authored
-          // text.
-          for (const tc of toolCalls) {
-            await addAttachment({
-              message_id: assistantMsg.id,
-              kind: "tool_call",
-              media_type: "application/json",
-              data: JSON.stringify(persistableToolCall(tc)),
-            });
-          }
-          // Persist each research subagent as a structured attachment (T55) so
-          // the cards survive reload — structured data, never model text.
-          for (const s of subagents) {
-            await addAttachment({
-              message_id: assistantMsg.id,
-              kind: "subagent",
-              media_type: "application/json",
-              data: JSON.stringify(persistableSubagent(s)),
-            });
-          }
-          // Persist images the model fetched as `image` attachments, so they
-          // appear in the right-hand media gallery, enlarge in the lightbox, and
-          // survive reload. The source page URL rides in `filename`.
-          for (const img of foundImages) {
-            await addAttachment({
-              message_id: assistantMsg.id,
-              kind: "image",
-              media_type: img.media_type,
-              data: img.data,
-              filename: img.source,
-            });
-          }
-          // Persist the captured reasoning + API trace (transparency settings) as
-          // their own attachments, so the panels survive reload.
-          await persistTransparency(assistantMsg.id, reasoning, apiTrace);
-          // Record token usage for this response. Attribute it to the model
-          // the API actually used (`result.model`), falling back to the
-          // requested model — so usage stays correct even if the thread's
-          // model changes later. Skip if the provider reported no tokens at
-          // all (e.g. an early cancel that emitted text but no usage event).
+          // Batch independent attachment writes.
+          await Promise.all([
+            ...toolCalls.map((tc) =>
+              addAttachment({
+                message_id: assistantMsg.id,
+                kind: "tool_call",
+                media_type: "application/json",
+                data: JSON.stringify(persistableToolCall(tc)),
+              }),
+            ),
+            ...subagents.map((s) =>
+              addAttachment({
+                message_id: assistantMsg.id,
+                kind: "subagent",
+                media_type: "application/json",
+                data: JSON.stringify(persistableSubagent(s)),
+              }),
+            ),
+            ...foundImages.map((img) =>
+              addAttachment({
+                message_id: assistantMsg.id,
+                kind: "image",
+                media_type: img.media_type,
+                data: img.data,
+                filename: img.source,
+              }),
+            ),
+            persistTransparency(assistantMsg.id, reasoning, apiTrace),
+          ]);
+          // Usage depends on the persisted message (needs message_id).
           const u = result.usage;
           if (
             u &&
@@ -1963,12 +1925,22 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             });
           }
         }
-        // Replace the placeholder with the persisted rows.
+        // Clear streaming state and reload persisted messages.
+        set({
+          streamingContent: null,
+          streamingToolCalls: [],
+          streamingSubagents: [],
+          streamingImages: [],
+          streamingReasoning: "",
+          streamingApiTrace: [],
+          streamingBotId: null,
+          streamingProvider: null,
+          streamingModel: null,
+        });
         {
           const msgs = await loadThreadMessages(threadId);
           if (get().currentThreadId === threadId) set({ messages: msgs });
         }
-        // updated_at changed → reorder sidebar.
         await get().refreshThreads();
         return result;
       };
@@ -2042,6 +2014,15 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             pendingApproval: null,
             autoApproveSysTools: false,
             awaitingModel: false,
+            streamingContent: null,
+            streamingToolCalls: [],
+            streamingSubagents: [],
+            streamingImages: [],
+            streamingReasoning: "",
+            streamingApiTrace: [],
+            streamingBotId: null,
+            streamingProvider: null,
+            streamingModel: null,
           };
         });
       }
