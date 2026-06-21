@@ -102,15 +102,16 @@ pub fn ollama_start() -> Result<(), String> {
 /// and passed as a single argv entry — never a shell string. Waits for the
 /// short command to finish so the caller can refresh `/api/ps` afterwards.
 #[tauri::command]
-pub fn ollama_unload(model: String) -> Result<(), String> {
+pub async fn ollama_unload(model: String) -> Result<(), String> {
     let name = model.trim();
     if name.is_empty() || name.split_whitespace().count() != 1 {
         return Err("invalid model name".into());
     }
-    let out = match std::process::Command::new("ollama")
+    let out = match tokio::process::Command::new("ollama")
         .arg("stop")
         .arg(name)
         .output()
+        .await
     {
         Ok(out) => out,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(not_installed_error()),

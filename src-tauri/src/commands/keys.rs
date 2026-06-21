@@ -69,28 +69,35 @@ impl KeyCache {
 }
 
 #[tauri::command]
-pub fn set_api_key(
+pub async fn set_api_key(
     provider: String,
     key: String,
     cache: State<'_, KeyCache>,
 ) -> Result<(), String> {
-    entry(&provider)?
-        .set_password(&key)
-        .map_err(|e| e.to_string())?;
-    // Warm the cache so the next chat send uses the new key without a keychain
-    // read (and so a *changed* key replaces a stale cached value).
+    let p = provider.clone();
+    let k = key.clone();
+    tokio::task::spawn_blocking(move || {
+        entry(&p)?.set_password(&k).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("keychain write failed: {e}"))??;
     cache.store(&provider, &key);
     Ok(())
 }
 
 /// Returns whether a key is stored for the provider. Never returns the key.
 #[tauri::command]
-pub fn has_api_key(provider: String) -> Result<bool, String> {
-    match entry(&provider)?.get_password() {
-        Ok(_) => Ok(true),
-        Err(KeyringError::NoEntry) => Ok(false),
-        Err(e) => Err(e.to_string()),
-    }
+pub async fn has_api_key(provider: String) -> Result<bool, String> {
+    let p = provider.clone();
+    tokio::task::spawn_blocking(move || {
+        match entry(&p)?.get_password() {
+            Ok(_) => Ok(true),
+            Err(KeyringError::NoEntry) => Ok(false),
+            Err(e) => Err(e.to_string()),
+        }
+    })
+    .await
+    .map_err(|e| format!("keychain read failed: {e}"))?
 }
 
 /// Read the stored key for in-process use (e.g. provider calls). Crate-internal
@@ -118,14 +125,19 @@ pub(crate) fn get_api_key_cached(
 }
 
 #[tauri::command]
-pub fn delete_api_key(provider: String, cache: State<'_, KeyCache>) -> Result<(), String> {
-    let result = match entry(&provider)?.delete_credential() {
-        Ok(()) | Err(KeyringError::NoEntry) => Ok(()),
-        Err(e) => Err(e.to_string()),
-    };
+pub async fn delete_api_key(provider: String, cache: State<'_, KeyCache>) -> Result<(), String> {
+    let p = provider.clone();
+    tokio::task::spawn_blocking(move || {
+        match entry(&p)?.delete_credential() {
+            Ok(()) | Err(KeyringError::NoEntry) => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    })
+    .await
+    .map_err(|e| format!("keychain delete failed: {e}"))??;
     // Drop any cached copy regardless of the delete outcome.
     cache.invalidate(&provider);
-    result
+    Ok(())
 }
 
 #[cfg(test)]

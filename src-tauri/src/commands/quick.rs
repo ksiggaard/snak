@@ -126,7 +126,7 @@ pub fn set_global_shortcut(app: AppHandle, accelerator: String) -> Result<(), St
 /// cancelled. The *invoking* window (quick overlay or main chat) is hidden
 /// during capture so it isn't in the shot, then restored.
 #[tauri::command]
-pub fn take_screenshot(
+pub async fn take_screenshot(
     app: AppHandle,
     window: tauri::WebviewWindow,
 ) -> Result<Option<String>, String> {
@@ -140,10 +140,12 @@ pub fn take_screenshot(
         }
         // Give the compositor a beat to unmap the window before the capture
         // tool freezes the screen.
-        std::thread::sleep(std::time::Duration::from_millis(150));
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
     }
 
-    let result = capture_interactive();
+    let result = tokio::task::spawn_blocking(capture_interactive)
+        .await
+        .map_err(|e| format!("screenshot task failed: {e}"))??;
 
     if was_visible {
         if is_quick {
@@ -153,7 +155,7 @@ pub fn take_screenshot(
             let _ = window.set_focus();
         }
     }
-    result
+    Ok(result)
 }
 
 fn temp_png_path() -> std::path::PathBuf {
