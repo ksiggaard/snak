@@ -46,29 +46,34 @@ export interface PlannerModelEntry {
 
 /**
  * Build the plannerModels list from the full models store, filtered by the
- * user's planner_model_config. If the config is absent or all models are
- * disabled, ALL configured models are returned (empty restriction = no
- * restriction). Capabilities are attached from the config when present.
+ * user's planner_model_config. When no config exists, all models are available.
+ * When a config exists, only models explicitly enabled (`enabled === true`) are
+ * included — the planner sees exactly the "Allowed models" list the user
+ * configured. Capabilities are attached from the config when present.
  */
 export function buildPlannerModels(
   models: Model[],
   config: PlannerModelConfig | null,
 ): PlannerModelEntry[] {
-  const anyEnabled = config
-    ? Object.values(config).some((c) => c.enabled !== false)
-    : false;
-  // No config or nothing explicitly enabled → allow all.
-  const allowAll = !config || !anyEnabled;
+  // No config or empty config → no restriction (backward compatible).
+  if (!config || Object.keys(config).length === 0) {
+    return models.map((m) => ({
+      provider: m.provider,
+      model_id: m.model_id,
+      label: m.label,
+      notes: m.notes || undefined,
+    }));
+  }
 
+  // Config exists → only models explicitly enabled by the user.
   return models
     .filter((m) => {
-      if (allowAll) return true;
       const key = `${m.provider}::${m.model_id}`;
-      return config![key]?.enabled !== false;
+      return config[key]?.enabled === true;
     })
     .map((m) => {
       const key = `${m.provider}::${m.model_id}`;
-      const caps = config?.[key]?.capabilities;
+      const caps = config[key]?.capabilities;
       return {
         provider: m.provider,
         model_id: m.model_id,

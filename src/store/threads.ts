@@ -1243,7 +1243,10 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         const config: PlannerModelConfig | null = configRaw
           ? (JSON.parse(configRaw) as PlannerModelConfig)
           : null;
-        const plannerModelsList = buildPlannerModels(allModels, config);
+        // Only show models from providers that have API keys (or are keyless
+        // like Ollama) — the planner can't delegate to unkeyed providers.
+        const keyedModels = allModels.filter((m) => keyedProviders.has(m.provider));
+        const plannerModelsList = buildPlannerModels(keyedModels, config);
         const plannerResult = await chatStream(
           plannerProvider,
           plannerModel,

@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useThreads } from "@/store/threads";
 import { useModels } from "@/store/models";
+import { useKeys } from "@/store/keys";
 import { useT } from "@/store/i18n";
 import { useProviders, isKeylessProvider } from "@/lib/providers";
 import { buildModelOptions, currentModelLabel } from "@/lib/modelOptions";
@@ -46,6 +47,8 @@ export function PlannerModel() {
   const setCriticModel = useThreads((s) => s.setCriticModel);
   const models = useModels((s) => s.models);
   const providers = useProviders();
+  const keyed = useKeys((s) => s.present);
+  const hasKey = (p: Provider) => isKeylessProvider(p) || keyed.has(p);
 
   const [instructions, setInstructions] = useState("");
   const [instructionsLoaded, setInstructionsLoaded] = useState(false);
@@ -86,7 +89,7 @@ export function PlannerModel() {
 
   const toggleEnabled = (key: string) => {
     const cur = config[key];
-    const next = { ...config, [key]: { ...cur, enabled: !(cur?.enabled !== false) } };
+    const next = { ...config, [key]: { ...cur, enabled: cur?.enabled !== true } };
     saveConfig(next);
   };
 
@@ -130,8 +133,8 @@ export function PlannerModel() {
   );
 
   const anyEnabled =
-    Object.values(config).some((c) => c.enabled !== false) ||
-    Object.keys(config).length === 0;
+    Object.values(config).some((c) => c.enabled === true);
+  const emptyConfig = Object.keys(config).length === 0;
 
   return (
     <Card className="w-full max-w-lg xl:max-w-2xl overflow-visible">
@@ -219,17 +222,19 @@ export function PlannerModel() {
               <label className="text-sm leading-tight font-medium">
                 {t("planner.allowedModels")}
               </label>
-              {!anyEnabled && (
+              {!anyEnabled && emptyConfig && (
                 <p className="text-muted-foreground text-xs mt-0.5">
                   {t("planner.allowedModelsHint")}
                 </p>
               )}
             </div>
             <div className="flex flex-col gap-3">
-              {models.map((m) => {
+              {models
+                .filter((m) => hasKey(m.provider))
+                .map((m) => {
                 const key = `${m.provider}::${m.model_id}`;
                 const entry = config[key];
-                const enabled = entry?.enabled !== false;
+                const enabled = entry?.enabled === true;
                 const caps = entry?.capabilities ?? [];
                 const p = providers.find((pm) => pm.id === m.provider);
                 const providerLabel = p?.label ?? m.provider;

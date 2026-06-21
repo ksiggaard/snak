@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import { useThreads } from "@/store/threads";
 import { confirmDialog } from "@/store/confirm";
@@ -40,13 +40,20 @@ export function ChatsPane() {
       closeWorkspace();
       closeBot();
       showChat();
-      void selectThread(id);
+      selectThread(id).catch((e) => {
+        console.error("selectThread failed:", e);
+      });
     },
     [clearSearch, closeWorkspace, closeBot, showChat, selectThread],
   );
 
   // Stable per-thread callbacks so React.memo on ThreadRow works.
   const [selectCallbacks] = useState(() => new Map<string, () => void>());
+  // If select is recreated (e.g. HMR, dependency change), discard cached
+  // callbacks so they don't reference stale store actions.
+  useEffect(() => {
+    selectCallbacks.clear();
+  }, [select, selectCallbacks]);
   const getSelect = (id: string) => {
     let cb = selectCallbacks.get(id);
     if (!cb) {

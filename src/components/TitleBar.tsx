@@ -44,14 +44,6 @@ export function TitleBar() {
         <WindowControls style={controlsStyle} />
       )}
 
-      {/* Logo + app name */}
-      <div data-tauri-drag-region className="flex items-center gap-1.5 px-2">
-        <img src="/icon.png" className="size-4 rounded-sm" draggable={false} />
-        <span className="text-sidebar-foreground/80 text-[13px] font-semibold tracking-tight">
-          snak
-        </span>
-      </div>
-
       {/* Sidebar toggle — collapses the pane (wide) or cycles the 3-step
           compact disclosure (<600px). */}
       <Tooltip>
