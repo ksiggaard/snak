@@ -1179,63 +1179,49 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           threadPlannerProgress: { ...s.threadPlannerProgress, [tid]: { phase: "planning", steps: [] } },
         }));
 
-        // Stream the planner's output into a placeholder.
+        // Use the global streaming state fields — they hold the planner's live
+        // output during the planning phase.
         let plannerAcc = "";
         const plannerToolCalls: MessageToolCall[] = [];
         const plannerSubagents: MessageSubagent[] = [];
         let plannerReasoning = "";
         const plannerApiTrace: ApiTraceEntry[] = [];
-
+        let plannerLastFlush = 0;
+        const plannerFlush = () => {
+          if (get().currentThreadId !== tid) return;
+          set({
+            streamingContent: plannerAcc,
+            streamingToolCalls: [...plannerToolCalls],
+            streamingSubagents: [...plannerSubagents],
+            streamingReasoning: plannerReasoning,
+            streamingApiTrace: [...plannerApiTrace],
+            streamingProvider: plannerProvider,
+            streamingModel: plannerModel,
+            ...(isModelOutput({ text: plannerAcc } as StreamEvent) ? { awaitingModel: false } : {}),
+          });
+        };
+        set({
+          streamingContent: "",
+          streamingToolCalls: [],
+          streamingSubagents: [],
+          streamingImages: [],
+          streamingReasoning: "",
+          streamingApiTrace: [],
+          streamingBotId: null,
+          streamingProvider: plannerProvider,
+          streamingModel: plannerModel,
+        });
         const onDelta = (event: StreamEvent) => {
           applyToolEvent(event, plannerToolCalls);
           applySubagentEvent(event, plannerSubagents);
           applyTraceEvent(event, plannerApiTrace);
           if (event.reasoning) plannerReasoning += event.reasoning.text;
           if (event.text) plannerAcc += event.text;
-          set((s) => {
-            if (get().currentThreadId !== tid) return {};
-            const exists = s.messages.some((m) => m.id === STREAM_ID);
-            const base = exists
-              ? s.messages
-              : [
-                  ...s.messages,
-                  {
-                    id: STREAM_ID,
-                    thread_id: tid,
-                    role: "assistant" as const,
-                    content: "",
-                    kind: "normal" as const,
-                    duration_ms: null,
-                    bot_id: null,
-                    variant_group: null,
-                    variant_selected: 1,
-                    created_at: "",
-                    provider: plannerProvider,
-                    model: plannerModel,
-                    images: [],
-                    documents: [],
-                    toolCalls: [],
-                    subagents: [],
-                  } as MessageView,
-                ];
-            return {
-              messages: base.map((m) =>
-                m.id === STREAM_ID
-                  ? {
-                      ...m,
-                      content: plannerAcc,
-                      toolCalls: [...plannerToolCalls],
-                      subagents: [...plannerSubagents],
-                      reasoning: plannerReasoning || undefined,
-                      apiTrace: plannerApiTrace.length
-                        ? [...plannerApiTrace]
-                        : undefined,
-                    }
-                  : m,
-              ),
-              ...(isModelOutput(event) ? { awaitingModel: false } : {}),
-            };
-          });
+          const now = performance.now();
+          if (now - plannerLastFlush > 100) {
+            plannerLastFlush = now;
+            plannerFlush();
+          }
         };
 
         const started = Date.now();
@@ -1248,6 +1234,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           false,
           true,
         );
+        plannerFlush();
 
         // Persist planner message.
         if (
@@ -1264,13 +1251,6 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           // displayed redundantly alongside the structured PlanPanel.
           const displayContent = stripPlanJsonFence(plannerResult.content);
 
-          // Update the live STREAM_ID placeholder to show the cleaned content.
-          set((s) => ({
-            messages: s.messages.map((m) =>
-              m.id === STREAM_ID ? { ...m, content: displayContent } : m,
-            ),
-          }));
-
           const plannerMsg = await addMessage({
             thread_id: tid,
             role: "assistant",
@@ -1280,23 +1260,25 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             model: plannerModel,
           });
           // Persist tool calls, subagents, transparency.
-          for (const tc of plannerToolCalls) {
-            await addAttachment({
-              message_id: plannerMsg.id,
-              kind: "tool_call",
-              media_type: "application/json",
-              data: JSON.stringify(persistableToolCall(tc)),
-            });
-          }
-          for (const s of plannerSubagents) {
-            await addAttachment({
-              message_id: plannerMsg.id,
-              kind: "subagent",
-              media_type: "application/json",
-              data: JSON.stringify(persistableSubagent(s)),
-            });
-          }
-          await persistTransparency(plannerMsg.id, plannerReasoning, plannerApiTrace);
+          await Promise.all([
+            ...plannerToolCalls.map((tc) =>
+              addAttachment({
+                message_id: plannerMsg.id,
+                kind: "tool_call",
+                media_type: "application/json",
+                data: JSON.stringify(persistableToolCall(tc)),
+              }),
+            ),
+            ...plannerSubagents.map((s) =>
+              addAttachment({
+                message_id: plannerMsg.id,
+                kind: "subagent",
+                media_type: "application/json",
+                data: JSON.stringify(persistableSubagent(s)),
+              }),
+            ),
+            persistTransparency(plannerMsg.id, plannerReasoning, plannerApiTrace),
+          ]);
           // Record usage.
           const u = plannerResult.usage;
           if (
@@ -1339,33 +1321,51 @@ export const useThreads = create<ThreadsState>((set, get) => ({
               msgId: string;
             }> => {
               let acc = "";
-              const onDelta = (event: StreamEvent) => {
-                if (event.text) acc += event.text;
-                set((s) => {
-                  if (get().currentThreadId !== tid) return {};
-                  const exists = s.messages.some((m) => m.id === STREAM_ID);
-                  const base = exists
-                    ? s.messages
-                    : [...s.messages, {
-                        id: STREAM_ID, thread_id: tid, role: "assistant" as const,
-                        content: "", kind: "normal" as const, duration_ms: null,
-                        bot_id: null, variant_group: null, variant_selected: 1,
-                        created_at: "", provider, model,
-                        images: [], documents: [], toolCalls: [], subagents: [],
-                      } as MessageView];
-                  return {
-                    messages: base.map((m) =>
-                      m.id === STREAM_ID ? { ...m, content: acc } : m,
-                    ),
-                    ...(isModelOutput(event) ? { awaitingModel: false } : {}),
-                  };
+              let wLastFlush = 0;
+              const wFlush = () => {
+                if (get().currentThreadId !== tid) return;
+                set({
+                  streamingContent: acc,
+                  streamingProvider: provider,
+                  streamingModel: model,
                 });
               };
+              set({
+                streamingContent: "",
+                streamingToolCalls: [],
+                streamingSubagents: [],
+                streamingImages: [],
+                streamingReasoning: "",
+                streamingApiTrace: [],
+                streamingBotId: null,
+                streamingProvider: provider,
+                streamingModel: model,
+              });
+              const onDelta = (event: StreamEvent) => {
+                if (event.text) acc += event.text;
+                const now = performance.now();
+                if (now - wLastFlush > 100) {
+                  wLastFlush = now;
+                  wFlush();
+                }
+              };
               const result = await chatStream(provider, model, messages, onDelta, tid, false);
+              wFlush();
               if (result.content.length > 0) {
                 const msg = await addMessage({
                   thread_id: tid, role: "assistant", content: result.content,
                   provider, model,
+                });
+                set({
+                  streamingContent: null,
+                  streamingToolCalls: [],
+                  streamingSubagents: [],
+                  streamingImages: [],
+                  streamingReasoning: "",
+                  streamingApiTrace: [],
+                  streamingBotId: null,
+                  streamingProvider: null,
+                  streamingModel: null,
                 });
                 {
                   const msgs = await loadThreadMessages(tid);
@@ -1373,6 +1373,17 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                 }
                 return { ...result, msgId: msg.id };
               }
+              set({
+                streamingContent: null,
+                streamingToolCalls: [],
+                streamingSubagents: [],
+                streamingImages: [],
+                streamingReasoning: "",
+                streamingApiTrace: [],
+                streamingBotId: null,
+                streamingProvider: null,
+                streamingModel: null,
+              });
               {
                 const msgs = await loadThreadMessages(tid);
                 if (get().currentThreadId === tid) set({ messages: msgs });
@@ -1386,6 +1397,17 @@ export const useThreads = create<ThreadsState>((set, get) => ({
               kind: "plan",
               media_type: "application/json",
               data: JSON.stringify(plan),
+            });
+            set({
+              streamingContent: null,
+              streamingToolCalls: [],
+              streamingSubagents: [],
+              streamingImages: [],
+              streamingReasoning: "",
+              streamingApiTrace: [],
+              streamingBotId: null,
+              streamingProvider: null,
+              streamingModel: null,
             });
             {
               const msgs = await loadThreadMessages(tid);
@@ -1461,6 +1483,17 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                   media_type: "application/json",
                   data: JSON.stringify(plan),
                 });
+                set({
+                  streamingContent: null,
+                  streamingToolCalls: [],
+                  streamingSubagents: [],
+                  streamingImages: [],
+                  streamingReasoning: "",
+                  streamingApiTrace: [],
+                  streamingBotId: null,
+                  streamingProvider: null,
+                  streamingModel: null,
+                });
                 {
                   const msgs = await loadThreadMessages(tid);
                   if (get().currentThreadId === tid) set({ messages: msgs });
@@ -1535,47 +1568,9 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                   };
                 });
 
-                // Stream the step into its own placeholder with per-step ID.
-                const streamId = `${STREAM_STEP_PREFIX}${step.id}`;
-                let stepAcc = "";
-                const stepOnDelta = (event: StreamEvent) => {
-                  if (event.text) stepAcc += event.text;
-                  set((s) => {
-                    if (get().currentThreadId !== tid) return {};
-                    const exists = s.messages.some((m) => m.id === streamId);
-                    const base = exists
-                      ? s.messages
-                      : [
-                          ...s.messages,
-                          {
-                            id: streamId,
-                            thread_id: tid,
-                            role: "assistant" as const,
-                            content: "",
-                            kind: "normal" as const,
-                            duration_ms: null,
-                            bot_id: null,
-                            variant_group: null,
-                            variant_selected: 1,
-                            created_at: "",
-                            provider: step.provider,
-                            model: step.model,
-                            images: [],
-                            documents: [],
-                            toolCalls: [],
-                            subagents: [],
-                          } as MessageView,
-                        ];
-                    return {
-                      messages: base.map((m) =>
-                        m.id === streamId
-                          ? { ...m, content: stepAcc }
-                          : m,
-                      ),
-                      ...(isModelOutput(event) ? { awaitingModel: false } : {}),
-                    };
-                  });
-                };
+                // No streaming bubble for steps — the planner progress strip
+                // already shows live status. Content surfaces after DB reload.
+                const noopOnDelta = (_event: StreamEvent) => {};
 
                 const stepStarted = Date.now();
                 const stepResult = await gate(
@@ -1585,7 +1580,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                       step.provider,
                       step.model,
                       [{ role: "user", content: resolvedPrompt, images: [] }],
-                      stepOnDelta,
+                      noopOnDelta,
                       tid,
                       false,
                     ),
@@ -1693,6 +1688,17 @@ export const useThreads = create<ThreadsState>((set, get) => ({
 
           // Reload messages to replace all placeholders and show final state.
           // Clear planner progress — orchestration is complete.
+          set({
+            streamingContent: null,
+            streamingToolCalls: [],
+            streamingSubagents: [],
+            streamingImages: [],
+            streamingReasoning: "",
+            streamingApiTrace: [],
+            streamingBotId: null,
+            streamingProvider: null,
+            streamingModel: null,
+          });
           {
             const msgs = await loadThreadMessages(tid);
             if (get().currentThreadId === tid) {
