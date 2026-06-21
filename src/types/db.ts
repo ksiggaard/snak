@@ -243,7 +243,9 @@ export type AttachmentKind =
   | "reasoning"
   | "api_trace"
   // Planner-orchestrated plan: the JSON plan the planner model produced.
-  | "plan";
+  | "plan"
+  // Planner step metadata: step_id + description for a dispatched worker step.
+  | "planner_step";
 
 export interface Attachment {
   id: string;

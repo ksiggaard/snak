@@ -201,7 +201,7 @@ export function ChatView() {
         {incognito && messages.length === 0 && !pending ? (
           <IncognitoExplainer />
         ) : (
-          <MessageList messages={messages} pending={pending} bot={bot} />
+          <MessageList messages={messages} pending={pending} busy={busy} bot={bot} />
         )}
         <div
           // Match the message column's inset: the same base horizontal padding

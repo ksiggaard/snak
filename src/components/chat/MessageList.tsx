@@ -34,6 +34,7 @@ import { ArtifactCard } from "@/components/chat/ArtifactCard";
 import { ArtifactContext } from "@/components/chat/artifactContext";
 import { ModelBadge } from "@/components/chat/ModelBadge";
 import { PlanPanel } from "@/components/chat/PlanPanel";
+import { StepCard } from "@/components/chat/StepCard";
 import { parseArtifact } from "@/lib/artifacts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,6 +72,7 @@ import type { Bot } from "@/types/db";
 interface MessageListProps {
   messages: MessageView[];
   pending?: boolean;
+  busy?: boolean;
   /** Bot persona of this thread (T38) — assistant messages render its avatar
    *  + name. null/undefined (no bot) leaves rendering unchanged. */
   bot?: Bot | null;
@@ -761,6 +763,16 @@ const ChatMessage = memo(function ChatMessage({
       };
     }, [ytEnabled, m.role, m.content, m.images, videoLabelStart]);
 
+  // Planner plan messages (route / multi_step) carry internal plan JSON and
+  // are hidden from the chat — the user sees only the progress indicator and
+  // the final synthesis answer.
+  if (m.plan) return null;
+
+  // Planner sub-messages (legacy worker steps with a planner_step attachment)
+  // get a collapsed StepCard instead of a full chat bubble. New synthesis
+  // messages don't carry a planner_step attachment, so they render normally.
+  const isStepMessage = m.role === "assistant" && m.provider && !m.plan && m.step !== undefined;
+
   const imageGrid = realImages.length > 0 && (
     <div className="flex flex-wrap gap-2">
       {realImages.map((img, i) => {
@@ -946,6 +958,21 @@ const ChatMessage = memo(function ChatMessage({
       {botName}
     </span>
   );
+
+  // Planner sub-messages get a collapsed StepCard instead of a full bubble.
+  if (isStepMessage) {
+    return (
+      <div className="mx-auto w-full scroll-mt-4" ref={containerRef} style={{ maxWidth }}>
+        <StepCard
+          stepId={m.step?.step_id}
+          description={m.step?.description}
+          provider={m.provider!}
+          model={m.model ?? ""}
+          content={m.content}
+        />
+      </div>
+    );
+  }
 
   if (chatStyle === "compact") {
     // Dense IRC-like row: a fixed-width role gutter, then the text. Markdown
@@ -1161,7 +1188,7 @@ function useNow(): number {
   return now;
 }
 
-export function MessageList({ messages, pending, bot }: MessageListProps) {
+export function MessageList({ messages, pending, busy, bot }: MessageListProps) {
   const t = useT();
   // Persona roster for @-mention attribution (T43): a message with `bot_id`
   // set renders that persona's avatar + name regardless of the thread's bot.
@@ -1325,7 +1352,7 @@ export function MessageList({ messages, pending, bot }: MessageListProps) {
       className="flex flex-1 flex-col"
       data={displayItems}
       computeItemKey={(_, m) => m.id}
-      followOutput={pending ? "smooth" : false}
+      followOutput={busy ? "smooth" : false}
       itemContent={(idx, m) => {
         if (m.kind === "summary") {
           return (

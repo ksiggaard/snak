@@ -127,7 +127,7 @@ beforeEach(() => {
     defaultModel: PROVIDERS[0].defaultModel,
     draftProvider: PROVIDERS[0].id,
     draftModel: PROVIDERS[0].defaultModel,
-    busy: false,
+    runningStreams: new Set(),
     cancelling: false,
   });
   vi.clearAllMocks();
@@ -272,7 +272,7 @@ describe("send() with @-mentions (T43)", () => {
       .mock.calls.map((c) => c[0])
       .filter((m) => m.role === "assistant");
     expect(assistant).toHaveLength(1);
-    expect(useThreads.getState().busy).toBe(false);
+    expect(useThreads.getState().runningStreams.size).toBe(0);
   });
 
   it("runs the T40 memory review per mentioned persona", async () => {

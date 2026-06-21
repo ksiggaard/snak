@@ -681,6 +681,8 @@
     "planner.pill.dispatching": "Spawning {n} sub-agents",
     "planner.pill.executing": "Running {n} steps",
     "planner.pill.planning": "Breaking down task…",
+    "planner.pill.critiquing": "Critiquing plan…",
+    "planner.pill.revising": "Revising plan ({round}/{max})…",
     "planner.pill.stepDone": "Done",
     "planner.pill.stepPending": "Waiting",
     "planner.pill.stepRunning": "Running",
@@ -695,6 +697,14 @@
     "planner.toggleOff": "Planer-Modus aus",
     "planner.toggleHint": "Das Planer-Modell entscheidet, wie Anfragen bearbeitet werden — Weiterleitung oder parallele Schritte.",
     "planner.instructions": "Anweisungen",
-    "planner.instructionsPlaceholder": "Weise den Planer an, wie Modelle priorisiert werden sollen. Z.B. \"Nutze lokale Modelle, wann immer es sinnvoll ist. Bevorzuge Claude für kreative Aufgaben.\""
+    "planner.instructionsPlaceholder": "Weise den Planer an, wie Modelle priorisiert werden sollen. Z.B. \"Nutze lokale Modelle, wann immer es sinnvoll ist. Bevorzuge Claude für kreative Aufgaben.\"",
+    "planner.criticLabel": "Kritikermodell",
+    "planner.criticReset": "Wie Planer",
+    "planner.criticFallback": "Wie Planermodell ({model})",
+    "planner.allowedModels": "Erlaubte Modelle",
+    "planner.allowedModelsHint": "Wähle, welche Modelle der Planer nutzen darf und markiere ihre Fähigkeiten.",
+    "planner.capabilityHint": "Fähigkeiten markieren, damit der Planer Modelle passend zuordnen kann.",
+    "sidebar.threadRunning": "Aktiv",
+    "sidebar.threadUnread": "Neu"
   }
 }

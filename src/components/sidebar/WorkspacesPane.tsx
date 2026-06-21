@@ -25,6 +25,8 @@ export function WorkspacesPane() {
   const t = useT();
   const threads = useThreads((s) => s.threads);
   const currentId = useThreads((s) => s.currentThreadId);
+  const runningStreams = useThreads((s) => s.runningStreams);
+  const unreadThreads = useThreads((s) => s.unreadThreads);
   const selectThread = useThreads((s) => s.selectThread);
   const startNewChatInWorkspace = useThreads((s) => s.startNewChatInWorkspace);
 
@@ -171,6 +173,8 @@ export function WorkspacesPane() {
                       active={t.id === currentId}
                       onSelect={() => selectChat(t.id)}
                       snippet={snippets.get(t.id)}
+                      isRunning={runningStreams.has(t.id)}
+                      isUnread={unreadThreads.has(t.id)}
                     />
                   ))
                 )}

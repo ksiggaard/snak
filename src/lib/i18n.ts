@@ -143,6 +143,8 @@ export const en = {
   "sidebar.unfavoriteAria": "Unfavorite conversation",
   "sidebar.deleteConversation": "Delete conversation",
   "sidebar.deleteThreadTitle": 'Delete "{title}"?',
+  "sidebar.threadRunning": "Running",
+  "sidebar.threadUnread": "New",
   "sidebar.navigation": "Navigation",
   "sidebar.resize": "Resize sidebar",
 
@@ -503,9 +505,19 @@ export const en = {
   "planner.instructions": "Instructions",
   "planner.instructionsPlaceholder":
     "Tell the planner how to prefer or prioritize models. E.g. \"Use local models whenever it makes sense. Prefer Claude for creative tasks.\"",
+  "planner.criticLabel": "Critic model",
+  "planner.criticReset": "Same as planner",
+  "planner.criticFallback": "Same as planner model ({model})",
+  "planner.allowedModels": "Allowed models",
+  "planner.allowedModelsHint":
+    "Select which models the planner may use and tag their capabilities. If no models are toggled on, all models are available.",
+  "planner.capabilityHint":
+    "Tag capabilities so the planner can match models to tasks.",
 
   // Planner progress pills
   "planner.pill.planning": "Breaking down task\u2026",
+  "planner.pill.critiquing": "Critiquing plan\u2026",
+  "planner.pill.revising": "Revising plan ({round}/{max})\u2026",
   "planner.pill.dispatching": "Spawning {n} sub-agents",
   "planner.pill.executing": "Running {n} steps",
   "planner.pill.completing": "Finalising answer",

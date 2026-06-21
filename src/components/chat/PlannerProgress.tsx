@@ -41,7 +41,8 @@ function StepPill({ step }: { step: StepProgress }) {
 
 export function PlannerProgress() {
   const t = useT();
-  const progress = useThreads((s) => s.plannerProgress);
+  const cid = useThreads((s) => s.currentThreadId);
+  const progress = useThreads((s) => (cid ? s.threadPlannerProgress[cid] : undefined));
   if (!progress) return null;
 
   const phaseLabel = (() => {
@@ -49,6 +50,13 @@ export function PlannerProgress() {
     switch (progress.phase) {
       case "planning":
         return t("planner.pill.planning");
+      case "critiquing":
+        return t("planner.pill.critiquing");
+      case "revising":
+        return t("planner.pill.revising", {
+          round: String(progress.round ?? 1),
+          max: String(progress.maxRounds ?? 5),
+        });
       case "dispatching":
         return t("planner.pill.dispatching", { n: String(n) });
       case "executing":

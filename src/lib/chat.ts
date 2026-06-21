@@ -176,6 +176,10 @@ export interface StreamEvent {
  * servers' tools to the model and runs the tool-call round-trip server-side,
  * still streaming text deltas through `onDelta` and resolving with the final
  * `{content, model, usage}`.
+ *
+ * `plannerModels` (optional): when set, a `planner__list_models` tool is
+ * exposed so the planner model can query the exact available model IDs before
+ * building a plan. The tool is handled in-process by the Rust backend.
  */
 export async function chatStream(
   provider: Provider,
@@ -184,6 +188,14 @@ export async function chatStream(
   onDelta: (event: StreamEvent) => void,
   threadId: string,
   deepResearch = false,
+  skipTools = false,
+  plannerModels?: {
+    provider: string;
+    model_id: string;
+    label: string;
+    notes?: string | null;
+    capabilities?: string[];
+  }[],
 ): Promise<ChatResult> {
   const channel = new Channel<StreamEvent>();
   channel.onmessage = (msg) => onDelta(msg);
@@ -194,7 +206,9 @@ export async function chatStream(
   // connectivity store here so `send()`'s call site stays unchanged.
   const { status, forceOffline } = useConnectivity.getState();
   const offline = deriveOffline(status, forceOffline);
-  const mcpServers = await enabledServersForChat(provider, offline);
+  const mcpServers = skipTools
+    ? undefined
+    : await enabledServersForChat(provider, offline);
   // Only read the subagent-concurrency setting when deep research is engaged;
   // null lets the backend apply its own default.
   const subagentConcurrency = deepResearch
@@ -217,6 +231,8 @@ export async function chatStream(
     subagentConcurrency,
     captureReasoning,
     captureTrace,
+    skipTools,
+    plannerModels: plannerModels ?? undefined,
   });
 }
 

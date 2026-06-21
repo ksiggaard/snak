@@ -21,6 +21,8 @@ export function BotsPane() {
   const t = useT();
   const threads = useThreads((s) => s.threads);
   const currentId = useThreads((s) => s.currentThreadId);
+  const runningStreams = useThreads((s) => s.runningStreams);
+  const unreadThreads = useThreads((s) => s.unreadThreads);
   const selectThread = useThreads((s) => s.selectThread);
   const startNewChatWithBot = useThreads((s) => s.startNewChatWithBot);
 
@@ -159,6 +161,8 @@ export function BotsPane() {
                       active={t.id === currentId}
                       onSelect={() => selectChat(t.id)}
                       snippet={snippets.get(t.id)}
+                      isRunning={runningStreams.has(t.id)}
+                      isUnread={unreadThreads.has(t.id)}
                     />
                   ))
                 )}

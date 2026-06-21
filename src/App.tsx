@@ -79,6 +79,18 @@ function App() {
   const setCompactNav = useLayout((s) => s.setCompactNav);
   const titleBarMode = useTitleBar((s) => s.mode);
   const menuBarMode = useTitleBar((s) => s.menuBar);
+  const runningStreams = useThreads((s) => s.runningStreams);
+  const unreadThreads = useThreads((s) => s.unreadThreads);
+
+  // Dynamic window title: show a busy marker when any thread is streaming and
+  // an unread count when background threads have completed responses.
+  useEffect(() => {
+    let prefix = "";
+    let suffix = "";
+    if (runningStreams.size > 0) prefix = "\u25CF ";
+    if (unreadThreads.size > 0) suffix = ` (${unreadThreads.size})`;
+    void getCurrentWindow().setTitle(prefix + "snak" + suffix);
+  }, [runningStreams, unreadThreads]);
 
   // Sync the OS window decorations with the title-bar preference. Rust strips
   // decorations at startup (the default is the custom bar); this restores them

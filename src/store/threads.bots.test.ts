@@ -119,7 +119,7 @@ beforeEach(() => {
     defaultModel: PROVIDERS[0].defaultModel,
     draftProvider: PROVIDERS[0].id,
     draftModel: PROVIDERS[0].defaultModel,
-    busy: false,
+    runningStreams: new Set(),
   });
   vi.clearAllMocks();
   vi.mocked(createThread).mockImplementation(

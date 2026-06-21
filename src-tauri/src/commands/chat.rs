@@ -28,6 +28,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use futures_util::StreamExt;
+use serde::Deserialize;
 use tauri::ipc::Channel;
 use tauri::State;
 use tokio::sync::oneshot;
@@ -40,6 +41,38 @@ use crate::providers::{
     Usage,
 };
 use crate::research;
+
+/// Planner-provided model info (from the frontend's model store). Rides in
+/// via `plannerModels` on `chat_stream`; the `list_models` tool returns it.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PlannerModelInfo {
+    pub provider: String,
+    #[serde(rename = "model_id")]
+    pub model_id: String,
+    pub label: String,
+    #[serde(default)]
+    pub notes: Option<String>,
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+}
+
+/// The tool name for the planner's model-list query.
+const PLANNER_LIST_MODELS_TOOL: &str = "planner__list_models";
+
+/// Build the tool definition for the planner's `list_models` tool.
+fn planner_tool_def() -> ToolDef {
+    ToolDef {
+        name: PLANNER_LIST_MODELS_TOOL.to_string(),
+        description: "List all available AI models with their exact provider ID, \
+        model ID, label, and notes. Call this before building a plan so you use \
+        only real model identifiers."
+            .to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {}
+        }),
+    }
+}
 
 /// Safety cap on tool-call rounds within one `chat_stream` call, so a model that
 /// keeps requesting tools can't loop forever. After the cap we return the last
@@ -105,6 +138,8 @@ pub async fn chat_stream(
     #[allow(non_snake_case)] subagentConcurrency: Option<usize>,
     #[allow(non_snake_case)] captureReasoning: Option<bool>,
     #[allow(non_snake_case)] captureTrace: Option<bool>,
+    #[allow(non_snake_case)] skipTools: Option<bool>,
+    #[allow(non_snake_case)] plannerModels: Option<Vec<PlannerModelInfo>>,
     sessions: State<'_, McpSessions>,
     cancel: State<'_, CancelFlag>,
     approvals: State<'_, PendingApprovals>,
@@ -135,7 +170,14 @@ pub async fn chat_stream(
     // (or none were passed), `tools` is empty and the request below is
     // byte-identical to a plain completion — exactly one provider round, no
     // `tools` field on the wire (T13 no-tools invariant).
-    let servers = mcpServers.unwrap_or_default();
+    // When `skipTools` is set (e.g. planner calls), all MCP server config is
+    // ignored so the model sees no tools and can't hallucinate tool names as
+    // model identifiers.
+    let servers = if skipTools.unwrap_or(false) {
+        Vec::new()
+    } else {
+        mcpServers.unwrap_or_default()
+    };
     let mut tools = if servers.is_empty() {
         Vec::new()
     } else {
@@ -149,13 +191,24 @@ pub async fn chat_stream(
     if deep_research {
         tools.push(research::dispatch_tool_def());
     }
+
+    // Planner mode: when plannerModels is present, expose the list_models tool
+    // so the planner model can discover exact model IDs before building a plan.
+    if plannerModels.is_some() {
+        tools.push(planner_tool_def());
+    }
     // How many subagents run at once (Settings → Advanced), clamped to a sane
     // range; defaulted when the setting is absent.
     let subagent_concurrency = research::clamp_concurrency(
         subagentConcurrency.unwrap_or(research::DEFAULT_SUBAGENT_CONCURRENCY),
     );
 
-    let history = with_system_prompt(messages, !tools.is_empty(), deep_research);
+    // Inject the tool-usage system prompt only when real MCP tools exist
+    // (not just the planner list_models or research dispatch meta-tools).
+    let has_mcp_tools = tools.iter().any(|t| {
+        t.name != PLANNER_LIST_MODELS_TOOL && t.name != research::DISPATCH_TOOL_NAME
+    });
+    let history = with_system_prompt(messages, has_mcp_tools, deep_research);
 
     run_agent_loop(
         &client,
@@ -175,6 +228,7 @@ pub async fn chat_stream(
         subagent_concurrency,
         captureReasoning.unwrap_or(false),
         captureTrace.unwrap_or(false),
+        &plannerModels,
     )
     .await
 }
@@ -208,6 +262,7 @@ async fn run_agent_loop(
     subagent_concurrency: usize,
     reasoning: bool,
     trace: bool,
+    planner_models: &Option<Vec<PlannerModelInfo>>,
 ) -> Result<ChatResponse, String> {
     // The full streamed transcript: text deltas across every round. Returned as
     // the authoritative content so the persisted message matches what streamed
@@ -287,6 +342,50 @@ async fn run_agent_loop(
                     break;
                 }
                 continue;
+            }
+
+            // Planner model-list query: handled in-process, returns the exact
+            // models the frontend passed.
+            if call.name == PLANNER_LIST_MODELS_TOOL {
+                if let Some(ref models) = *planner_models {
+                    let mut buf = String::from("Available models:\n");
+                    for m in models {
+                        let note = m.notes.as_deref().unwrap_or("");
+                        let note_suffix = if note.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" — {note}")
+                        };
+                        let caps = if m.capabilities.is_empty() {
+                            String::new()
+                        } else {
+                            format!(
+                                " [{}]",
+                                m.capabilities
+                                    .iter()
+                                    .map(|c| c.as_str())
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            )
+                        };
+                        buf.push_str(&format!(
+                            "- {} · {} (provider: \"{}\", model: \"{}\"){caps}{note_suffix}\n",
+                            m.provider, m.label, m.provider, m.model_id
+                        ));
+                    }
+                    on_delta
+                        .send(StreamDelta::tool(call, None))
+                        .map_err(|e| format!("channel send failed: {e}"))?;
+                    on_delta
+                        .send(StreamDelta::tool_done(&call.id, true))
+                        .map_err(|e| format!("channel send failed: {e}"))?;
+                    results.push(ToolResult {
+                        tool_call_id: call.id.clone(),
+                        name: call.name.clone(),
+                        content: buf,
+                    });
+                    continue;
+                }
             }
 
             if mcp::requires_approval(&call.name) {
@@ -456,10 +555,11 @@ async fn run_subagents(
         Err(e) => return (e, Usage::default()),
     };
 
-    // Subagents get the web/MCP tools but not the dispatch tool (depth bound 1).
+    // Subagents get the web/MCP tools but not the dispatch tool (depth bound 1)
+    // or the planner tool (subagents don't plan).
     let sub_tools: Vec<ToolDef> = orchestrator_tools
         .iter()
-        .filter(|t| t.name != research::DISPATCH_TOOL_NAME)
+        .filter(|t| t.name != research::DISPATCH_TOOL_NAME && t.name != PLANNER_LIST_MODELS_TOOL)
         .cloned()
         .collect();
     let sub_tools = &sub_tools;
@@ -537,6 +637,7 @@ async fn run_subagents(
                 // thinking sidesteps the Anthropic thinking+tools echo-back.
                 false,
                 false,
+                &None, // no planner tools for subagents
             ))
             .await;
             match res {

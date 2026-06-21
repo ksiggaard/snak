@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import {
   FolderInput,
   Ghost,
+  Loader2,
   MoreHorizontal,
   Star,
   Trash2,
@@ -41,6 +42,10 @@ interface ThreadRowProps {
   /** Last-message snippet for the "preview" row style (T35); undefined for
    *  empty threads or when the style doesn't need it. */
   snippet?: string;
+  /** True when this thread has an active stream. */
+  isRunning?: boolean;
+  /** True when this thread completed a stream while not being viewed. */
+  isUnread?: boolean;
 }
 
 /** One thread entry in the sidebar: select, double-click-to-rename, favorite
@@ -51,6 +56,8 @@ export const ThreadRow = memo(function ThreadRow({
   active,
   onSelect,
   snippet,
+  isRunning,
+  isUnread,
 }: ThreadRowProps) {
   const t = useT();
   const locale = useIntlLocale();
@@ -252,6 +259,19 @@ export const ThreadRow = memo(function ThreadRow({
                 >
                   {thread.title}
                 </span>
+                {/* Background stream / unread indicators. */}
+                {isRunning && (
+                  <Loader2
+                    className="text-muted-foreground ml-auto size-3 shrink-0 animate-spin"
+                    aria-label={t("sidebar.threadRunning")}
+                  />
+                )}
+                {!isRunning && isUnread && (
+                  <span
+                    className="bg-primary ml-auto size-2 shrink-0 rounded-full"
+                    aria-label={t("sidebar.threadUnread")}
+                  />
+                )}
                 {/* Right-aligned date for the "inline" / "full" row styles. */}
                 {trailingDate !== null && (
                   <span className="text-muted-foreground ml-auto shrink-0 pl-1 text-[10px] tabular-nums">

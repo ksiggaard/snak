@@ -18,6 +18,8 @@ export function ChatsPane() {
   const t = useT();
   const threads = useThreads((s) => s.threads);
   const currentId = useThreads((s) => s.currentThreadId);
+  const runningStreams = useThreads((s) => s.runningStreams);
+  const unreadThreads = useThreads((s) => s.unreadThreads);
   const selectThread = useThreads((s) => s.selectThread);
   const clearArchive = useThreads((s) => s.clearArchive);
   const closeWorkspace = useWorkspaces((s) => s.close);
@@ -85,6 +87,8 @@ export function ChatsPane() {
               active={t.id === currentId}
               onSelect={getSelect(t.id)}
               snippet={snippets.get(t.id)}
+              isRunning={runningStreams.has(t.id)}
+              isUnread={unreadThreads.has(t.id)}
             />
           ))}
         </section>
@@ -102,6 +106,8 @@ export function ChatsPane() {
             active={t.id === currentId}
               onSelect={getSelect(t.id)}
             snippet={snippets.get(t.id)}
+            isRunning={runningStreams.has(t.id)}
+            isUnread={unreadThreads.has(t.id)}
           />
         ))}
       </section>
@@ -151,6 +157,8 @@ export function ChatsPane() {
                 active={t.id === currentId}
                 onSelect={getSelect(t.id)}
                 snippet={snippets.get(t.id)}
+                isRunning={runningStreams.has(t.id)}
+                isUnread={unreadThreads.has(t.id)}
               />
             ))}
         </section>
