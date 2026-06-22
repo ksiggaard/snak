@@ -55,16 +55,56 @@ fn whisper_dir(app: &AppHandle) -> Result<PathBuf, String> {
         .join("whisper"))
 }
 
-/// True when `bin` resolves on PATH (probed with `--help`, output discarded).
-fn binary_on_path(bin: &str) -> bool {
-    std::process::Command::new(bin)
-        .arg("--help")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .map(|s| s.success())
-        // A binary that exists but exits non-zero on `--help` still resolved.
-        .unwrap_or(false)
+/// Candidate command names for each tool, most-preferred first. whisper.cpp's
+/// CLI is `whisper-cli` (older builds shipped `whisper-cpp` / `main`); the Piper
+/// pip package installs `piper` (some builds expose `piper-tts`).
+const PIPER_BINS: &[&str] = &["piper", "piper-tts"];
+const WHISPER_BINS: &[&str] = &["whisper-cli", "whisper-cpp", "main"];
+
+/// Directories to search for a tool: every `$PATH` entry plus the common install
+/// locations a *GUI* app's minimal PATH usually omits — Homebrew (Linux/macOS),
+/// and the per-user `~/.local/bin` (pipx), `~/.cargo/bin`, `~/bin`. Resolving the
+/// absolute path here means detection *and* later spawning both work regardless
+/// of how the app was launched (desktop launcher vs. shell).
+fn binary_dirs() -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = std::env::var_os("PATH")
+        .map(|p| std::env::split_paths(&p).collect())
+        .unwrap_or_default();
+    for extra in [
+        "/home/linuxbrew/.linuxbrew/bin",
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+    ] {
+        dirs.push(PathBuf::from(extra));
+    }
+    for var in ["HOME", "USERPROFILE"] {
+        if let Some(home) = std::env::var_os(var) {
+            let home = PathBuf::from(home);
+            dirs.push(home.join(".local").join("bin"));
+            dirs.push(home.join(".cargo").join("bin"));
+            dirs.push(home.join(".linuxbrew").join("bin"));
+            dirs.push(home.join("bin"));
+        }
+    }
+    dirs
+}
+
+/// First `names` candidate found as an executable file across [`binary_dirs`],
+/// returned as an absolute path (also tries a `.exe` suffix for Windows).
+fn resolve_binary(names: &[&str]) -> Option<PathBuf> {
+    let dirs = binary_dirs();
+    for name in names {
+        for dir in &dirs {
+            for file in [name.to_string(), format!("{name}.exe")] {
+                let candidate = dir.join(&file);
+                if candidate.is_file() {
+                    return Some(candidate);
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Names of files in `dir` whose extension is `ext`, mapped through `map` on the
@@ -102,8 +142,8 @@ pub fn audio_status(app: AppHandle) -> AudioStatus {
         })
         .unwrap_or_default();
     AudioStatus {
-        piper_installed: binary_on_path("piper"),
-        whisper_installed: binary_on_path("whisper-cli"),
+        piper_installed: resolve_binary(PIPER_BINS).is_some(),
+        whisper_installed: resolve_binary(WHISPER_BINS).is_some(),
         voices,
         stt_models,
     }
@@ -142,11 +182,12 @@ pub async fn tts_synthesize(
             "Piper voice `{voice}` isn't installed. Add it from the Audio settings."
         ));
     }
+    let piper = resolve_binary(PIPER_BINS).ok_or_else(piper_not_installed)?;
 
     // `--output_file -` makes Piper write a WAV stream to stdout; text is fed on
     // stdin so it never touches argv (length/charset safe).
     use tokio::io::AsyncWriteExt;
-    let mut child = match tokio::process::Command::new("piper")
+    let mut child = match tokio::process::Command::new(&piper)
         .arg("--model")
         .arg(&model)
         .arg("--output_file")
@@ -205,6 +246,7 @@ pub async fn stt_transcribe(
             "whisper.cpp model `{model}` isn't installed. Add it from the Audio settings."
         ));
     }
+    let whisper = resolve_binary(WHISPER_BINS).ok_or_else(whisper_not_installed)?;
 
     // whisper-cli reads a file, so persist the clip to a unique temp path. Use
     // the process id to avoid collisions; clean up on the way out.
@@ -217,7 +259,7 @@ pub async fn stt_transcribe(
         language.trim().to_string()
     };
     // `-nt` = no timestamps, `-otxt` writes `<tmp>.txt`; `-l` sets the language.
-    let result = tokio::process::Command::new("whisper-cli")
+    let result = tokio::process::Command::new(&whisper)
         .arg("-m")
         .arg(&model_path)
         .arg("-f")
