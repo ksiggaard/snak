@@ -354,10 +354,16 @@ export function validateSteps(
 // Plan parsing
 // ---------------------------------------------------------------------------
 
+/** Hard cap on plan size — guards against a runaway plan firing dozens of
+ *  paid model calls. Oversized plans are truncated to this many steps with a
+ *  warning. */
+export const MAX_PLAN_STEPS = 20;
+
 /**
  * Parse the plan from the planner's output and validate all model references
  * against the configured models list. Returns the corrected plan with warnings
- * about any fixed hallucinations.
+ * about any fixed hallucinations. Oversized plans are truncated to
+ * `MAX_PLAN_STEPS`.
  */
 export function parsePlan(
   text: string,
@@ -367,8 +373,18 @@ export function parsePlan(
 ): PlanResult | null {
   const plan = extractPlan(text);
   if (!plan) return null;
-  const { steps, warnings } = validateSteps(plan.steps, models, providerMetas, keyedProviders);
-  return { plan: { ...plan, steps }, warnings };
+
+  const capWarnings: string[] = [];
+  let rawSteps = plan.steps;
+  if (rawSteps.length > MAX_PLAN_STEPS) {
+    capWarnings.push(
+      `Plan had ${rawSteps.length} steps; truncated to the first ${MAX_PLAN_STEPS}.`,
+    );
+    rawSteps = rawSteps.slice(0, MAX_PLAN_STEPS);
+  }
+
+  const { steps, warnings } = validateSteps(rawSteps, models, providerMetas, keyedProviders);
+  return { plan: { ...plan, steps }, warnings: [...capWarnings, ...warnings] };
 }
 
 /** Extract the raw plan JSON (without validation). */
@@ -414,7 +430,11 @@ function tryParsePlan(raw: string): Plan | null {
             provider: s.provider as Provider,
             model: s.model,
             prompt: s.prompt,
-            depends_on: s.depends_on,
+            // Keep only string ids — the planner occasionally emits stray
+            // non-string entries which would corrupt the dependency graph.
+            depends_on: (s.depends_on as unknown[]).filter(
+              (d): d is string => typeof d === "string",
+            ),
           });
         }
       }
@@ -468,14 +488,25 @@ export function stripPlanJsonFence(content: string): string {
 // Variable substitution
 // ---------------------------------------------------------------------------
 
-/** Replace {step_N} placeholders in a prompt with the actual step results. */
+/** Replace {step_id} placeholders in a prompt with the actual step results.
+ *  Step ids may contain word characters and hyphens. Returns the resolved
+ *  prompt plus the ids of any placeholder that had no result yet, so the caller
+ *  can warn about an unresolved dependency instead of silently shipping a
+ *  literal `{id}` to the model. */
 export function resolveStepVariables(
   prompt: string,
   results: Map<string, string>,
-): string {
-  return prompt.replace(/\{(\w+)\}/g, (_, id) => {
-    return results.get(id) ?? `{${id}}`;
+): { prompt: string; missing: string[] } {
+  const missing: string[] = [];
+  const resolved = prompt.replace(/\{([\w-]+)\}/g, (_, id) => {
+    const value = results.get(id);
+    if (value === undefined) {
+      missing.push(id);
+      return `{${id}}`;
+    }
+    return value;
   });
+  return { prompt: resolved, missing };
 }
 
 // ---------------------------------------------------------------------------
@@ -526,25 +557,51 @@ export function topologicalSort(steps: PlanStep[]): PlanStep[][] {
 
 /**
  * Execute a plan by dispatching each step to its specified model. Steps in the
- * same dependency wave run in parallel via Promise.all. Results are collected
- * and returned, with later-step prompts having their placeholders resolved.
+ * same dependency wave run in parallel; later waves see earlier waves' results
+ * substituted into their prompts.
  *
  * `runStep` is a callback that calls chatStream for a given step; it receives
  * the resolved prompt (with placeholders filled) and must return a StepResult.
+ *
+ * Robustness: a step whose callback throws is isolated — it resolves to empty
+ * content so its siblings and the synthesis step still run (one provider error
+ * must not sink the whole plan). Steps the dependency sort could not place
+ * (dangling or cyclic `depends_on`) are run last, and their ids are returned in
+ * `dropped` so the caller can surface a warning rather than losing them
+ * silently.
  */
 export async function executePlan(
   plan: Plan,
   runStep: (step: PlanStep, resolvedPrompt: string) => Promise<StepResult>,
-): Promise<StepResult[]> {
+): Promise<{ results: StepResult[]; dropped: string[] }> {
   const results = new Map<string, string>();
   const allResults: StepResult[] = [];
   const waves = topologicalSort(plan.steps);
 
+  // Steps absent from every wave were caught in a cycle or depend on a
+  // non-existent id. Run them as a final wave so they aren't silently lost.
+  const placed = new Set(waves.flat().map((s) => s.id));
+  const dropped = plan.steps.filter((s) => !placed.has(s.id));
+  if (dropped.length > 0) waves.push(dropped);
+
   for (const wave of waves) {
     const waveResults = await Promise.all(
       wave.map(async (step) => {
-        const resolvedPrompt = resolveStepVariables(step.prompt, results);
-        const r = await runStep(step, resolvedPrompt);
+        const { prompt: resolvedPrompt } = resolveStepVariables(step.prompt, results);
+        let r: StepResult;
+        try {
+          r = await runStep(step, resolvedPrompt);
+        } catch {
+          // Failure isolation: keep the plan alive with an empty result.
+          r = {
+            stepId: step.id,
+            description: step.description,
+            provider: step.provider,
+            model: step.model,
+            content: "",
+            usage: { input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0 },
+          };
+        }
         results.set(step.id, r.content);
         return r;
       }),
@@ -552,7 +609,7 @@ export async function executePlan(
     allResults.push(...waveResults);
   }
 
-  return allResults;
+  return { results: allResults, dropped: dropped.map((s) => s.id) };
 }
 
 // ---------------------------------------------------------------------------
@@ -591,11 +648,18 @@ If the plan is perfect, set "approved": true and "issues": [].
 - Only output ONE JSON code block.`;
 }
 
-/** Build the critic's request message, presenting the original user request and the plan. */
-export function buildCriticRequest(originalRequest: string, plan: Plan): string {
+/** Build the critic's request message, presenting the original user request and
+ *  the plan. `modelsText`, when provided, embeds the available-models list so
+ *  the critic (which has no list_available_models tool) can verify that each
+ *  step references a real provider/model. */
+export function buildCriticRequest(
+  originalRequest: string,
+  plan: Plan,
+  modelsText?: string,
+): string {
   return `## Original User Request
 ${originalRequest}
-
+${modelsText ? `\n${modelsText}\n` : ""}
 ## Proposed Plan
 \`\`\`json
 ${JSON.stringify(plan, null, 2)}

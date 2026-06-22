@@ -46,6 +46,18 @@ describe("buildModelOptions", () => {
     expect(opts.map((o) => o.modelId)).toEqual(["claude-opus-4-8", "claude-sonnet-4-6"]);
   });
 
+  it("carries a model's notes onto the option (undefined when empty)", () => {
+    const withNotes: Model = {
+      ...model(1, "anthropic", "claude-opus-4-8", "Opus 4.8", 0),
+      notes: "great at coding",
+    };
+    const opts = buildModelOptions(providers, new Set(["anthropic"]), [withNotes], null);
+    expect(opts[0].notes).toBe("great at coding");
+    // Empty notes collapse to undefined so the picker omits the description.
+    const empty = buildModelOptions(providers, new Set(["anthropic"]), [models[0]], null);
+    expect(empty[0].notes).toBeUndefined();
+  });
+
   it("prepends the current combo as an inert option when absent", () => {
     const opts = buildModelOptions(
       providers,

@@ -509,6 +509,9 @@ export const en = {
   "planner.criticLabel": "Critic model",
   "planner.criticReset": "Same as planner",
   "planner.criticFallback": "Same as planner model ({model})",
+  "planner.criticRounds": "Critique rounds",
+  "planner.criticRoundsHint":
+    "How many times the critic reviews the plan and the planner revises it. 0 disables review. Single-model routes are never reviewed.",
   "planner.allowedModels": "Allowed models",
   "planner.allowedModelsHint":
     "Select which models the planner may use and tag their capabilities. If no models are toggled on, all models are available.",
@@ -527,6 +530,14 @@ export const en = {
   "planner.pill.stepPending": "Waiting",
   "planner.pill.stepRunning": "Running",
   "planner.pill.stepDone": "Done",
+  "planner.pill.stepError": "Failed",
+
+  // Planner orchestration notes (posted into the thread)
+  "planner.note.stepsFailed": "Some plan steps failed and were skipped: {ids}.",
+  "planner.note.stepsDropped":
+    "Some plan steps had unresolvable dependencies (a possible typo or cycle) and may not have run as intended: {ids}.",
+  "planner.note.noAnswer":
+    "⚠️ The plan ran but the final step produced no answer. Some steps may have failed — see the notes above.",
 
   // --- Settings: context windows (T53) -------------------------------------------
   "contextWindows.title": "Context windows",

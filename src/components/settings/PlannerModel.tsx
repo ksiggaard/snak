@@ -57,6 +57,10 @@ export function PlannerModel() {
   const [config, setConfig] = useState<PlannerModelConfig>({});
   const [configLoaded, setConfigLoaded] = useState(false);
 
+  // Critique rounds (0 disables the critic loop).
+  const [criticRounds, setCriticRounds] = useState(2);
+  const [criticRoundsLoaded, setCriticRoundsLoaded] = useState(false);
+
   useEffect(() => {
     void getSetting("planner_instructions").then((v) => {
       setInstructions(v ?? "");
@@ -77,9 +81,23 @@ export function PlannerModel() {
     });
   }, []);
 
+  useEffect(() => {
+    void getSetting("planner_critic_rounds").then((raw) => {
+      const n = raw ? parseInt(raw, 10) : 2;
+      setCriticRounds(Number.isNaN(n) ? 2 : Math.max(0, Math.min(5, n)));
+      setCriticRoundsLoaded(true);
+    });
+  }, []);
+
   const saveInstructions = (value: string) => {
     setInstructions(value);
     void setSetting("planner_instructions", value);
+  };
+
+  const saveCriticRounds = (value: number) => {
+    const clamped = Math.max(0, Math.min(5, value));
+    setCriticRounds(clamped);
+    void setSetting("planner_critic_rounds", String(clamped));
   };
 
   const saveConfig = (next: PlannerModelConfig) => {
@@ -104,9 +122,7 @@ export function PlannerModel() {
   };
 
   // Count how many distinct providers have API keys (or are keyless).
-  const keyedCount = providers.filter(
-    (p) => isKeylessProvider(p.id),
-  ).length;
+  const keyedCount = providers.filter((p) => hasKey(p.id)).length;
   const hasEnoughModels = keyedCount >= 2;
 
   // All enabled providers count as selectable (not filtered by API key), so the
@@ -199,6 +215,29 @@ export function PlannerModel() {
               {t("planner.criticFallback", { model: criticModelLabel })}
             </p>
           )}
+        </div>
+
+        {/* Critique rounds */}
+        <div className="flex flex-col gap-2">
+          <label htmlFor="planner-critic-rounds" className="text-sm leading-tight">
+            {t("planner.criticRounds")}
+          </label>
+          <select
+            id="planner-critic-rounds"
+            className="border-input bg-background h-9 w-20 rounded-md border px-2 text-sm"
+            value={criticRounds}
+            disabled={!criticRoundsLoaded}
+            onChange={(e) => saveCriticRounds(parseInt(e.target.value, 10))}
+          >
+            {[0, 1, 2, 3, 4, 5].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+          <p className="text-muted-foreground text-xs">
+            {t("planner.criticRoundsHint")}
+          </p>
         </div>
 
         <div className="flex flex-col gap-2">

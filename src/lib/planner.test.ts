@@ -2,13 +2,56 @@ import { describe, expect, it } from "vitest";
 import {
   buildCriticRequest,
   buildCriticSystemPrompt,
+  executePlan,
+  MAX_PLAN_STEPS,
   parseCriticResponse,
   parsePlan,
+  resolveStepVariables,
   scoreModelForStep,
+  topologicalSort,
   validateSteps,
 } from "@/lib/planner";
+import type { Plan, PlanStep, StepResult } from "@/lib/planner";
 import type { ProviderMeta } from "@/lib/providers";
 import type { Model, Provider } from "@/types/db";
+
+const EMPTY_USAGE = {
+  input_tokens: 0,
+  output_tokens: 0,
+  cache_creation_tokens: 0,
+  cache_read_tokens: 0,
+};
+
+/** A minimal plan step for execution/ordering tests. */
+function makeStep(id: string, depends_on: string[] = []): PlanStep {
+  return {
+    id,
+    description: id,
+    provider: "anthropic" as Provider,
+    model: "claude-opus-4-8",
+    prompt: `do ${id}`,
+    depends_on,
+  };
+}
+
+/** A passthrough runStep that records call order and echoes a result. */
+function makeRunner(
+  ran: string[],
+  behavior: (step: PlanStep, resolved: string) => string | never = (s) =>
+    `${s.id}-ok`,
+) {
+  return async (step: PlanStep, resolved: string): Promise<StepResult> => {
+    ran.push(step.id);
+    return {
+      stepId: step.id,
+      description: step.description,
+      provider: step.provider,
+      model: step.model,
+      content: behavior(step, resolved),
+      usage: EMPTY_USAGE,
+    };
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -306,5 +349,161 @@ describe("buildCriticRequest", () => {
     const req = buildCriticRequest("Hello world", plan);
     expect(req).toContain("Hello world");
     expect(req).toContain('"strategy"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveStepVariables
+// ---------------------------------------------------------------------------
+
+describe("resolveStepVariables", () => {
+  it("substitutes a known placeholder", () => {
+    const { prompt, missing } = resolveStepVariables(
+      "use {a} now",
+      new Map([["a", "RESULT"]]),
+    );
+    expect(prompt).toBe("use RESULT now");
+    expect(missing).toEqual([]);
+  });
+
+  it("resolves hyphenated step ids", () => {
+    const { prompt, missing } = resolveStepVariables(
+      "based on {research-a}",
+      new Map([["research-a", "DATA"]]),
+    );
+    expect(prompt).toBe("based on DATA");
+    expect(missing).toEqual([]);
+  });
+
+  it("leaves unknown placeholders intact and reports them as missing", () => {
+    const { prompt, missing } = resolveStepVariables(
+      "use {a} and {b}",
+      new Map([["a", "X"]]),
+    );
+    expect(prompt).toBe("use X and {b}");
+    expect(missing).toEqual(["b"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// topologicalSort
+// ---------------------------------------------------------------------------
+
+describe("topologicalSort", () => {
+  it("groups independent steps into wave 0 and dependents after", () => {
+    const waves = topologicalSort([
+      makeStep("a"),
+      makeStep("b"),
+      makeStep("c", ["a", "b"]),
+    ]);
+    expect(waves[0].map((s) => s.id).sort()).toEqual(["a", "b"]);
+    expect(waves[1].map((s) => s.id)).toEqual(["c"]);
+  });
+
+  it("omits steps caught in a dependency cycle", () => {
+    const waves = topologicalSort([makeStep("a", ["b"]), makeStep("b", ["a"])]);
+    expect(waves.flat()).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// executePlan
+// ---------------------------------------------------------------------------
+
+describe("executePlan", () => {
+  it("runs steps in dependency order, threading results into later prompts", async () => {
+    const plan: Plan = {
+      strategy: "multi_step",
+      reasoning: "",
+      steps: [makeStep("a"), { ...makeStep("b", ["a"]), prompt: "use {a}" }],
+    };
+    const seen: Record<string, string> = {};
+    await executePlan(plan, async (step, resolved) => {
+      seen[step.id] = resolved;
+      return {
+        stepId: step.id,
+        description: step.id,
+        provider: step.provider,
+        model: step.model,
+        content: step.id === "a" ? "AAA" : "",
+        usage: EMPTY_USAGE,
+      };
+    });
+    expect(seen["b"]).toBe("use AAA");
+  });
+
+  it("isolates a failing step so siblings and the synthesis still run", async () => {
+    const plan: Plan = {
+      strategy: "multi_step",
+      reasoning: "",
+      steps: [makeStep("a"), makeStep("b"), makeStep("synth", ["a", "b"])],
+    };
+    const ran: string[] = [];
+    const { results } = await executePlan(
+      plan,
+      makeRunner(ran, (s) => {
+        if (s.id === "a") throw new Error("boom");
+        return `${s.id}-ok`;
+      }),
+    );
+    expect(ran).toContain("b");
+    expect(ran).toContain("synth");
+    expect(results.find((r) => r.stepId === "synth")?.content).toBe("synth-ok");
+    // The failed step resolves to empty content, not a thrown rejection.
+    expect(results.find((r) => r.stepId === "a")?.content).toBe("");
+  });
+
+  it("runs steps with dangling dependencies anyway and reports them as dropped", async () => {
+    const plan: Plan = {
+      strategy: "multi_step",
+      reasoning: "",
+      steps: [makeStep("a"), makeStep("b", ["ghost"])],
+    };
+    const ran: string[] = [];
+    const { dropped } = await executePlan(plan, makeRunner(ran));
+    expect(dropped).toContain("b");
+    expect(ran).toContain("b");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parsePlan — robustness guards
+// ---------------------------------------------------------------------------
+
+describe("parsePlan robustness", () => {
+  it("filters non-string entries out of depends_on", () => {
+    const planJson = `\`\`\`json
+{
+  "strategy": "multi_step",
+  "reasoning": "",
+  "steps": [
+    { "id": "a", "description": "x", "provider": "anthropic", "model": "claude-opus-4-8", "prompt": "p", "depends_on": [] },
+    { "id": "b", "description": "y", "provider": "anthropic", "model": "claude-opus-4-8", "prompt": "q", "depends_on": ["a", 5, null] }
+  ]
+}
+\`\`\``;
+    const result = parsePlan(planJson, allModels, providers, keyedProviders);
+    expect(result).not.toBeNull();
+    const b = result!.plan.steps.find((s) => s.id === "b");
+    expect(b?.depends_on).toEqual(["a"]);
+  });
+
+  it("caps oversized plans at MAX_PLAN_STEPS with a warning", () => {
+    const steps = Array.from({ length: MAX_PLAN_STEPS + 5 }, (_, i) => ({
+      id: `s${i}`,
+      description: "x",
+      provider: "anthropic",
+      model: "claude-opus-4-8",
+      prompt: "p",
+      depends_on: [],
+    }));
+    const planJson =
+      "```json\n" +
+      JSON.stringify({ strategy: "multi_step", reasoning: "", steps }) +
+      "\n```";
+    const result = parsePlan(planJson, allModels, providers, keyedProviders);
+    expect(result).not.toBeNull();
+    expect(result!.plan.steps).toHaveLength(MAX_PLAN_STEPS);
+    expect(result!.warnings.some((w) => /step/i.test(w))).toBe(true);
   });
 });

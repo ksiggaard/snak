@@ -78,10 +78,10 @@ import {
   buildCriticRequest,
   parsePlan,
   parseCriticResponse,
-  resolveStepVariables,
+  executePlan,
   stripPlanJsonFence,
-  topologicalSort,
   type PlanStep,
+  type StepResult,
   buildPlannerModels,
   type PlannerModelConfig,
 } from "@/lib/planner";
@@ -117,7 +117,7 @@ export interface StepProgress {
   description: string;
   provider: Provider;
   model: string;
-  status: "pending" | "running" | "done";
+  status: "pending" | "running" | "done" | "error";
 }
 
 export interface PlannerProgress {
@@ -691,8 +691,11 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       getSetting(CRITIC_PROVIDER_KEY),
       getSetting(CRITIC_MODEL_KEY),
     ]);
-    const criticProvider = (cp as Provider | null) ?? null;
-    const criticModel = cm ?? null;
+    // `setCriticModel(null, null)` persists "" for both keys (setSetting takes a
+    // string), so treat empty strings — not just null — as "unset" here, or the
+    // invalid provider id "" leaks into the picker and the critic resolution.
+    const criticProvider = cp ? (cp as Provider) : null;
+    const criticModel = cm ? cm : null;
     set({
       defaultProvider: def.provider,
       defaultModel: def.model,
@@ -1247,6 +1250,29 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         // like Ollama) — the planner can't delegate to unkeyed providers.
         const keyedModels = allModels.filter((m) => keyedProviders.has(m.provider));
         const plannerModelsList = buildPlannerModels(keyedModels, config);
+        // Compact text snapshot of the available models, embedded into the
+        // critic + revision prompts so those calls (which don't expose the
+        // list_available_models tool) can still verify provider/model validity.
+        const modelsText =
+          plannerModelsList.length > 0
+            ? "## Available Models\n" +
+              plannerModelsList
+                .map((m) => {
+                  const caps =
+                    m.capabilities && m.capabilities.length > 0
+                      ? ` [${m.capabilities.join(", ")}]`
+                      : "";
+                  return `- provider: "${m.provider}", model: "${m.model_id}" — ${m.label}${caps}`;
+                })
+                .join("\n")
+            : "";
+        // Critique rounds: how many critique/revise passes to run (0 disables
+        // the loop). Capped at 5; defaults to 2.
+        const criticRoundsRaw = await getSetting("planner_critic_rounds");
+        const criticRounds = (() => {
+          const n = criticRoundsRaw ? parseInt(criticRoundsRaw, 10) : 2;
+          return Number.isNaN(n) ? 2 : Math.max(0, Math.min(5, n));
+        })();
         const plannerResult = await chatStream(
           plannerProvider,
           plannerModel,
@@ -1446,8 +1472,9 @@ export const useThreads = create<ThreadsState>((set, get) => ({
               if (get().currentThreadId === tid) set({ messages: msgs });
             }
 
-            // Critique loop — up to 5 rounds; the 5th is the final plan.
-            const MAX_ROUNDS = 5;
+            // Critique loop — `criticRounds` passes (0 disables it). Skipped
+            // entirely for "route" (a single delegation isn't worth a review).
+            const MAX_ROUNDS = plan!.strategy === "route" ? 0 : criticRounds;
             let round: number;
             const { criticProvider: cProvider, criticModel: cModel } = get();
             const criticProvider = (cProvider ?? plannerProvider) as Provider;
@@ -1466,7 +1493,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
 
               const criticMessages: ApiMessage[] = [
                 { role: "system", content: buildCriticSystemPrompt(), images: [] },
-                { role: "user", content: buildCriticRequest(content, plan!), images: [] },
+                { role: "user", content: buildCriticRequest(content, plan!, modelsText), images: [] },
               ];
               const criticResult = await writeReply(criticProvider, criticModel, criticMessages, { persist: false });
               const criticVerdict = parseCriticResponse(criticResult.content);
@@ -1498,7 +1525,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                   hasRenderer(selectRegistry(usePlugins.getState()), "youtube"),
                 ),
                 { role: "assistant", content: `Previous plan:\n\`\`\`json\n${JSON.stringify(plan)}\n\`\`\``, images: [] },
-                { role: "user", content: `Critique:\n${issues}\n\nPlease revise the plan to address these issues. Only use model IDs exactly as listed in the available models.`, images: [] },
+                { role: "user", content: `Critique:\n${issues}\n\n${modelsText ? modelsText + "\n\n" : ""}Please revise the plan to address these issues. Only use provider and model IDs exactly as listed in the available models above.`, images: [] },
               ];
               const revisedResult = await writeReply(plannerProvider, plannerModel, replanHistory, { persist: false });
               const revisedParse = parsePlan(revisedResult.content, allModels, PROVIDERS, keyedProviders);
@@ -1536,16 +1563,21 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                 },
               }));
 
-              // Execute steps in dependency waves via Promise.all (cloud models
-              // run unrestricted; local/Ollama steps serialize through a gate).
-              const stepResults = new Map<string, string>();
+              // Cloud models run in parallel within a wave; local/Ollama steps
+              // serialize through a gate to avoid overloading the host.
               const gate = createGate();
+              const emptyUsage = { input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0 };
+              // The last plan step is the synthesis: its output is the final
+              // answer and the only step persisted as a chat message.
+              const synthesisId = plan!.steps[plan!.steps.length - 1]?.id;
+              const failed: string[] = [];
+              let synthesisPersisted = false;
 
-              const runStep = async (step: PlanStep, resolvedPrompt: string) => {
-                if (get().cancelling)
-                  return { stepId: step.id, description: step.description, provider: step.provider, model: step.model, content: "", usage: { input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0 } };
-
-                // Mark step as running.
+              const setStepStatus = (
+                stepId: string,
+                status: StepProgress["status"],
+                phase?: PlannerProgress["phase"],
+              ) =>
                 set((s) => {
                   const pp = s.threadPlannerProgress[tid];
                   if (!pp) return {};
@@ -1554,133 +1586,112 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                       ...s.threadPlannerProgress,
                       [tid]: {
                         ...pp,
-                        phase: "executing" as const,
+                        ...(phase ? { phase } : {}),
                         steps: pp.steps.map((sp) =>
-                          sp.id === step.id ? { ...sp, status: "running" as const } : sp,
+                          sp.id === stepId ? { ...sp, status } : sp,
                         ),
                       },
                     },
                   };
                 });
 
-                // No streaming bubble for steps — the planner progress strip
-                // already shows live status. Content surfaces after DB reload.
-                const noopOnDelta = (_event: StreamEvent) => {};
+              const runStep = async (
+                step: PlanStep,
+                resolvedPrompt: string,
+              ): Promise<StepResult> => {
+                if (get().cancelling) {
+                  return { stepId: step.id, description: step.description, provider: step.provider, model: step.model, content: "", usage: emptyUsage };
+                }
+                // The synthesis step shows the "Finalising answer" phase; the
+                // workers show "Running steps".
+                setStepStatus(step.id, "running", step.id === synthesisId ? "completing" : "executing");
 
                 const stepStarted = Date.now();
-                const stepResult = await gate(
-                  isKeylessProvider(step.provider),
-                  () =>
+                try {
+                  // No streaming bubble for steps — the progress strip shows
+                  // live status; the synthesis answer surfaces after DB reload.
+                  const stepResult = await gate(isKeylessProvider(step.provider), () =>
                     chatStream(
                       step.provider,
                       step.model,
                       [{ role: "user", content: resolvedPrompt, images: [] }],
-                      noopOnDelta,
+                      () => {},
                       tid,
                       false,
                     ),
-                );
+                  );
 
-                // Collect step output in memory for variable substitution
-                // (resolveStepVariables reads this map). Only the synthesis
-                // step (last in the plan) is persisted to the DB so it
-                // appears as the final answer in the chat.
-                stepResults.set(step.id, stepResult.content);
+                  // Only the synthesis step (the final answer) is persisted; the
+                  // worker outputs are intentionally ephemeral.
+                  if (step.id === synthesisId && stepResult.content.length > 0) {
+                    const stepMsg = await addMessage({
+                      thread_id: tid,
+                      role: "assistant",
+                      content: stepResult.content,
+                      duration_ms: Math.round(Date.now() - stepStarted),
+                      provider: step.provider,
+                      model: step.model,
+                    });
+                    synthesisPersisted = true;
+                    const su = stepResult.usage;
+                    if (
+                      su &&
+                      (su.input_tokens > 0 ||
+                        su.output_tokens > 0 ||
+                        su.cache_creation_tokens > 0 ||
+                        su.cache_read_tokens > 0)
+                    ) {
+                      await addUsage({
+                        message_id: stepMsg.id,
+                        thread_id: tid,
+                        provider: step.provider,
+                        model: stepResult.model || step.model,
+                        input_tokens: su.input_tokens,
+                        output_tokens: su.output_tokens,
+                        cache_creation_tokens: su.cache_creation_tokens,
+                        cache_read_tokens: su.cache_read_tokens,
+                      });
+                    }
+                  }
 
-                const isSynthesis = plan!.steps[plan!.steps.length - 1].id === step.id;
-
-                if (isSynthesis && stepResult.content.length > 0) {
-                  const stepMsg = await addMessage({
-                    thread_id: tid,
-                    role: "assistant",
-                    content: stepResult.content,
-                    duration_ms: Math.round(Date.now() - stepStarted),
+                  setStepStatus(step.id, "done");
+                  return {
+                    stepId: step.id,
+                    description: step.description,
                     provider: step.provider,
                     model: step.model,
-                  });
-                  // No planner_step attachment — the synthesis renders as a
-                  // normal chat bubble (the final answer), not a StepCard.
-                  const su = stepResult.usage;
-                  if (
-                    su &&
-                    (su.input_tokens > 0 ||
-                      su.output_tokens > 0 ||
-                      su.cache_creation_tokens > 0 ||
-                      su.cache_read_tokens > 0)
-                  ) {
-                    await addUsage({
-                      message_id: stepMsg.id,
-                      thread_id: tid,
-                      provider: step.provider,
-                      model: stepResult.model || step.model,
-                      input_tokens: su.input_tokens,
-                      output_tokens: su.output_tokens,
-                      cache_creation_tokens: su.cache_creation_tokens,
-                      cache_read_tokens: su.cache_read_tokens,
-                    });
-                  }
-                }
-
-                // Mark step as done.
-                set((s) => {
-                  const pp = s.threadPlannerProgress[tid];
-                  if (!pp) return {};
-                  return {
-                    threadPlannerProgress: {
-                      ...s.threadPlannerProgress,
-                      [tid]: {
-                        ...pp,
-                        steps: pp.steps.map((sp) =>
-                          sp.id === step.id ? { ...sp, status: "done" as const } : sp,
-                        ),
-                      },
-                    },
+                    content: stepResult.content,
+                    usage: stepResult.usage ?? emptyUsage,
                   };
-                });
-
-                return {
-                  stepId: step.id,
-                  description: step.description,
-                  provider: step.provider,
-                  model: step.model,
-                  content: stepResult.content,
-                  usage: stepResult.usage ?? { input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0 },
-                };
+                } catch {
+                  // Failure isolation: one step failing must not sink the plan.
+                  failed.push(step.id);
+                  setStepStatus(step.id, "error");
+                  return { stepId: step.id, description: step.description, provider: step.provider, model: step.model, content: "", usage: emptyUsage };
+                }
               };
 
-              // Run waves. The last wave gets the "completing" phase and races:
-              // when its first step (presumed synthesis) finishes, the remaining
-              // in-flight workers are aborted so they don't waste tokens.
-              const waves = topologicalSort(plan!.steps);
-              for (let wi = 0; wi < waves.length; wi++) {
-                if (get().cancelling) break;
+              // Execute the plan: dependency waves run in parallel, each step's
+              // failure is isolated, and steps the sort couldn't place (dangling
+              // or cyclic depends_on) run last and are reported as `dropped`.
+              const { dropped } = await executePlan(plan!, runStep);
 
-                if (wi === waves.length - 1) {
-                  set((s) => {
-                    const pp = s.threadPlannerProgress[tid];
-                    if (!pp) return {};
-                    return {
-                      threadPlannerProgress: {
-                        ...s.threadPlannerProgress,
-                        [tid]: { ...pp, phase: "completing" },
-                      },
-                    };
-                  });
-                  const promises = waves[wi].map((step) =>
-                    runStep(step, resolveStepVariables(step.prompt, stepResults)),
-                  );
-                  await Promise.race(promises);
-                  // Abort any remaining in-flight workers.
-                  await cancelStream();
-                  // Let aborted steps settle (they resolve with partial/empty content).
-                  await Promise.allSettled(promises);
-                } else {
-                  await Promise.all(
-                    waves[wi].map((step) =>
-                      runStep(step, resolveStepVariables(step.prompt, stepResults)),
-                    ),
-                  );
-                }
+              if (failed.length > 0) {
+                await get().postNote(t("planner.note.stepsFailed", { ids: failed.join(", ") }));
+              }
+              if (dropped.length > 0) {
+                await get().postNote(t("planner.note.stepsDropped", { ids: dropped.join(", ") }));
+              }
+              // Guarantee a final answer: if the synthesis produced nothing,
+              // persist a clear message so the turn is never left blank.
+              if (!synthesisPersisted && !get().cancelling) {
+                await addMessage({
+                  thread_id: tid,
+                  role: "assistant",
+                  content: t("planner.note.noAnswer"),
+                  provider: plannerProvider,
+                  model: plannerModel,
+                });
               }
             }
           } else if (plan?.strategy === "direct") {
@@ -1789,7 +1800,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           ...(groupBlock ? [groupBlock] : []),
           ...shared.tail,
           ...compactHistory(
-            rows.filter((m) => !m.step),
+            rows,
             group,
             hasRenderer(selectRegistry(usePlugins.getState()), "youtube"),
           ),
@@ -2170,7 +2181,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         ...(groupBlock ? [groupBlock] : []),
         ...shared.tail,
         ...compactHistory(
-          priorRows.filter((m) => !m.step),
+          priorRows,
           group,
           hasRenderer(selectRegistry(usePlugins.getState()), "youtube"),
         ),
@@ -2462,7 +2473,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         ...(groupBlock ? [groupBlock] : []),
         ...shared.tail,
         ...compactHistory(
-          includedRows.filter((m) => !m.step),
+          includedRows,
           group,
           hasRenderer(selectRegistry(usePlugins.getState()), "youtube"),
         ),

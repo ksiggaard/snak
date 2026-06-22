@@ -34,7 +34,6 @@ import { ArtifactCard } from "@/components/chat/ArtifactCard";
 import { ArtifactContext } from "@/components/chat/artifactContext";
 import { ModelBadge } from "@/components/chat/ModelBadge";
 import { PlanPanel } from "@/components/chat/PlanPanel";
-import { StepCard } from "@/components/chat/StepCard";
 import { parseArtifact } from "@/lib/artifacts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -768,11 +767,6 @@ const ChatMessage = memo(function ChatMessage({
   // the final synthesis answer.
   if (m.plan) return null;
 
-  // Planner sub-messages (legacy worker steps with a planner_step attachment)
-  // get a collapsed StepCard instead of a full chat bubble. New synthesis
-  // messages don't carry a planner_step attachment, so they render normally.
-  const isStepMessage = m.role === "assistant" && m.provider && !m.plan && m.step !== undefined;
-
   const imageGrid = realImages.length > 0 && (
     <div className="flex flex-wrap gap-2">
       {realImages.map((img, i) => {
@@ -958,21 +952,6 @@ const ChatMessage = memo(function ChatMessage({
       {botName}
     </span>
   );
-
-  // Planner sub-messages get a collapsed StepCard instead of a full bubble.
-  if (isStepMessage) {
-    return (
-      <div className="mx-auto w-full scroll-mt-4" ref={containerRef} style={{ maxWidth }}>
-        <StepCard
-          stepId={m.step?.step_id}
-          description={m.step?.description}
-          provider={m.provider!}
-          model={m.model ?? ""}
-          content={m.content}
-        />
-      </div>
-    );
-  }
 
   if (chatStyle === "compact") {
     // Dense IRC-like row: a fixed-width role gutter, then the text. Markdown

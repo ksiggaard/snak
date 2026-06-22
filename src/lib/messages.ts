@@ -105,8 +105,6 @@ export interface MessageView extends Message {
   variantIds?: string[];
   /** Planner-orchestrated plan for this message (parsed from a `plan` attachment). */
   plan?: Plan;
-  /** Planner step metadata (parsed from a `planner_step` attachment). */
-  step?: { step_id: string; description: string } | null;
 }
 
 /**
@@ -398,12 +396,6 @@ export async function loadThreadMessages(
       if (planRaw) {
         try { plan = JSON.parse(planRaw) as Plan; } catch { /* ignore */ }
       }
-      // Planner step metadata (JSON): step_id + description for worker steps.
-      const stepRaw = attachments.find((a) => a.kind === "planner_step")?.data;
-      let step: { step_id: string; description: string } | undefined;
-      if (stepRaw) {
-        try { step = JSON.parse(stepRaw); } catch { /* ignore */ }
-      }
       return {
         ...m,
         images,
@@ -413,7 +405,6 @@ export async function loadThreadMessages(
         reasoning: reasoning || undefined,
         apiTrace,
         plan,
-        step,
         ...variants,
       };
     }),

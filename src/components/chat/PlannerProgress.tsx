@@ -1,4 +1,4 @@
-import { Brain, Check, Circle, Loader2 } from "lucide-react";
+import { Brain, Check, Circle, Loader2, X } from "lucide-react";
 import { useThreads, type StepProgress } from "@/store/threads";
 import { useModels } from "@/store/models";
 import { useProviders } from "@/lib/providers";
@@ -16,12 +16,14 @@ function StepPill({ step }: { step: StepProgress }) {
     pending: <Circle className="size-3 opacity-40" />,
     running: <Loader2 className="size-3 animate-spin" />,
     done: <Check className="size-3 text-emerald-500" />,
+    error: <X className="text-destructive size-3" />,
   }[step.status];
 
   const statusLabel = {
     pending: t("planner.pill.stepPending"),
     running: t("planner.pill.stepRunning"),
     done: t("planner.pill.stepDone"),
+    error: t("planner.pill.stepError"),
   }[step.status];
 
   return (
@@ -29,6 +31,7 @@ function StepPill({ step }: { step: StepProgress }) {
       className={cn(
         "bg-muted text-muted-foreground flex items-center gap-1 rounded-full px-2.5 py-1 text-xs transition-all duration-300",
         step.status === "running" && "bg-accent text-accent-foreground",
+        step.status === "error" && "bg-destructive/15 text-destructive",
         step.status === "done" && "opacity-0",
       )}
       title={`${step.description} · ${label} — ${statusLabel}`}

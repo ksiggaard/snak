@@ -161,7 +161,7 @@ beforeEach(() => {
   });
   vi.mocked(createThread).mockImplementation(async (input) => ({
     id: "t_new",
-    title: input.title,
+    title: input.title ?? "",
     provider: input.provider,
     model: input.model,
     workspace_id: (input as any).workspace_id ?? null,

@@ -18,7 +18,7 @@ vi.mock("@/lib/db", () => ({
 }));
 
 import { useThreads } from "@/store/threads";
-import { setSetting } from "@/lib/db";
+import { getSetting, setSetting } from "@/lib/db";
 import { PROVIDERS } from "@/lib/providers";
 
 beforeEach(() => {
@@ -74,5 +74,20 @@ describe("default model in threads store", () => {
     // currentThreadId is null (a draft), so the live draft updates too.
     expect(s.draftProvider).toBe("mistral");
     expect(s.draftModel).toBe("mistral-large-latest");
+  });
+});
+
+describe("critic model in threads store", () => {
+  it("init() normalizes a reset critic (empty-string settings) back to null", async () => {
+    // setCriticModel(null, null) persists "" for both keys; init() must read
+    // those empty strings back as null so the critic falls back to the planner
+    // model instead of leaking an invalid provider id (`""`).
+    vi.mocked(getSetting).mockImplementation(async (key: string) =>
+      key === "critic_provider" || key === "critic_model" ? "" : null,
+    );
+    await useThreads.getState().init();
+    const s = useThreads.getState();
+    expect(s.criticProvider).toBeNull();
+    expect(s.criticModel).toBeNull();
   });
 });

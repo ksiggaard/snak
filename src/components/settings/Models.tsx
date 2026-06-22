@@ -30,6 +30,10 @@ export function Models() {
   // Per-provider draft inputs for the add row, keyed by provider id.
   const [labelDraft, setLabelDraft] = useState<Record<string, string>>({});
   const [idDraft, setIdDraft] = useState<Record<string, string>>({});
+  // Per-model notes draft, keyed by model id. Edits stay local while typing and
+  // persist on blur — avoids a DB write + full reload (and a cursor jump from
+  // the controlled value resetting) on every keystroke.
+  const [notesDraft, setNotesDraft] = useState<Record<number, string>>({});
 
   function submit(provider: Provider) {
     const label = (labelDraft[provider] ?? "").trim();
@@ -79,8 +83,21 @@ export function Models() {
                     </Button>
                   </div>
                   <Input
-                    value={m.notes}
-                    onChange={(e) => void updateNotes(m.id, e.target.value)}
+                    value={notesDraft[m.id] ?? m.notes}
+                    onChange={(e) =>
+                      setNotesDraft((d) => ({ ...d, [m.id]: e.target.value }))
+                    }
+                    onBlur={() => {
+                      const draft = notesDraft[m.id];
+                      if (draft !== undefined && draft !== m.notes) {
+                        void updateNotes(m.id, draft);
+                      }
+                      setNotesDraft((d) => {
+                        const next = { ...d };
+                        delete next[m.id];
+                        return next;
+                      });
+                    }}
                     placeholder={t("models.notesPlaceholder")}
                     className="h-7 text-xs"
                   />

@@ -1543,7 +1543,7 @@ async function searchHistoryLike(
 export async function listModels(): Promise<Model[]> {
   const db = await getDb();
   return db.select<Model[]>(
-    `SELECT id, provider, model_id, label, sort_order
+    `SELECT id, provider, model_id, label, sort_order, notes
        FROM models
       ORDER BY provider, sort_order, label`,
   );
