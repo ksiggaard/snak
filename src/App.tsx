@@ -19,6 +19,7 @@ import { Sidebar } from "@/components/sidebar/Sidebar";
 import { SidebarRail } from "@/components/sidebar/SidebarRail";
 import { SidebarPane } from "@/components/sidebar/SidebarPane";
 import { TitleBar } from "@/components/TitleBar";
+import { WindowResizeHandles } from "@/components/WindowResizeHandles";
 import { MenuBar } from "@/components/MenuBar";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ImageLightbox } from "@/components/ImageLightbox";
@@ -274,6 +275,9 @@ function App() {
   return (
     <TooltipProvider delayDuration={300}>
       <div className="bg-background text-foreground flex h-screen flex-col">
+        {/* Custom resize handles — only needed when we draw our own (decoration-
+            less) title bar; native mode lets the OS own window resize. */}
+        {titleBarMode === "custom" && <WindowResizeHandles />}
         <TitleBar />
         {menuBarMode === "inline" && <MenuBar />}
         <ConfirmDialog />
