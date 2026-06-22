@@ -13,6 +13,7 @@ import {
   PLUGIN_CATEGORIES,
   type PluginCategory,
   type PluginContribution,
+  type AudioContribution,
   type PluginInfo,
   type PluginManifest,
   type ProviderContribution,
@@ -99,6 +100,7 @@ export interface HostRegistry {
   skills: SkillContribution[];
   slashCommands: SlashCommandContribution[];
   renderers: RendererContribution[];
+  audio: AudioContribution[];
 }
 
 /** Build the registry from a plugin list (only `enabled` plugins contribute). */
@@ -109,6 +111,7 @@ export function buildRegistry(plugins: PluginInfo[]): HostRegistry {
     skills: [],
     slashCommands: [],
     renderers: [],
+    audio: [],
   };
   for (const p of plugins) {
     if (!p.enabled || !p.manifest.contributes) continue;
@@ -129,6 +132,9 @@ export function buildRegistry(plugins: PluginInfo[]): HostRegistry {
       case "renderer":
         reg.renderers.push(c as RendererContribution);
         break;
+      case "audio":
+        reg.audio.push(c as AudioContribution);
+        break;
     }
   }
   return reg;
@@ -140,4 +146,10 @@ export function buildRegistry(plugins: PluginInfo[]): HostRegistry {
 export function hasRenderer(reg: HostRegistry, language: string): boolean {
   const lang = language.toLowerCase();
   return reg.renderers.some((r) => r.language.toLowerCase() === lang);
+}
+
+/** True when the `audio` plugin (TTS/STT) is enabled. The gate the composer mic
+ * button and the per-reply speak button read to decide whether to render. */
+export function audioEnabled(reg: HostRegistry): boolean {
+  return reg.audio.length > 0;
 }

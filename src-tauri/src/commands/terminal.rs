@@ -85,32 +85,142 @@ pub fn open_in_terminal(command: String) -> Result<(), String> {
     launch_terminal(&command)
 }
 
+/// How an emulator takes "run this program with these args" on its command line.
+/// Most use `-e prog args…`; GNOME-family use `-- prog args…`; a few run a bare
+/// `prog args…`; wezterm needs `start -- prog args…`.
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy)]
+enum ExecStyle {
+    Dashe,
+    DashDash,
+    Bare,
+    WeztermStart,
+}
+
+#[cfg(target_os = "linux")]
+impl ExecStyle {
+    fn prefix(self) -> &'static [&'static str] {
+        match self {
+            ExecStyle::Dashe => &["-e"],
+            ExecStyle::DashDash => &["--"],
+            ExecStyle::Bare => &[],
+            ExecStyle::WeztermStart => &["start", "--"],
+        }
+    }
+}
+
+/// Known emulators and their exec style. The user's configured terminal (below)
+/// is matched against this table to pick the right flag; an unknown one defaults
+/// to `-e` (the most common convention).
+#[cfg(target_os = "linux")]
+const KNOWN_TERMINALS: &[(&str, ExecStyle)] = &[
+    ("konsole", ExecStyle::Dashe),
+    ("ghostty", ExecStyle::Dashe),
+    ("alacritty", ExecStyle::Dashe),
+    ("foot", ExecStyle::Dashe),
+    ("kitty", ExecStyle::Bare),
+    ("wezterm", ExecStyle::WeztermStart),
+    ("gnome-terminal", ExecStyle::DashDash),
+    ("kgx", ExecStyle::DashDash), // GNOME Console
+    ("xfce4-terminal", ExecStyle::Dashe),
+    ("x-terminal-emulator", ExecStyle::Dashe),
+    ("xterm", ExecStyle::Dashe),
+];
+
+/// The exec style for `program` (basename), or `-e` if we don't recognize it.
+#[cfg(target_os = "linux")]
+fn exec_style_for(program: &str) -> ExecStyle {
+    KNOWN_TERMINALS
+        .iter()
+        .find(|(name, _)| *name == program)
+        .map(|(_, style)| *style)
+        .unwrap_or(ExecStyle::Dashe)
+}
+
+/// Reduce a configured terminal value to its binary name: take the first
+/// whitespace-separated token (dropping any flags the desktop stored, e.g.
+/// `ghostty --gtk-single-instance=true`) and strip the directory.
+#[cfg(target_os = "linux")]
+fn terminal_binary(value: &str) -> Option<String> {
+    let first = value.split_whitespace().next()?;
+    let base = first.rsplit('/').next()?.trim();
+    if base.is_empty() {
+        None
+    } else {
+        Some(base.to_string())
+    }
+}
+
+/// The user's preferred terminal(s), most-preferred first: the `$TERMINAL` env
+/// var, then the KDE-configured `TerminalApplication` (read via kreadconfig).
+/// There is no portable cross-desktop "default terminal" API, so we consult the
+/// few sources that exist and otherwise fall back to the known list.
+#[cfg(target_os = "linux")]
+fn preferred_terminals() -> Vec<String> {
+    let mut out = Vec::new();
+    if let Some(t) = std::env::var("TERMINAL")
+        .ok()
+        .and_then(|v| terminal_binary(&v))
+    {
+        out.push(t);
+    }
+    for bin in ["kreadconfig6", "kreadconfig5"] {
+        if let Ok(o) = std::process::Command::new(bin)
+            .args(["--group", "General", "--key", "TerminalApplication"])
+            .output()
+        {
+            if o.status.success() {
+                if let Some(t) = terminal_binary(&String::from_utf8_lossy(&o.stdout)) {
+                    out.push(t);
+                    break;
+                }
+            }
+        }
+    }
+    out
+}
+
 #[cfg(target_os = "linux")]
 fn launch_terminal(command: &str) -> Result<(), String> {
     let rcfile = write_rcfile()?;
-    // Konsole on KDE. `-e bash --rcfile <rc> -i` starts an interactive shell
-    // that stages (does not run) the command. The command is passed only via
-    // the env var, never on the argv / shell line.
-    let try_spawn = |program: &str| -> std::io::Result<std::process::Child> {
-        std::process::Command::new(program)
-            .arg("-e")
+    // `<term> <exec-prefix> bash --rcfile <rc> -i` starts an interactive shell
+    // that stages (does not run) the command. The command is passed only via the
+    // env var, never on the argv / shell line.
+    let try_spawn = |program: &str, style: ExecStyle| -> std::io::Result<std::process::Child> {
+        let mut cmd = std::process::Command::new(program);
+        cmd.args(style.prefix())
             .arg("bash")
             .arg("--rcfile")
             .arg(&rcfile)
             .arg("-i")
-            .env(STAGED_CMD_ENV, command)
-            .spawn()
+            .env(STAGED_CMD_ENV, command);
+        cmd.spawn()
     };
 
-    // Prefer Konsole (KDE); fall back to common emulators.
-    for program in ["konsole", "x-terminal-emulator", "xterm"] {
-        match try_spawn(program) {
+    // The user's configured terminal first, then the known fallbacks. Dedupe so
+    // a configured terminal already in the list isn't tried twice.
+    let preferred = preferred_terminals();
+    let candidates = preferred
+        .iter()
+        .map(|p| (p.as_str(), exec_style_for(p)))
+        .chain(KNOWN_TERMINALS.iter().map(|(n, s)| (*n, *s)));
+
+    let mut tried: Vec<String> = Vec::new();
+    for (program, style) in candidates {
+        if tried.iter().any(|t| t == program) {
+            continue;
+        }
+        tried.push(program.to_string());
+        match try_spawn(program, style) {
             Ok(_) => return Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
             Err(e) => return Err(format!("failed to launch {program}: {e}")),
         }
     }
-    Err("no supported terminal emulator found (tried konsole, x-terminal-emulator, xterm)".into())
+    Err(format!(
+        "no supported terminal emulator found (tried {})",
+        tried.join(", ")
+    ))
 }
 
 #[cfg(target_os = "macos")]
@@ -187,5 +297,28 @@ mod tests {
     #[test]
     fn empty_command_is_rejected() {
         assert!(open_in_terminal("   \n  ".to_string()).is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn terminal_binary_strips_path_and_flags() {
+        assert_eq!(
+            terminal_binary("/usr/bin/ghostty --gtk-single-instance=true").as_deref(),
+            Some("ghostty")
+        );
+        assert_eq!(terminal_binary("konsole").as_deref(), Some("konsole"));
+        assert_eq!(terminal_binary("   ").as_deref(), None);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn exec_style_defaults_to_dashe_for_unknown() {
+        // Known GNOME terminal uses `--`; an unknown one falls back to `-e`.
+        assert!(matches!(
+            exec_style_for("gnome-terminal"),
+            ExecStyle::DashDash
+        ));
+        assert!(matches!(exec_style_for("kitty"), ExecStyle::Bare));
+        assert!(matches!(exec_style_for("some-new-term"), ExecStyle::Dashe));
     }
 }

@@ -63,6 +63,10 @@ keyring = { version = "3", features = ["windows-native"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
+# Grant microphone access to the WebKitGTK webview (the in-webview recorder used
+# by the audio plugin's STT). Pinned to the version wry already resolves so the
+# `WebView` type from `with_webview().inner()` matches (no duplicate crate).
+webkit2gtk = "=2.0.2"
 
 # Use a local patched tray-icon that passes the file stem (not the full path)
 # as the SNI IconName. KDE Plasma's StatusNotifier host requires a freedesktop

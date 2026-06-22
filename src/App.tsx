@@ -52,6 +52,7 @@ import { useView } from "@/store/view";
 import { useLayout } from "@/store/layout";
 import { useTitleBar } from "@/store/titlebar";
 import { useZoom } from "@/store/zoom";
+import { useAudio } from "@/store/audio";
 // Side-effect import: applies the stored custom color/typography overrides at
 // module load, before first paint (T30/T33) — mirrors store/theme's bootstrap.
 import "@/store/appearance";
@@ -128,6 +129,9 @@ function App() {
     void loadUserLanguagePacks();
     // Re-apply the persisted webview zoom (browser-style Ctrl/Cmd +/-/0).
     useZoom.getState().setZoom(useZoom.getState().zoom);
+    // Audio plugin: load persisted TTS/STT selections + probe tool availability
+    // (fire-and-forget) so the chat mic/speak buttons honor saved choices.
+    void useAudio.getState().load();
   }, [
     init,
     initWorkspaces,

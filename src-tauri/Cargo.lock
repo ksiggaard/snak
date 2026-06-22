@@ -4413,6 +4413,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-sql",
  "tokio",
+ "webkit2gtk",
  "zip 8.6.0",
 ]
 

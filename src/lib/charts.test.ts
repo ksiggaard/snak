@@ -8,6 +8,7 @@ const registry = (languages: string[]): HostRegistry => ({
   skills: [],
   slashCommands: [],
   renderers: languages.map((language) => ({ language })),
+  audio: [],
 });
 
 describe("buildChartsSystemText", () => {

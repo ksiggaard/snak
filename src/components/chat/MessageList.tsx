@@ -15,9 +15,11 @@ import {
   Globe,
   Loader2,
   RefreshCw,
+  Square,
   Telescope,
   TriangleAlert,
   UnfoldHorizontal,
+  Volume2,
   Wrench,
 } from "lucide-react";
 import {
@@ -52,7 +54,14 @@ import {
 } from "@/lib/appearance";
 import { formatDuration, parseDbTime, relativeTime } from "@/lib/time";
 import { imageLabel } from "@/lib/imageLabels";
-import { hasRenderer } from "@/lib/plugins";
+import { audioEnabled, hasRenderer } from "@/lib/plugins";
+import {
+  extractSpeakableText,
+  playWav,
+  ttsSynthesize,
+  type Playback,
+} from "@/lib/audio";
+import { useAudio } from "@/store/audio";
 import {
   LOADING_MESSAGE_KEYS,
   pickLoadingMessage,
@@ -403,6 +412,7 @@ function AssistantMeta({
   createdAt,
   durationMs,
   content,
+  speak,
   trailing,
   onToggleWide,
   wide,
@@ -411,6 +421,8 @@ function AssistantMeta({
   durationMs: number | null;
   /** The reply's raw Markdown, copied verbatim. */
   content: string;
+  /** Speak button (audio plugin), rendered right next to the copy button. */
+  speak?: React.ReactNode;
   /** Inline controls rendered after the copy button (T54 variation controls). */
   trailing?: React.ReactNode;
   /** When provided, renders the full-width toggle (cap is on + assistant reply). */
@@ -458,6 +470,7 @@ function AssistantMeta({
           <Copy className="size-3.5" aria-hidden />
         )}
       </button>
+      {speak}
       {onToggleWide && (
         <button
           type="button"
@@ -570,6 +583,89 @@ function RequestSourcesButton({ messageId }: { messageId: string }) {
       className="hover:bg-muted hover:text-foreground rounded p-1 transition-colors disabled:opacity-40"
     >
       <BookOpenText className="size-3.5" aria-hidden />
+    </button>
+  );
+}
+
+/**
+ * Speak button (audio plugin): reads the reply aloud with the selected Piper
+ * voice. Renders only when the audio plugin is enabled. It speaks the prose only
+ * — `extractSpeakableText` strips code fences, and reasoning is a separate field
+ * that never reaches `content`. Click again (or when playing) to stop.
+ */
+function SpeakButton({ content }: { content: string }) {
+  const t = useT();
+  const enabled = usePlugins((s) => audioEnabled(selectRegistry(s)));
+  const voice = useAudio((s) => s.ttsVoice);
+  const [state, setState] = useState<"idle" | "loading" | "playing" | "error">(
+    "idle",
+  );
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+  const playbackRef = useRef<Playback | null>(null);
+
+  useEffect(
+    () => () => {
+      playbackRef.current?.stop();
+    },
+    [],
+  );
+
+  if (!enabled) return null;
+
+  const stop = () => {
+    playbackRef.current?.stop();
+    playbackRef.current = null;
+    setState("idle");
+  };
+
+  const speak = async () => {
+    if (state === "playing" || state === "loading") {
+      stop();
+      return;
+    }
+    const text = extractSpeakableText(content);
+    if (!text) return;
+    setState("loading");
+    setErrMsg(null);
+    try {
+      const bytes = await ttsSynthesize(text, voice);
+      const playback = await playWav(bytes, () => {
+        playbackRef.current = null;
+        setState("idle");
+      });
+      playbackRef.current = playback;
+      setState("playing");
+    } catch (e) {
+      setErrMsg(e instanceof Error ? e.message : String(e));
+      setState("error");
+      setTimeout(() => setState("idle"), 4000);
+    }
+  };
+
+  const label =
+    state === "error"
+      ? (errMsg ?? t("chat.speakError"))
+      : state === "playing"
+        ? t("chat.speakStop")
+        : t("chat.speak");
+
+  return (
+    <button
+      type="button"
+      onClick={() => void speak()}
+      aria-label={label}
+      title={label}
+      className="hover:bg-muted hover:text-foreground rounded p-1 transition-colors disabled:opacity-40"
+    >
+      {state === "loading" ? (
+        <Loader2 className="size-3.5 animate-spin" aria-hidden />
+      ) : state === "playing" ? (
+        <Square className="size-3.5" aria-hidden />
+      ) : state === "error" ? (
+        <TriangleAlert className="text-destructive size-3.5" aria-hidden />
+      ) : (
+        <Volume2 className="size-3.5" aria-hidden />
+      )}
     </button>
   );
 }
@@ -926,11 +1022,16 @@ const ChatMessage = memo(function ChatMessage({
     m.role === "assistant" && realMessageId ? (
       <RequestSourcesButton messageId={realMessageId} />
     ) : null;
+  const speakBtn =
+    m.role === "assistant" && realMessageId && m.content ? (
+      <SpeakButton content={m.content} />
+    ) : null;
   const meta = m.role === "assistant" && (
     <AssistantMeta
       createdAt={m.created_at}
       durationMs={m.duration_ms}
       content={m.content}
+      speak={speakBtn}
       trailing={
         variations || requestSourcesBtn ? (
           <>

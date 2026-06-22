@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { motion } from "framer-motion";
-import { Sparkles } from "lucide-react";
+import { Lips } from "@/components/Lips";
 import { Button } from "@/components/ui/button";
 import { BotAvatar } from "@/components/bots/BotAvatar";
 import { useThreads } from "@/store/threads";
@@ -134,7 +134,7 @@ export function EmptySuggestions({ bot }: { bot?: Bot | null }) {
             animate={{ opacity: [0.6, 1, 0.6], scale: [1, 1.05, 1] }}
             transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
           >
-            <Sparkles className="text-primary mb-2 size-10" aria-hidden />
+            <Lips className="text-primary mb-2 h-12 w-auto" />
           </motion.div>
           <h2 className="text-foreground text-xl font-bold">
             {t("chat.suggestionsTitle")}

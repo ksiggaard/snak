@@ -5,6 +5,7 @@ import {
   FoldVertical,
   Loader2,
   Maximize2,
+  Mic,
   Paperclip,
   Square,
   Telescope,
@@ -45,6 +46,11 @@ import {
   resolveCommand,
   type SlashCommand,
 } from "@/lib/slashCommands";
+import { SoundWave } from "@/components/chat/SoundWave";
+import { AudioRecorder } from "@/lib/audioRecorder";
+import { sttTranscribe } from "@/lib/audio";
+import { audioEnabled } from "@/lib/plugins";
+import { useAudio } from "@/store/audio";
 import { BotAvatar } from "@/components/bots/BotAvatar";
 import { useBots } from "@/store/bots";
 import { selectRegistry, usePlugins } from "@/store/plugins";
@@ -162,6 +168,86 @@ export function Composer({
   // can't contain "@", so this only matters for malformed input).
   const showMentionPalette =
     mentionOpen && !showPalette && mentionMatches.length > 0;
+
+  // --- Voice dictation (audio plugin STT) ------------------------------------
+  const audioOn = usePlugins((s) => audioEnabled(selectRegistry(s)));
+  const sttModel = useAudio((s) => s.sttModel);
+  const [recState, setRecState] = useState<
+    "idle" | "recording" | "transcribing"
+  >("idle");
+  const [recAnalyser, setRecAnalyser] = useState<AnalyserNode | null>(null);
+  const [recError, setRecError] = useState<string | null>(null);
+  const recorderRef = useRef<AudioRecorder | null>(null);
+
+  /** Append transcribed text into the field for review (never auto-sends), with
+   * the caret left at the end — mirrors `pickMention`'s insertion pattern. */
+  function insertTranscript(transcript: string) {
+    const clean = transcript.trim();
+    if (!clean) return;
+    setHistoryIndex(null);
+    setText((prev) => {
+      const next = prev && !/\s$/.test(prev) ? `${prev} ${clean}` : prev + clean;
+      requestAnimationFrame(() => {
+        const el = textareaRef.current;
+        if (el) {
+          el.focus();
+          el.setSelectionRange(next.length, next.length);
+          setCaret(next.length);
+        }
+      });
+      return next;
+    });
+  }
+
+  async function startRecording() {
+    setRecError(null);
+    const recorder = new AudioRecorder();
+    try {
+      await recorder.start();
+    } catch (e) {
+      setRecError(e instanceof Error ? e.message : String(e));
+      return;
+    }
+    recorderRef.current = recorder;
+    setRecAnalyser(recorder.analyser);
+    setRecState("recording");
+  }
+
+  async function stopRecording() {
+    const recorder = recorderRef.current;
+    if (!recorder) return;
+    setRecState("transcribing");
+    setRecAnalyser(null);
+    try {
+      const wav = await recorder.stop();
+      const transcript = await sttTranscribe(
+        Array.from(wav),
+        sttModel,
+        "auto",
+      );
+      insertTranscript(transcript);
+    } catch (e) {
+      setRecError(e instanceof Error ? e.message : String(e));
+    } finally {
+      recorderRef.current = null;
+      setRecState("idle");
+    }
+  }
+
+  function cancelRecording() {
+    recorderRef.current?.cancel();
+    recorderRef.current = null;
+    setRecAnalyser(null);
+    setRecState("idle");
+  }
+
+  // Tear down a live recording if the composer unmounts mid-capture.
+  useEffect(
+    () => () => {
+      recorderRef.current?.cancel();
+    },
+    [],
+  );
 
   /** Insert the picked persona as `@Name ` over the typed token. The trailing
    * space ends the active mention token, so the palette closes and the next
@@ -630,6 +716,7 @@ export function Composer({
           </p>
         ))}
       {attachError && <p className="text-destructive text-xs">{attachError}</p>}
+      {recError && <p className="text-destructive text-xs">{recError}</p>}
 
       {/* Slash-command palette (T14): discovery/autocomplete while typing `/…`. */}
       {showPalette && (
@@ -782,6 +869,36 @@ export function Composer({
           e.target.value = "";
         }}
       />
+      {recState !== "idle" && (
+        <div className="bg-muted/40 flex items-center gap-3 rounded-lg border px-3 py-2">
+          {recState === "recording" ? (
+            <>
+              <span className="relative flex size-2.5 shrink-0">
+                <span className="bg-destructive absolute inline-flex h-full w-full animate-ping rounded-full opacity-75" />
+                <span className="bg-destructive relative inline-flex size-2.5 rounded-full" />
+              </span>
+              <SoundWave analyser={recAnalyser} className="flex-1" />
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={cancelRecording}
+              >
+                {t("common.cancel")}
+              </Button>
+              <Button type="button" size="sm" onClick={() => void stopRecording()}>
+                <Square className="size-4" />
+                {t("composer.recordStop")}
+              </Button>
+            </>
+          ) : (
+            <span className="text-muted-foreground flex items-center gap-2 text-sm">
+              <Loader2 className="size-4 animate-spin" aria-hidden />
+              {t("composer.transcribing")}
+            </span>
+          )}
+        </div>
+      )}
       <Textarea
         ref={textareaRef}
         value={text}
@@ -975,6 +1092,29 @@ export function Composer({
         {/* T61: workspace file selector — visible when the thread/draft belongs
             to a workspace that has files. Hidden otherwise. */}
         <WorkspaceFileSelector />
+        {/* Voice dictation (audio plugin): toggles recording → transcribe →
+            insert into the field. Only shown when the audio plugin is enabled. */}
+        {audioOn && (
+          <Button
+            variant={recState === "recording" ? "default" : "ghost"}
+            size="icon"
+            aria-label={t("composer.recordAudio")}
+            aria-pressed={recState === "recording"}
+            title={t("composer.recordAudio")}
+            disabled={composeDisabled || recState === "transcribing"}
+            onClick={() =>
+              recState === "recording"
+                ? void stopRecording()
+                : void startRecording()
+            }
+          >
+            {recState === "transcribing" ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Mic className="size-4" />
+            )}
+          </Button>
+        )}
         <div className="flex-1" />
         <ModelPicker />
         {busy ? (

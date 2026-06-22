@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildRegistry, hasRenderer, parseManifest } from "@/lib/plugins";
+import {
+  audioEnabled,
+  buildRegistry,
+  hasRenderer,
+  parseManifest,
+} from "@/lib/plugins";
 import type { PluginInfo } from "@/types/plugins";
 
 const valid = {
@@ -122,5 +127,26 @@ describe("hasRenderer", () => {
   it("is false for a language no renderer contributes", () => {
     expect(hasRenderer(reg, "plantuml")).toBe(false);
     expect(hasRenderer(buildRegistry([]), "mermaid")).toBe(false);
+  });
+});
+
+describe("audioEnabled", () => {
+  const audioPlugin = (enabled: boolean): PluginInfo => ({
+    source: "builtin",
+    enabled,
+    manifest: {
+      id: "com.snak.audio",
+      name: "Audio",
+      version: "1.0.0",
+      category: "audio",
+      apiVersion: 1,
+      contributes: { tts: true, stt: true } as never,
+    },
+  });
+
+  it("is true only when an audio plugin is enabled", () => {
+    expect(audioEnabled(buildRegistry([audioPlugin(true)]))).toBe(true);
+    expect(audioEnabled(buildRegistry([audioPlugin(false)]))).toBe(false);
+    expect(audioEnabled(buildRegistry([]))).toBe(false);
   });
 });

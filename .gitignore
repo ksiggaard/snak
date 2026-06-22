@@ -25,8 +25,8 @@ dist-ssr
 
 .worktrees/
 
-# Affinity Designer lock files
-*~lock~
+# Affinity Designer lock files (incl. Dropbox-suffixed copies)
+*~lock~*
 
 # Superpowers brainstorming companion (local mockups)
 .superpowers/

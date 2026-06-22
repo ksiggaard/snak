@@ -1,0 +1,11 @@
+{
+  "id": "com.snak.audio",
+  "name": "Audio",
+  "version": "1.0.0",
+  "category": "audio",
+  "apiVersion": 1,
+  "description": "Speak assistant replies (Piper TTS) and dictate into the composer (whisper.cpp STT). Local, offline, free.",
+  "author": "snak",
+  "enabledByDefault": false,
+  "contributes": { "tts": true, "stt": true }
+}

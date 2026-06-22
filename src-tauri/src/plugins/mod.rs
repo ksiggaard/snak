@@ -72,7 +72,14 @@ pub struct PluginInfo {
 }
 
 /// The known plugin categories.
-const CATEGORIES: [&str; 5] = ["provider", "theme", "skill", "slash-command", "renderer"];
+const CATEGORIES: [&str; 6] = [
+    "provider",
+    "theme",
+    "skill",
+    "slash-command",
+    "renderer",
+    "audio",
+];
 
 /// Parse + validate a manifest from JSON text. Pure (no IO) so it is unit-tested.
 /// Rejects unknown categories, blank required fields, and mismatched `apiVersion`.
@@ -126,6 +133,7 @@ fn builtin_manifests() -> Vec<PluginManifest> {
         include_str!("builtin/youtube.json"),
         include_str!("builtin/artifacts.json"),
         include_str!("builtin/maps.json"),
+        include_str!("builtin/audio.json"),
     ];
     BUILTINS
         .iter()
@@ -324,18 +332,26 @@ mod tests {
         let builtins = builtin_manifests();
         // Five provider plugins (T18/T37) + the /terminal slash-command plugin
         // (T14) + five renderer plugins: mermaid (T42), charts, youtube,
-        // artifacts, and maps (disabled by default).
-        assert_eq!(builtins.len(), 11, "expected 11 built-in plugins");
+        // artifacts, and maps (disabled by default) + the audio plugin
+        // (TTS/STT, disabled by default).
+        assert_eq!(builtins.len(), 12, "expected 12 built-in plugins");
         let providers = builtins.iter().filter(|m| m.category == "provider").count();
         assert_eq!(providers, 5, "expected 5 built-in providers");
         for m in &builtins {
             validate_manifest(m).expect("built-in must validate");
-            if m.id == "com.snak.maps" {
-                assert!(!m.enabled_by_default, "maps defaults disabled");
+            if m.id == "com.snak.maps" || m.id == "com.snak.audio" {
+                assert!(!m.enabled_by_default, "maps and audio default disabled");
             } else {
                 assert!(m.enabled_by_default, "other built-ins default enabled");
             }
         }
+        // The audio built-in is present (category `audio`) and disabled by default.
+        assert!(
+            builtins.iter().any(|m| m.category == "audio"
+                && m.id == "com.snak.audio"
+                && !m.enabled_by_default),
+            "expected the built-in audio plugin (disabled by default)",
+        );
         // The maps renderer built-in is present, contributes the map language,
         // and is disabled by default.
         assert!(

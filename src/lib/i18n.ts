@@ -49,6 +49,7 @@ export const en = {
   "common.use": "Use",
   "common.settings": "Settings",
   "common.uninstall": "Uninstall",
+  "common.close": "Close",
   "common.builtIn": "built-in",
   "common.byAuthor": "by {author}",
 
@@ -207,6 +208,10 @@ export const en = {
   "chat.directionGenerate": "Generate",
   // --- Request sources (T56) -----------------------------------------------
   "chat.requestSources": "Request sources",
+  // --- Audio plugin: speak a reply -----------------------------------------
+  "chat.speak": "Read aloud",
+  "chat.speakStop": "Stop reading",
+  "chat.speakError": "Couldn't read this aloud",
   "chat.copyCode": "Copy code",
   "chat.viewImage": "View image",
   "chat.viewDiagram": "View diagram",
@@ -264,6 +269,10 @@ export const en = {
   "composer.deepResearch": "Deep research",
   "composer.deepResearchTitle":
     "Deep research — let the model dispatch parallel subagents to investigate, then synthesize their findings",
+  // --- Audio plugin: voice dictation (STT) ---------------------------------
+  "composer.recordAudio": "Dictate (speech to text)",
+  "composer.recordStop": "Stop",
+  "composer.transcribing": "Transcribing…",
   "composer.stop": "Stop",
   "composer.stopAria": "Stop generating",
   "composer.providerDisabled":
@@ -435,6 +444,7 @@ export const en = {
   "settings.nav.mcp": "MCP Servers",
   "settings.nav.skills": "Skills",
   "settings.nav.plugins": "Plugins",
+  "settings.nav.audio": "Audio",
   "settings.nav.planner": "Planner",
   "settings.nav.bots": "Personas",
   "settings.nav.quickActions": "Quick actions",
@@ -785,8 +795,52 @@ export const en = {
   "plugins.category.skill": "Skills",
   "plugins.category.slashCommand": "Slash commands",
   "plugins.category.renderer": "Renderers",
+  "plugins.category.audio": "Audio",
   "plugins.noneInCategory": "No {category} installed.",
   "plugins.uninstallTitle": 'Uninstall "{name}"?',
+
+  // --- Audio plugin settings (TTS / STT) -----------------------------------
+  "audio.title": "Audio (text-to-speech & speech-to-text)",
+  "audio.description":
+    "Local, offline speech: read replies aloud with Piper and dictate into the composer with whisper.cpp. Pick a model for each and install it below.",
+  "audio.pluginDisabled":
+    "The Audio plugin is disabled. Enable it in Settings → Plugins to show the microphone and read-aloud buttons in chat.",
+  "audio.modelDirHint": "Models download to the app data audio folder.",
+  "audio.ttsSection": "Text-to-Speech (Piper)",
+  "audio.sttSection": "Speech-to-Text (whisper.cpp)",
+  "audio.ttsModel": "Voice",
+  "audio.sttModel": "Model",
+  "audio.piperInstalled": "Piper is installed.",
+  "audio.piperMissing":
+    "Piper isn't installed — install the `piper` command (see github.com/rhasspy/piper).",
+  "audio.whisperInstalled": "whisper.cpp is installed.",
+  "audio.whisperMissing":
+    "whisper.cpp isn't installed — install the `whisper-cli` command (see github.com/ggml-org/whisper.cpp).",
+  "audio.installed": "Installed",
+  "audio.stageDownload": "Download",
+  "audio.default": "default",
+  "audio.stagedHint":
+    "Staged the download for “{name}” in your terminal — review it and press Enter, then Refresh.",
+  "audio.help": "Getting started",
+  "audio.helpTitle": "Set up audio",
+  "audio.helpIntro":
+    "snak speaks and listens with two small, free, local tools. Install whichever you want for your system, then download a model below and press Refresh.",
+  "audio.helpPiperHeading": "Piper — read replies aloud (TTS)",
+  "audio.helpPiperNote":
+    "Installs the `piper` command (needs Python via pipx). Prebuilt binaries are also available — see the full instructions.",
+  "audio.helpWhisperHeading": "whisper.cpp — dictate into the composer (STT)",
+  "audio.helpWhisperNote": "Installs the `whisper-cli` command via Homebrew.",
+  "audio.helpWhisperNoteWindows":
+    "No one-line installer on Windows — download a prebuilt release or build from source (see the full instructions), then put `whisper-cli.exe` on your PATH.",
+  "audio.helpStage": "Stage in terminal",
+  "audio.helpDocs": "Full instructions",
+  "audio.helpPathHint":
+    "Make sure the `piper` and `whisper-cli` commands are on your PATH so snak can find them.",
+  "audio.helpAfter":
+    "Then pick a voice and model above, click Download for each, and press Refresh.",
+  "audio.osLinux": "Linux",
+  "audio.osMac": "macOS",
+  "audio.osWindows": "Windows",
 
   // --- Workspace view ----------------------------------------------------------------------------------------------------------------------------------
   "workspace.notFound": "Workspace not found.",

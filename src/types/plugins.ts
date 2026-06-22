@@ -10,7 +10,8 @@ export type PluginCategory =
   | "theme"
   | "skill"
   | "slash-command"
-  | "renderer";
+  | "renderer"
+  | "audio";
 
 export const PLUGIN_CATEGORIES: PluginCategory[] = [
   "provider",
@@ -18,6 +19,7 @@ export const PLUGIN_CATEGORIES: PluginCategory[] = [
   "skill",
   "slash-command",
   "renderer",
+  "audio",
 ];
 
 /** Human labels for each category (used in the settings UI grouping). */
@@ -27,6 +29,7 @@ export const CATEGORY_LABELS: Record<PluginCategory, string> = {
   skill: "Skills",
   "slash-command": "Slash commands",
   renderer: "Renderers",
+  audio: "Audio",
 };
 
 // --- Category-specific contribution descriptors (extension points) ----------
@@ -66,12 +69,21 @@ export interface RendererContribution {
   language: string;
 }
 
+/** Local speech support. Per the declarative security model the descriptor only
+ * *names* the capabilities — the TTS/STT behaviour is built-in code keyed by the
+ * plugin id (Piper / whisper.cpp), gated on the plugin being enabled. */
+export interface AudioContribution {
+  tts: boolean;
+  stt: boolean;
+}
+
 export type PluginContribution =
   | ProviderContribution
   | ThemeContribution
   | SkillContribution
   | SlashCommandContribution
-  | RendererContribution;
+  | RendererContribution
+  | AudioContribution;
 
 export interface PluginManifest {
   id: string;

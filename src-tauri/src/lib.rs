@@ -31,6 +31,31 @@ fn set_close_to_tray(state: State<'_, CloseToTray>, enabled: bool) {
     state.0.store(enabled, Ordering::Relaxed);
 }
 
+/// Grant the webview microphone access so the audio plugin's in-webview recorder
+/// (`getUserMedia`) works. WebKitGTK denies media-stream requests by default and
+/// never prompts, so we enable the media-stream setting and auto-allow permission
+/// requests for the main window. On macOS/Windows the system webview prompts the
+/// user natively, so this is a no-op there.
+#[cfg(target_os = "linux")]
+fn grant_microphone_access(window: &tauri::WebviewWindow) {
+    use webkit2gtk::{PermissionRequestExt, SettingsExt, WebViewExt};
+    let _ = window.with_webview(|webview| {
+        let wv = webview.inner();
+        if let Some(settings) = WebViewExt::settings(&wv) {
+            settings.set_enable_media_stream(true);
+        }
+        wv.connect_permission_request(|_wv, request| {
+            // Local desktop app: the only media-capable surface is our own UI,
+            // so granting capture requests is safe and avoids a dead mic button.
+            request.allow();
+            true
+        });
+    });
+}
+
+#[cfg(not(target_os = "linux"))]
+fn grant_microphone_access(_window: &tauri::WebviewWindow) {}
+
 /// Show + unminimize + focus the main window (mirrors `quick::focus_main`).
 fn show_main(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
@@ -294,6 +319,7 @@ pub fn run() {
             // startup (see the effect in App.tsx).
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_decorations(false);
+                grant_microphone_access(&w);
             }
 
             // Native application menu (macOS menu bar / Linux global menu).
@@ -384,6 +410,9 @@ pub fn run() {
             commands::languages::list_languages,
             commands::languages::languages_directory,
             commands::media::media_playback_available,
+            commands::audio::audio_status,
+            commands::audio::tts_synthesize,
+            commands::audio::stt_transcribe,
             commands::connectivity::connectivity_probe,
             commands::ollama::ollama_status,
             commands::ollama::ollama_list_models,
