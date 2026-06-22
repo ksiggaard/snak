@@ -18,6 +18,8 @@
     "audio.sttSection": "Sprache-zu-Text (whisper.cpp)",
     "audio.ttsModel": "Stimme",
     "audio.sttModel": "Modell",
+    "audio.highlightRead": "Beim Vorlesen hervorheben",
+    "audio.highlightReadHint": "Beim Vorlesen einer Antwort wird jeder Satz in der Nachricht hervorgehoben, während er gesprochen wird.",
     "audio.piperInstalled": "Piper ist installiert.",
     "audio.piperMissing": "Piper ist nicht installiert – installiere den Befehl `piper` (siehe github.com/rhasspy/piper).",
     "audio.whisperInstalled": "whisper.cpp ist installiert.",

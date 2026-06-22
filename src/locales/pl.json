@@ -18,6 +18,8 @@
     "audio.sttSection": "Rozpoznawanie mowy (whisper.cpp)",
     "audio.ttsModel": "Głos",
     "audio.sttModel": "Model",
+    "audio.highlightRead": "Podświetlaj podczas czytania",
+    "audio.highlightReadHint": "Podczas czytania odpowiedzi na głos podświetla każde zdanie w wiadomości w miarę jego wypowiadania.",
     "audio.piperInstalled": "Piper jest zainstalowany.",
     "audio.piperMissing": "Piper nie jest zainstalowany — zainstaluj polecenie `piper` (zob. github.com/rhasspy/piper).",
     "audio.whisperInstalled": "whisper.cpp jest zainstalowany.",

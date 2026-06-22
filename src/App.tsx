@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
@@ -75,14 +75,29 @@ function App() {
   const openLibraryId = useLibrary((s) => s.openId);
   const view = useView((s) => s.view);
   const sidebarOpen = useLayout((s) => s.sidebarOpen);
+  const sidebarWidth = useLayout((s) => s.sidebarWidth);
   const tier = useLayout((s) => s.tier);
   const setTier = useLayout((s) => s.setTier);
   const compactNav = useLayout((s) => s.compactNav);
   const setCompactNav = useLayout((s) => s.setCompactNav);
+  const peeking = useLayout((s) => s.peeking);
+  const setPeeking = useLayout((s) => s.setPeeking);
   const titleBarMode = useTitleBar((s) => s.mode);
   const menuBarMode = useTitleBar((s) => s.menuBar);
   const runningStreams = useThreads((s) => s.runningStreams);
   const unreadThreads = useThreads((s) => s.unreadThreads);
+
+  // Collapse the floating rail-peek once a thread is opened (the user picked a
+  // chat). Mouse-out is handled by the peek wrapper's onMouseLeave.
+  useEffect(
+    () =>
+      useThreads.subscribe((s, prev) => {
+        if (s.currentThreadId !== prev.currentThreadId) {
+          useLayout.getState().setPeeking(false);
+        }
+      }),
+    [],
+  );
 
   // Dynamic window title: show a busy marker when any thread is streaming and
   // an unread count when background threads have completed responses.
@@ -272,6 +287,25 @@ function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  // Hover-intent for the collapsed-rail peek: a short close delay lets the
+  // pointer cross the gap from the rail into the floating pane (which is out of
+  // the wrapper's flow) without the peek flickering shut.
+  const peekTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelPeekClose = () => {
+    if (peekTimer.current !== null) {
+      clearTimeout(peekTimer.current);
+      peekTimer.current = null;
+    }
+  };
+  const openPeek = () => {
+    cancelPeekClose();
+    if (tier === "wide" && !sidebarOpen) setPeeking(true);
+  };
+  const schedulePeekClose = () => {
+    cancelPeekClose();
+    peekTimer.current = setTimeout(() => setPeeking(false), 140);
+  };
+
   return (
     <TooltipProvider delayDuration={300}>
       <div className="bg-background text-foreground flex h-screen flex-col">
@@ -285,8 +319,36 @@ function App() {
         <SearchOverlay />
 
         <div className="canvas-bg flex min-h-0 flex-1 gap-3 p-3">
-          {/* Icon rail (wide tier): always visible, independent of the pane. */}
-          {tier === "wide" && <SidebarRail />}
+          {/* Icon rail (wide tier): always visible, independent of the pane.
+              When the pane is collapsed the rail becomes a hover trigger that
+              floats the list over the chat (no layout shift). */}
+          {tier === "wide" && (
+            <div
+              className="relative flex"
+              onMouseEnter={openPeek}
+              onMouseLeave={schedulePeekClose}
+            >
+              <SidebarRail />
+              {!sidebarOpen && (
+                <AnimatePresence>
+                  {peeking && (
+                    <motion.aside
+                      initial={{ x: -16, opacity: 0 }}
+                      animate={{ x: 0, opacity: 1 }}
+                      exit={{ x: -12, opacity: 0 }}
+                      transition={{ duration: 0.18, ease: "easeOut" }}
+                      style={{ width: sidebarWidth }}
+                      onMouseEnter={cancelPeekClose}
+                      onMouseLeave={schedulePeekClose}
+                      className="bg-sidebar text-sidebar-foreground ring-foreground/10 absolute top-0 left-full z-30 ml-2 flex h-full flex-col overflow-hidden rounded-2xl shadow-2xl ring-1"
+                    >
+                      <SidebarPane />
+                    </motion.aside>
+                  )}
+                </AnimatePresence>
+              )}
+            </div>
+          )}
 
           {/* Inline list pane (wide tier): shown unless collapsed. */}
           {tier === "wide" && sidebarOpen && <Sidebar />}
@@ -335,7 +397,7 @@ function App() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -10, scale: 0.98 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
-                className="flex min-h-0 flex-1 flex-col"
+                className="flex min-h-0 min-w-0 flex-1 flex-col"
               >
                 {view === "settings" ? (
                   <SettingsView />

@@ -18,6 +18,8 @@
     "audio.sttSection": "Reconnaissance vocale (whisper.cpp)",
     "audio.ttsModel": "Voix",
     "audio.sttModel": "Modèle",
+    "audio.highlightRead": "Surligner pendant la lecture",
+    "audio.highlightReadHint": "Lors de la lecture à voix haute d'une réponse, surligne chaque phrase du message au fur et à mesure qu'elle est prononcée.",
     "audio.piperInstalled": "Piper est installé.",
     "audio.piperMissing": "Piper n’est pas installé — installez la commande `piper` (voir github.com/rhasspy/piper).",
     "audio.whisperInstalled": "whisper.cpp est installé.",

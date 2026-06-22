@@ -7,6 +7,7 @@ import {
   Maximize2,
   Mic,
   Paperclip,
+  SendHorizontal,
   Square,
   Telescope,
   TerminalSquare,
@@ -641,7 +642,7 @@ export function Composer({
 
   return (
     <div
-      className="bg-card shadow-sm composer-shimmer flex flex-col gap-3 rounded-xl border p-5 transition-shadow focus-within:ring-primary/40 focus-within:ring-2"
+      className="bg-card shadow-sm composer-shimmer @container/composer flex flex-col gap-3 rounded-xl border p-5 transition-shadow focus-within:ring-primary/40 focus-within:ring-2 @max-[20rem]/composer:[zoom:0.9] @max-[16rem]/composer:[zoom:0.8]"
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
@@ -1022,14 +1023,16 @@ export function Composer({
       />
       {/* Context-size readout (T53): live estimate of the next request, with a
           usage bar when the active model has a configured max window. */}
-      <ContextMeter
-        model={model}
-        messages={threadMessages}
-        draftText={text}
-        draftImageCount={images.length}
-        draftDocuments={documents}
-      />
-      <div className="flex items-center gap-2">
+      <div className="@max-[30rem]/composer:hidden">
+        <ContextMeter
+          model={model}
+          messages={threadMessages}
+          draftText={text}
+          draftImageCount={images.length}
+          draftDocuments={documents}
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
         <Button
           variant="ghost"
           size="icon"
@@ -1115,23 +1118,35 @@ export function Composer({
             )}
           </Button>
         )}
-        <div className="flex-1" />
-        <ModelPicker />
-        {busy ? (
-          <Button
-            type="button"
-            variant="destructive"
-            onClick={onCancel}
-            aria-label={t("composer.stopAria")}
-          >
-            <Square className="size-4" />
-            {t("composer.stop")}
-          </Button>
-        ) : (
-          <Button onClick={send} disabled={!canSend}>
-            {t("common.send")}
-          </Button>
-        )}
+        <div className="ml-auto flex items-center gap-2">
+          <ModelPicker />
+          {busy ? (
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={onCancel}
+              aria-label={t("composer.stopAria")}
+              title={t("composer.stopAria")}
+            >
+              <Square className="size-4" />
+              <span className="@max-[30rem]/composer:hidden">
+                {t("composer.stop")}
+              </span>
+            </Button>
+          ) : (
+            <Button
+              onClick={send}
+              disabled={!canSend}
+              aria-label={t("common.send")}
+              title={t("common.send")}
+            >
+              <SendHorizontal className="hidden size-4 @max-[30rem]/composer:block" />
+              <span className="@max-[30rem]/composer:hidden">
+                {t("common.send")}
+              </span>
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );

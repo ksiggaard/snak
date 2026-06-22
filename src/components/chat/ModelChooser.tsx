@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Brain, Check, ChevronsUpDown } from "lucide-react";
+import { Brain, Check, ChevronsUpDown, Cpu } from "lucide-react";
 import { useModels } from "@/store/models";
 import { useKeys } from "@/store/keys";
 import { useIsOffline } from "@/store/connectivity";
@@ -123,8 +123,11 @@ export function ModelChooser({
               className,
             )}
           >
-            <span className="text-foreground max-w-40 truncate">{displayLabel}</span>
-            <ChevronsUpDown className="size-3 shrink-0 opacity-60" />
+            <Cpu className="hidden size-4 @max-[30rem]/composer:block" />
+            <span className="text-foreground max-w-40 truncate @max-[30rem]/composer:hidden">
+              {displayLabel}
+            </span>
+            <ChevronsUpDown className="size-3 shrink-0 opacity-60 @max-[30rem]/composer:hidden" />
           </button>
         </TooltipTrigger>
         <TooltipContent side="top">

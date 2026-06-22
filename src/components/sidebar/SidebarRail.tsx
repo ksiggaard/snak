@@ -1,4 +1,11 @@
-import { Bot, Folder, Library, MessagesSquare, type LucideIcon } from "lucide-react";
+import {
+  Bot,
+  Folder,
+  Library,
+  MessagesSquare,
+  Settings2,
+  type LucideIcon,
+} from "lucide-react";
 import { motion } from "framer-motion";
 import {
   Tooltip,
@@ -24,6 +31,7 @@ const SECTIONS: SidebarSection[] = [
   { id: "projects", labelKey: "sidebar.workspaces", Icon: Folder },
   { id: "bots", labelKey: "sidebar.bots", Icon: Bot },
   { id: "artifacts", labelKey: "sidebar.artifacts", Icon: Library },
+  { id: "settings", labelKey: "titleBar.settings", Icon: Settings2 },
 ];
 
 /** Vertical, fully left-aligned icon rail (VS Code / Teams activity bar). Top
@@ -38,14 +46,16 @@ export function SidebarRail({
   const mode = useLayout((s) => s.sidebarMode);
   const setMode = useLayout((s) => s.setSidebarMode);
   const tier = useLayout((s) => s.tier);
-  const setSidebarOpen = useLayout((s) => s.setSidebarOpen);
   const compactNav = useLayout((s) => s.compactNav);
   const setCompactNav = useLayout((s) => s.setCompactNav);
+  const setPeeking = useLayout((s) => s.setPeeking);
 
   const onSelect = (id: SidebarMode) => {
     setMode(id);
-    // Ensure the list pane is visible (mode switch alone doesn't open it).
-    if (tier === "wide") setSidebarOpen(true);
+    // Wide tier: switch the section and reveal the floating peek (pinning the
+    // pane open inline is the TitleBar toggle's job, not the rail's). Compact:
+    // ensure the pane is visible in the drawer.
+    if (tier === "wide") setPeeking(true);
     else if (compactNav < 1) setCompactNav(1);
   };
 

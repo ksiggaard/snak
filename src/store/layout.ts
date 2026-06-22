@@ -26,6 +26,9 @@ interface LayoutState {
   /** Narrow-width disclosure: 0 = chat only, 1 = pane, 2 = pane + rail.
    *  Ephemeral (not persisted); reset when entering a compact tier. */
   compactNav: 0 | 1 | 2;
+  /** Collapsed-rail hover reveal: floats the list pane over the chat (wide tier,
+   *  sidebar collapsed). Ephemeral (not persisted). */
+  peeking: boolean;
 
   setSidebarOpen: (open: boolean) => void;
   toggleSidebar: () => void;
@@ -34,6 +37,7 @@ interface LayoutState {
   setTier: (tier: LayoutTier) => void;
   cycleCompactNav: () => void;
   setCompactNav: (n: 0 | 1 | 2) => void;
+  setPeeking: (v: boolean) => void;
 }
 
 // State is seeded synchronously from localStorage (like `useTheme`) so the
@@ -48,6 +52,7 @@ export const useLayout = create<LayoutState>((set, get) => {
     sidebarMode: getStoredSidebarMode(),
     tier: initialTier,
     compactNav: initialCompactNav(initialTier),
+    peeking: false,
 
     setSidebarOpen: (open) => {
       storeSidebarOpen(open);
@@ -90,5 +95,7 @@ export const useLayout = create<LayoutState>((set, get) => {
       set({ compactNav: ((get().compactNav + 1) % 3) as 0 | 1 | 2 }),
 
     setCompactNav: (n) => set({ compactNav: n }),
+
+    setPeeking: (v) => set({ peeking: v }),
   };
 });

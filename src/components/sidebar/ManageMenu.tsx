@@ -18,9 +18,9 @@ import { useZoom } from "@/store/zoom";
 import { useConnectivity } from "@/store/connectivity";
 import { useT } from "@/store/i18n";
 
-/** The "Manage" menu — relocated from the old TitleBar "⋯" dropdown. Settings,
- *  Usage, a browser-style zoom row, and the Work-offline toggle. Theme moved to
- *  Settings › Appearance. */
+/** The "Manage" menu — relocated from the old TitleBar "⋯" dropdown. Usage, a
+ *  browser-style zoom row, and the Work-offline toggle. Settings is its own
+ *  rail section now; theme moved to Settings › Appearance. */
 export function ManageMenu() {
   const t = useT();
   const zoom = useZoom((s) => s.zoom);
@@ -47,10 +47,6 @@ export function ManageMenu() {
       </Tooltip>
 
       <DropdownMenuContent side="right" align="end" className="w-56">
-        <DropdownMenuItem onClick={() => runMenuAction("settings")}>
-          {t("titleBar.settings")}
-          <DropdownMenuShortcut>{shortcutLabel(",")}</DropdownMenuShortcut>
-        </DropdownMenuItem>
         <DropdownMenuItem onClick={() => runMenuAction("usage")}>
           {t("titleBar.usage")}
           <DropdownMenuShortcut>{shortcutLabel("U")}</DropdownMenuShortcut>

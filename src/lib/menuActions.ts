@@ -91,9 +91,17 @@ export function runMenuAction(action: MenuAction): void {
     case "toggle-sidebar":
       useLayout.getState().toggleSidebar();
       break;
-    case "settings":
+    case "settings": {
+      // Settings categories live in the standard list pane (sidebarMode
+      // "settings"); reveal it and show the settings view on the current
+      // category.
+      const layout = useLayout.getState();
+      layout.setSidebarMode("settings");
+      if (layout.tier === "wide") layout.setSidebarOpen(true);
+      else layout.setCompactNav(1);
       useView.getState().setView("settings");
       break;
+    }
     case "usage":
       useView.getState().setView("usage");
       break;

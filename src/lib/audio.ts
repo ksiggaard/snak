@@ -164,3 +164,59 @@ export async function playWav(
     };
   }
 }
+
+/** Hooks for {@link playSentences}. */
+export interface SentencePlaybackHooks {
+  /** Fires with the index of the sentence about to play, then `-1` when the
+   *  whole run finishes naturally. */
+  onSentence?: (index: number) => void;
+  /** Fires once if a synthesis call fails (the run then stops). */
+  onError?: (error: unknown) => void;
+}
+
+/**
+ * Speak `sentences` in order, one Piper clip at a time, for read-along
+ * highlighting. Piper exposes no word timestamps, so the sentence is the unit:
+ * each clip is synthesized then played to completion before the next, and
+ * `onSentence(i)` fires as clip `i` begins — exact boundaries, no drift. Returns
+ * a {@link Playback} whose `stop()` cancels the current clip and skips the rest.
+ */
+export function playSentences(
+  sentences: string[],
+  voice: string,
+  hooks: SentencePlaybackHooks = {},
+): Playback {
+  let cancelled = false;
+  let current: Playback | null = null;
+
+  const run = async () => {
+    for (let i = 0; i < sentences.length; i++) {
+      if (cancelled) return;
+      let bytes: number[];
+      try {
+        bytes = await ttsSynthesize(sentences[i], voice);
+      } catch (e) {
+        if (!cancelled) hooks.onError?.(e);
+        return;
+      }
+      if (cancelled) return;
+      hooks.onSentence?.(i);
+      await new Promise<void>((resolve) => {
+        void playWav(bytes, resolve).then((pb) => {
+          if (cancelled) pb.stop();
+          else current = pb;
+        });
+      });
+    }
+    if (!cancelled) hooks.onSentence?.(-1);
+  };
+
+  void run();
+  return {
+    stop: () => {
+      cancelled = true;
+      current?.stop();
+      current = null;
+    },
+  };
+}

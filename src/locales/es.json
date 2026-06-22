@@ -18,6 +18,8 @@
     "audio.sttSection": "Voz a texto (whisper.cpp)",
     "audio.ttsModel": "Voz",
     "audio.sttModel": "Modelo",
+    "audio.highlightRead": "Resaltar al leer",
+    "audio.highlightReadHint": "Al leer una respuesta en voz alta, resalta cada frase del mensaje a medida que se pronuncia.",
     "audio.piperInstalled": "Piper está instalado.",
     "audio.piperMissing": "Piper no está instalado: instala el comando `piper` (consulta github.com/rhasspy/piper).",
     "audio.whisperInstalled": "whisper.cpp está instalado.",

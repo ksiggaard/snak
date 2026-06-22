@@ -9,6 +9,7 @@ import { ChatsPane } from "./ChatsPane";
 import { WorkspacesPane } from "./WorkspacesPane";
 import { BotsPane } from "./BotsPane";
 import { ArtifactsPane } from "./ArtifactsPane";
+import { SettingsPane } from "./SettingsPane";
 import { useThreads } from "@/store/threads";
 import { useWorkspaces } from "@/store/workspaces";
 import { useBots } from "@/store/bots";
@@ -108,7 +109,9 @@ export function SidebarPane() {
         ? t("sidebar.workspaces")
         : mode === "bots"
           ? t("sidebar.bots")
-          : t("sidebar.artifacts");
+          : mode === "artifacts"
+            ? t("sidebar.artifacts")
+            : t("titleBar.settings");
 
   return (
     <>
@@ -146,14 +149,14 @@ export function SidebarPane() {
             >
               <Bot className="size-4" />
             </PaneAction>
-          ) : (
+          ) : mode === "artifacts" ? (
             <PaneAction
               label={t("library.new")}
               onClick={() => void onNewArtifact()}
             >
               <Plus className="size-4" />
             </PaneAction>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -164,8 +167,10 @@ export function SidebarPane() {
           <WorkspacesPane />
         ) : mode === "bots" ? (
           <BotsPane />
-        ) : (
+        ) : mode === "artifacts" ? (
           <ArtifactsPane />
+        ) : (
+          <SettingsPane />
         )}
       </div>
     </>

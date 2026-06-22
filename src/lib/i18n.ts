@@ -810,6 +810,9 @@ export const en = {
   "audio.sttSection": "Speech-to-Text (whisper.cpp)",
   "audio.ttsModel": "Voice",
   "audio.sttModel": "Model",
+  "audio.highlightRead": "Highlight while reading",
+  "audio.highlightReadHint":
+    "When reading a reply aloud, light up each sentence in the message as it's spoken.",
   "audio.piperInstalled": "Piper is installed.",
   "audio.piperMissing":
     "Piper isn't installed — install the `piper` command (see github.com/rhasspy/piper).",

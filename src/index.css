@@ -171,6 +171,19 @@
     @apply font-sans;
     }
 
+  /* The main window is a fixed, full-height shell — the title bar, rail, and
+     chat each own their scrolling, so the page itself must never scroll. Without
+     this, a child that momentarily exceeds the viewport (a wide code block, a
+     view transition, a floating peek pane) adds a window-level scrollbar and
+     shoves the chat column partly off-screen, clipping message text on the right.
+     The quick overlay sets the same rule for its own reasons (see `html.overlay`). */
+  html,
+  body,
+  #root {
+    height: 100%;
+    overflow: hidden;
+    }
+
   button:not([disabled]),
   a:not([disabled]) {
     transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
@@ -205,6 +218,15 @@ html.overlay #root {
    breaks out of the 75% width cap to the full row instead of squishing. */
 .chat-style-bubbles .bubble-assistant:has(pre, table) {
   max-width: 100%;
+}
+
+/* Read-along (audio plugin): the sentence currently being spoken aloud, lit up
+   in place. Painted via the CSS Custom Highlight API (no DOM mutation), so it
+   rides over react-markdown's output without disturbing it — see
+   src/lib/readAlong.ts. Theme-aware soft accent that keeps text legible. */
+::highlight(read-along) {
+  background-color: color-mix(in oklch, var(--primary) 28%, transparent);
+  color: var(--foreground);
 }
 
 /* Compact & terminal: tighten the Markdown rhythm inside messages. The margins

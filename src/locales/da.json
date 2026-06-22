@@ -18,6 +18,8 @@
     "audio.sttSection": "Tale-til-tekst (whisper.cpp)",
     "audio.ttsModel": "Stemme",
     "audio.sttModel": "Model",
+    "audio.highlightRead": "Fremhæv under oplæsning",
+    "audio.highlightReadHint": "Når et svar læses højt, fremhæves hver sætning i beskeden, efterhånden som den læses op.",
     "audio.piperInstalled": "Piper er installeret.",
     "audio.piperMissing": "Piper er ikke installeret – installer kommandoen `piper` (se github.com/rhasspy/piper).",
     "audio.whisperInstalled": "whisper.cpp er installeret.",

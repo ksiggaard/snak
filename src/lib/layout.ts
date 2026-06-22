@@ -3,7 +3,12 @@
 // live in localStorage (not the SQLite settings table) to avoid a layout flash.
 // Mirrors the shape of `src/lib/theme.ts`.
 
-export type SidebarMode = "chats" | "projects" | "bots" | "artifacts";
+export type SidebarMode =
+  | "chats"
+  | "projects"
+  | "bots"
+  | "artifacts"
+  | "settings";
 
 const WIDTH_KEY = "sidebar-width";
 const OPEN_KEY = "sidebar-open";

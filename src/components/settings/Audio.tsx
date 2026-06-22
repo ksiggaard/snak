@@ -9,6 +9,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { AudioHelp } from "@/components/settings/AudioHelp";
 import {
   DEFAULT_STT_MODEL,
@@ -38,10 +40,12 @@ export function Audio() {
   const loaded = useAudio((s) => s.loaded);
   const ttsVoice = useAudio((s) => s.ttsVoice);
   const sttModel = useAudio((s) => s.sttModel);
+  const highlightRead = useAudio((s) => s.highlightRead);
   const load = useAudio((s) => s.load);
   const refreshStatus = useAudio((s) => s.refreshStatus);
   const setTtsVoice = useAudio((s) => s.setTtsVoice);
   const setSttModel = useAudio((s) => s.setSttModel);
+  const setHighlightRead = useAudio((s) => s.setHighlightRead);
 
   const [piperDir, setPiperDir] = useState("");
   const [whisperDir, setWhisperDir] = useState("");
@@ -145,6 +149,22 @@ export function Audio() {
             installedLabel={t("audio.installed")}
             stageLabel={t("audio.stageDownload")}
           />
+          <div className="flex items-start justify-between gap-4 pt-1">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="audio-highlight-read">
+                {t("audio.highlightRead")}
+              </Label>
+              <p className="text-muted-foreground text-sm">
+                {t("audio.highlightReadHint")}
+              </p>
+            </div>
+            <Switch
+              id="audio-highlight-read"
+              checked={highlightRead}
+              disabled={!loaded}
+              onCheckedChange={(v) => void setHighlightRead(v)}
+            />
+          </div>
         </section>
 
         {/* Speech-to-Text (whisper.cpp) */}

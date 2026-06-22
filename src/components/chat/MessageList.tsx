@@ -57,10 +57,19 @@ import { imageLabel } from "@/lib/imageLabels";
 import { audioEnabled, hasRenderer } from "@/lib/plugins";
 import {
   extractSpeakableText,
+  playSentences,
   playWav,
   ttsSynthesize,
   type Playback,
 } from "@/lib/audio";
+import {
+  buildRange,
+  clearReadAlongHighlight,
+  collectProse,
+  readAlongSupported,
+  setReadAlongHighlight,
+  splitSentenceRanges,
+} from "@/lib/readAlong";
 import { useAudio } from "@/store/audio";
 import {
   LOADING_MESSAGE_KEYS,
@@ -593,10 +602,18 @@ function RequestSourcesButton({ messageId }: { messageId: string }) {
  * — `extractSpeakableText` strips code fences, and reasoning is a separate field
  * that never reaches `content`. Click again (or when playing) to stop.
  */
-function SpeakButton({ content }: { content: string }) {
+function SpeakButton({
+  content,
+  bodyRef,
+}: {
+  content: string;
+  /** The rendered reply body — read-along highlights sentences inside it. */
+  bodyRef?: React.RefObject<HTMLElement | null>;
+}) {
   const t = useT();
   const enabled = usePlugins((s) => audioEnabled(selectRegistry(s)));
   const voice = useAudio((s) => s.ttsVoice);
+  const highlightRead = useAudio((s) => s.highlightRead);
   const [state, setState] = useState<"idle" | "loading" | "playing" | "error">(
     "idle",
   );
@@ -606,6 +623,7 @@ function SpeakButton({ content }: { content: string }) {
   useEffect(
     () => () => {
       playbackRef.current?.stop();
+      clearReadAlongHighlight();
     },
     [],
   );
@@ -615,7 +633,49 @@ function SpeakButton({ content }: { content: string }) {
   const stop = () => {
     playbackRef.current?.stop();
     playbackRef.current = null;
+    clearReadAlongHighlight();
     setState("idle");
+  };
+
+  const onFail = (e: unknown) => {
+    clearReadAlongHighlight();
+    setErrMsg(e instanceof Error ? e.message : String(e));
+    setState("error");
+    setTimeout(() => setState("idle"), 4000);
+  };
+
+  // Read-along: speak sentence by sentence and light each one up in place. Used
+  // only when the option is on, the body is mounted, and the host supports the
+  // CSS Custom Highlight API — otherwise we fall through to one-shot playback.
+  const speakWithHighlight = (): boolean => {
+    const root = bodyRef?.current;
+    if (!highlightRead || !root || !readAlongSupported()) return false;
+    const map = collectProse(root);
+    const sentences = splitSentenceRanges(map.text);
+    if (sentences.length === 0) return false;
+
+    setState("loading");
+    setErrMsg(null);
+    playbackRef.current = playSentences(
+      sentences.map((s) => s.text),
+      voice,
+      {
+        onSentence: (i) => {
+          if (i < 0) {
+            playbackRef.current = null;
+            clearReadAlongHighlight();
+            setState("idle");
+            return;
+          }
+          setState("playing");
+          setReadAlongHighlight(
+            buildRange(map, sentences[i].start, sentences[i].end),
+          );
+        },
+        onError: onFail,
+      },
+    );
+    return true;
   };
 
   const speak = async () => {
@@ -623,6 +683,8 @@ function SpeakButton({ content }: { content: string }) {
       stop();
       return;
     }
+    if (speakWithHighlight()) return;
+
     const text = extractSpeakableText(content);
     if (!text) return;
     setState("loading");
@@ -636,9 +698,7 @@ function SpeakButton({ content }: { content: string }) {
       playbackRef.current = playback;
       setState("playing");
     } catch (e) {
-      setErrMsg(e instanceof Error ? e.message : String(e));
-      setState("error");
-      setTimeout(() => setState("idle"), 4000);
+      onFail(e);
     }
   };
 
@@ -807,6 +867,10 @@ const ChatMessage = memo(function ChatMessage({
   const isUser = m.role === "user";
   // Self-register the root DOM element for scroll-to-message.
   const containerRef = useRef<HTMLDivElement>(null);
+  // The rendered reply body — read-along (audio plugin) walks its text to
+  // highlight the spoken sentence in place. Wraps the Markdown with
+  // `display:contents` so it adds no box (layout/markdown styling unchanged).
+  const bodyRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const refs = messageRefs.current;
     if (containerRef.current) {
@@ -981,17 +1045,19 @@ const ChatMessage = memo(function ChatMessage({
         // Assistant text is Markdown (GFM + highlighted code fences).
         // react-markdown tolerates partial/unclosed Markdown, so this
         // is safe to render against the growing streaming placeholder.
-        <Markdown
-          content={m.content}
-          suppressedVideoIds={suppressedVideoIds}
-          // Real ids only: a streaming placeholder stays ephemeral so artifacts
-          // persist exactly once, when the reply is saved.
-          messageId={realMessageId}
-          threadId={realMessageId ? m.thread_id : null}
-          // Live streaming placeholder → defer flicker-prone renderers (Mermaid)
-          // until the reply completes.
-          streaming={m.id === STREAM_ID}
-        />
+        <div ref={bodyRef} className="contents">
+          <Markdown
+            content={m.content}
+            suppressedVideoIds={suppressedVideoIds}
+            // Real ids only: a streaming placeholder stays ephemeral so artifacts
+            // persist exactly once, when the reply is saved.
+            messageId={realMessageId}
+            threadId={realMessageId ? m.thread_id : null}
+            // Live streaming placeholder → defer flicker-prone renderers (Mermaid)
+            // until the reply completes.
+            streaming={m.id === STREAM_ID}
+          />
+        </div>
       )
     ) : (
       <span className="whitespace-pre-wrap">{m.content}</span>
@@ -1024,7 +1090,7 @@ const ChatMessage = memo(function ChatMessage({
     ) : null;
   const speakBtn =
     m.role === "assistant" && realMessageId && m.content ? (
-      <SpeakButton content={m.content} />
+      <SpeakButton content={m.content} bodyRef={bodyRef} />
     ) : null;
   const meta = m.role === "assistant" && (
     <AssistantMeta
