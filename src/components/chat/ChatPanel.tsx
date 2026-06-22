@@ -102,7 +102,7 @@ export function ChatPanel({
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: 20, opacity: 0 }}
       transition={{ duration: 0.2, ease: "easeOut" }}
-      className="bg-background shadow-sm flex w-72 shrink-0 flex-col overflow-hidden rounded-2xl border md:flex will-change-[transform,opacity]"
+      className="bg-background shadow-sm flex w-72 shrink-0 flex-col overflow-hidden rounded-2xl border md:flex"
     >
       <div className="flex items-center gap-2 border-b p-2">
         <Input

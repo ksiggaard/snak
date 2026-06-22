@@ -857,10 +857,15 @@ const ChatMessage = memo(function ChatMessage({
   // artifact: detect a fence-less, whole-message artifact and show the card.
   const wholeArtifact = useMemo(
     () =>
-      m.role === "assistant" && m.content && !m.content.includes("```")
+      // Skip the streaming placeholder: parseArtifact (JSON.parse) would run on
+      // the growing text every ~100ms flush. Only the finished message matters.
+      m.role === "assistant" &&
+      m.id !== STREAM_ID &&
+      m.content &&
+      !m.content.includes("```")
         ? parseArtifact(m.content)
         : null,
-    [m.role, m.content],
+    [m.role, m.id, m.content],
   );
   const realMessageId = m.id === STREAM_ID ? null : m.id;
   const body =
@@ -1280,6 +1285,23 @@ export function MessageList({ messages, pending, busy, bot }: MessageListProps) 
     }
   }, [messages]);
 
+  // Follow the reply as it streams. Virtuoso's `followOutput` re-pins on item
+  // *count* changes, but here the last item (the streaming placeholder) grows
+  // in place on every ~100ms flush — so we re-pin on each streamingContent
+  // change while the user is still parked at the bottom. `atBottomThreshold`
+  // gives hysteresis so a single flush's growth doesn't read as "scrolled up";
+  // scrolling up past it opts out of the follow until they return to the bottom.
+  const atBottomRef = useRef(true);
+  useEffect(() => {
+    if (busy && streamingContent !== null && atBottomRef.current) {
+      virtuosoRef.current?.scrollToIndex({
+        index: "LAST",
+        align: "end",
+        behavior: "auto",
+      });
+    }
+  }, [streamingContent, busy]);
+
   // The thread's most recent assistant reply gets the variation controls (T54).
   // Includes the streaming placeholder (no variantIds → renders nothing), which
   // correctly suppresses controls on the prior reply while a reply is in flight.
@@ -1331,7 +1353,15 @@ export function MessageList({ messages, pending, busy, bot }: MessageListProps) 
       className="flex flex-1 flex-col"
       data={displayItems}
       computeItemKey={(_, m) => m.id}
-      followOutput={busy ? "smooth" : false}
+      // ponytail: "auto" (instant stick-to-bottom), not "smooth" — a smooth
+      // scroll tween was being launched on every ~100ms stream flush and
+      // stacking up on WebKitGTK. Upgrade path: one rAF-debounced smooth
+      // scroll if instant reads too jumpy.
+      followOutput={busy ? "auto" : false}
+      atBottomThreshold={120}
+      atBottomStateChange={(atBottom) => {
+        atBottomRef.current = atBottom;
+      }}
       itemContent={(idx, m) => {
         if (m.kind === "summary") {
           return (

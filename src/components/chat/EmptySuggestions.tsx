@@ -133,7 +133,6 @@ export function EmptySuggestions({ bot }: { bot?: Bot | null }) {
           <motion.div
             animate={{ opacity: [0.6, 1, 0.6], scale: [1, 1.05, 1] }}
             transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
-            className="will-change-[transform,opacity]"
           >
             <Sparkles className="text-primary mb-2 size-10" aria-hidden />
           </motion.div>

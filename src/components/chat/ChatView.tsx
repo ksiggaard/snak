@@ -118,6 +118,8 @@ export function ChatView() {
       void send(text, images, documents),
     [send],
   );
+  // Stable identity so it can't bust a memoized Composer on each render.
+  const onCancel = useCallback(() => void cancel(), [cancel]);
   const threads = useThreads((s) => s.threads);
   const draftProvider = useThreads((s) => s.draftProvider);
   const draftModel = useThreads((s) => s.draftModel);
@@ -170,11 +172,16 @@ export function ChatView() {
   // post-tool round doesn't look like the persona stopped responding.
   const last = messages[messages.length - 1];
   const awaitingModel = useThreads((s) => s.awaitingModel);
-  const streamingContent = useThreads((s) => s.streamingContent);
+  // Subscribe to a boolean, not the raw growing string: streamingContent gets a
+  // new value on every ~100ms flush, and subscribing to it re-rendered all of
+  // ChatView (Composer, PlannerProgress, ApprovalGate) 10×/sec for nothing.
+  // The boolean only flips once (empty→non-empty), so the subtree stays quiet
+  // mid-stream; MessageList owns the live bubble via its own subscription.
+  const hasStreamedText = useThreads((s) => !!s.streamingContent);
   const pending =
     busy &&
     (!last || last.role === "user" || awaitingModel) &&
-    (!streamingContent || awaitingModel);
+    (!hasStreamedText || awaitingModel);
 
   return (
     <div className="relative flex flex-1 flex-row gap-4 overflow-hidden">
@@ -223,7 +230,7 @@ export function ChatView() {
             <ApprovalGate providerLabel={providerLabel} local={providerLocal} />
             <Composer
               onSend={onSend}
-              onCancel={() => void cancel()}
+              onCancel={onCancel}
               busy={busy}
               provider={provider}
               model={model}

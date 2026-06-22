@@ -250,9 +250,17 @@ function MarkdownImpl({
           >
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
-              rehypePlugins={[
-                [rehypeHighlight, { detect: true, ignoreMissing: true }],
-              ]}
+              // ponytail: highlight on completion only. While streaming, the
+              // costly hljs tokenization would otherwise re-run on the whole
+              // growing reply every ~100ms flush — the main lag-spike source.
+              // The finished message renders with streaming=false and
+              // highlights once. Ceiling: a live code block isn't colored
+              // mid-stream; revisit only if that's wanted.
+              rehypePlugins={
+                streaming
+                  ? []
+                  : [[rehypeHighlight, { detect: true, ignoreMissing: true }]]
+              }
               components={components}
             >
               {content}

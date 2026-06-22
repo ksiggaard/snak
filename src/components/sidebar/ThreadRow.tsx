@@ -170,7 +170,7 @@ export const ThreadRow = memo(function ThreadRow({
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.2, ease: "easeOut" }}
           className={cn(
-            "group relative flex items-center gap-1 rounded-md px-3 transition-transform hover:translate-x-[3px] will-change-[transform,opacity]",
+            "group relative flex items-center gap-1 rounded-md px-3 transition-transform hover:translate-x-[3px]",
             compact ? "py-1" : "py-2",
             active
               ? "bg-primary/10 hover:bg-primary/15"

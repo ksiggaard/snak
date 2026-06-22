@@ -264,17 +264,13 @@ html.overlay #root {
   box-shadow: var(--shadow-sm);
 }
 
-/* Animated gradient border shimmer for the composer on focus. A thin
-   rotating conic-gradient pseudo-element gives a lively "active" feel. */
-@keyframes composer-shimmer {
-  from { --shimmer-angle: 0deg; }
-  to   { --shimmer-angle: 360deg; }
-}
-@property --shimmer-angle {
-  syntax: "<angle>";
-  initial-value: 0deg;
-  inherits: false;
-}
+/* Static gradient border on the composer when focused — a thin gradient ring
+   for an "active" feel. ponytail: this was an animated rotating conic-gradient
+   driven by `@property --shimmer-angle` (3s linear infinite). A registered-
+   property→gradient animation can't be GPU-composited and repaints the border
+   every frame the composer is focused — i.e. the whole time you're in a chat —
+   which is brutal on WebKitGTK/nvidia. The static ring keeps the look for ~0
+   cost (painted once). */
 .composer-shimmer:focus-within {
   border-color: transparent;
   background-clip: padding-box;
@@ -286,15 +282,9 @@ html.overlay #root {
   inset: -1px;
   border-radius: inherit;
   padding: 1px;
-  background: conic-gradient(
-    from var(--shimmer-angle, 0deg),
-    var(--primary),
-    var(--ring),
-    var(--primary)
-  );
+  background: linear-gradient(135deg, var(--primary), var(--ring));
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask-composite: exclude;
-  animation: composer-shimmer 3s linear infinite;
 }
 
 /* Staggered list entry: each section items fade-slide in with a

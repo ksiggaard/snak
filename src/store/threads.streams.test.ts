@@ -28,9 +28,12 @@ vi.mock("@/lib/db", () => ({
   setThreadArchived: vi.fn(async () => {}),
 }));
 
-vi.mock("@/lib/messages", () => ({
-  loadThreadMessages: vi.fn(async () => []),
-}));
+vi.mock("@/lib/messages", async (importOriginal) => {
+  // Keep the real stream-event helpers (applyToolEvent, isModelOutput, …) the
+  // send path calls from onDelta; only loadThreadMessages is stubbed.
+  const actual = await importOriginal<typeof import("@/lib/messages")>();
+  return { ...actual, loadThreadMessages: vi.fn(async () => []) };
+});
 
 vi.mock("@/store/connectivity", () => ({
   useConnectivity: { getState: () => ({ status: "online" as const, forceOffline: false }) },
@@ -396,6 +399,39 @@ describe("concurrent streams", () => {
     // Await both sends to clean up.
     await t1Send;
     await t2Send;
+  });
+
+  it("does not leak a background thread's streamed text into the viewed thread", async () => {
+    let deltaFor1!: (e: { text: string }) => void;
+    let resolve1!: () => void;
+    const pending1 = new Promise<void>((r) => { resolve1 = r; });
+    vi.mocked(chatStream).mockImplementation((_p, _m, _msgs, onDelta) => {
+      deltaFor1 = onDelta as unknown as (e: { text: string }) => void;
+      return pending1.then(() => reply("t1 done"));
+    });
+
+    // Start a stream on t1 (the thread currently on screen).
+    const t1Send = useThreads.getState().send("t1 hello", []);
+    await vi.waitFor(() => expect(vi.mocked(chatStream)).toHaveBeenCalledTimes(1));
+
+    // A delta while t1 is viewed paints the streaming bubble.
+    deltaFor1({ text: "visible in t1" });
+    expect(useThreads.getState().streamingContent).toBe("visible in t1");
+
+    // User navigates to t2 — the bubble clears with the thread switch.
+    await useThreads.getState().selectThread("t2");
+    expect(useThreads.getState().currentThreadId).toBe("t2");
+    expect(useThreads.getState().streamingContent).toBeNull();
+
+    // t1 keeps streaming in the background. The sleep clears the 100ms flush
+    // throttle so a flush *would* fire if unguarded — but it must not repaint
+    // t2's view with t1's text.
+    await new Promise((r) => setTimeout(r, 110));
+    deltaFor1({ text: " — more from t1" });
+    expect(useThreads.getState().streamingContent).toBeNull();
+
+    resolve1();
+    await t1Send;
   });
 });
 

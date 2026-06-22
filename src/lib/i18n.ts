@@ -519,7 +519,7 @@ export const en = {
     "Tag capabilities so the planner can match models to tasks.",
 
   // Planner progress pills
-  "planner.pill.planning": "Breaking down task\u2026",
+  "planner.pill.planning": "Planning\u2026",
   "planner.pill.critiquing": "Critiquing plan\u2026",
   "planner.pill.revising": "Revising plan ({round}/{max})\u2026",
   "planner.pill.dispatching": "Spawning {n} sub-agents",

@@ -15,7 +15,7 @@ export function Sidebar() {
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: -16, opacity: 0 }}
       transition={{ duration: 0.2, ease: "easeOut" }}
-      className="bg-sidebar text-sidebar-foreground relative flex shrink-0 flex-col overflow-hidden rounded-2xl will-change-[transform,opacity]"
+      className="bg-sidebar text-sidebar-foreground relative flex shrink-0 flex-col overflow-hidden rounded-2xl"
       style={{ width }}
     >
       <SidebarPane />

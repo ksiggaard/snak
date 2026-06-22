@@ -1833,6 +1833,12 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         const apiTrace: ApiTraceEntry[] = [];
         let lastFlush = 0;
         const flushStreamingState = () => {
+          // Thread isolation: only paint the global streaming bubble while this
+          // thread is the one on screen (mirrors the planner-path guards). The
+          // reply still grows in streamAcc and persists on completion no matter
+          // which thread is viewed — a background stream just doesn't leak its
+          // text into whatever chat the user has open.
+          if (get().currentThreadId !== threadId) return;
           set({
             streamingContent: streamAcc,
             streamingToolCalls: [...toolCalls],
@@ -2214,6 +2220,11 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       const apiTrace: ApiTraceEntry[] = [];
       let lastFlush = 0;
       const flushStreamingState = () => {
+        // Thread isolation: only paint the global streaming bubble while this
+        // thread is on screen (mirrors the planner-path guards). A background
+        // stream still accumulates and persists; it just doesn't leak its text
+        // into whatever chat the user currently has open.
+        if (get().currentThreadId !== id) return;
         set({
           streamingContent: acc,
           streamingToolCalls: [...toolCalls],
@@ -2504,6 +2515,11 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       const apiTrace: ApiTraceEntry[] = [];
       let lastFlush = 0;
       const flushStreamingState = () => {
+        // Thread isolation: only paint the global streaming bubble while this
+        // thread is on screen (mirrors the planner-path guards). A background
+        // stream still accumulates and persists; it just doesn't leak its text
+        // into whatever chat the user currently has open.
+        if (get().currentThreadId !== id) return;
         set({
           streamingContent: acc,
           streamingToolCalls: [...toolCalls],

@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { FileCode, Trash2 } from "lucide-react";
 import { useLibrary } from "@/store/library";
-import { useT, useTp } from "@/store/i18n";
+import { confirmDialog } from "@/store/confirm";
+import { t as tNow, useT, useTp } from "@/store/i18n";
 import { relativeTime } from "@/lib/time";
+import { cn } from "@/lib/utils";
 
 export function ArtifactsPane() {
   const t = useT();
   const tp = useTp();
   const { items, load, openId, setOpenId, remove } = useLibrary();
-  const [confirmId, setConfirmId] = useState<string | null>(null);
   const [renamingId, setRenameId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const renameRef = useRef<HTMLInputElement>(null);
@@ -23,97 +24,97 @@ export function ArtifactsPane() {
 
   if (items.length === 0) {
     return (
-      <div className="text-sidebar-foreground/50 flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center text-xs">
-        <FileCode className="size-10 opacity-30" />
-        <p>{t("library.empty")}</p>
-      </div>
+      <p className="text-muted-foreground px-2 py-4 text-xs">
+        {t("library.empty")}
+      </p>
     );
   }
 
   return (
-    <div className="flex flex-1 flex-col overflow-y-auto">
-      {items.map((item) => (
-        <div key={item.id} className="group relative">
-          {renamingId === item.id ? (
-            <input
-              ref={renameRef}
-              value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
-              onBlur={() => {
-                if (renameValue.trim()) {
-                  void useLibrary.getState().rename(item.id, renameValue.trim());
-                }
-                setRenameId(null);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.currentTarget.blur();
-                } else if (e.key === "Escape") {
+    <div className="flex flex-col">
+      {items.map((item) => {
+        const active = openId === item.id;
+        return (
+          <div key={item.id} className="group relative">
+            {renamingId === item.id ? (
+              <input
+                ref={renameRef}
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onBlur={() => {
+                  if (renameValue.trim()) {
+                    void useLibrary.getState().rename(item.id, renameValue.trim());
+                  }
                   setRenameId(null);
-                }
-              }}
-              className="w-full px-3 py-2 text-xs bg-sidebar-accent outline-none"
-            />
-          ) : (
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.currentTarget.blur();
+                  } else if (e.key === "Escape") {
+                    setRenameId(null);
+                  }
+                }}
+                className="bg-sidebar-accent w-full rounded-md px-3 py-2 text-xs outline-none"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setOpenId(item.id)}
+                onDoubleClick={() => {
+                  setRenameValue(item.title);
+                  setRenameId(item.id);
+                }}
+                className={cn(
+                  "flex w-full flex-col rounded-md px-3 py-2 text-left transition-transform hover:translate-x-[3px]",
+                  active
+                    ? "bg-primary/10 hover:bg-primary/15"
+                    : "hover:bg-sidebar-accent/50",
+                )}
+              >
+                {active && (
+                  <span
+                    aria-hidden
+                    className="bg-primary absolute inset-y-1 left-0 w-[3px] rounded-r-full"
+                  />
+                )}
+                <span className="flex items-center gap-2">
+                  <FileCode className="size-3.5 shrink-0 opacity-60" />
+                  <span
+                    className={cn(
+                      "truncate text-sm",
+                      active && "text-foreground font-medium",
+                    )}
+                  >
+                    {item.title}
+                  </span>
+                </span>
+                <span className="text-muted-foreground mt-0.5 ml-[22px] flex items-center gap-2 text-[11px]">
+                  <span>{tp("artifact.fileCount", item.files.length)}</span>
+                  <span>·</span>
+                  <span>{relativeTime(new Date(item.updated_at))}</span>
+                </span>
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => setOpenId(item.id)}
-              onDoubleClick={() => {
-                setRenameValue(item.title);
-                setRenameId(item.id);
+              onClick={(e) => {
+                e.stopPropagation();
+                void confirmDialog({
+                  title: tNow("library.deleteConfirm"),
+                  confirmText: tNow("common.delete"),
+                  destructive: true,
+                }).then((ok) => {
+                  if (ok) void remove(item.id);
+                });
               }}
-              className={`w-full px-3 py-2 text-left text-xs transition-colors ${
-                openId === item.id
-                  ? "bg-sidebar-accent text-sidebar-foreground"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50"
-              }`}
+              className="text-muted-foreground hover:text-destructive absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100"
+              aria-label={t("library.deleteTooltip")}
             >
-              <div className="flex items-center gap-2">
-                <FileCode className="size-3.5 shrink-0 opacity-60" />
-                <span className="truncate font-medium">{item.title}</span>
-              </div>
-              <div className="text-sidebar-foreground/40 mt-0.5 ml-[22px] flex items-center gap-2 text-[11px]">
-                <span>{tp("artifact.fileCount", item.files.length)}</span>
-                <span>·</span>
-                <span>{relativeTime(new Date(item.updated_at))}</span>
-              </div>
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setConfirmId(item.id);
-            }}
-            className="absolute right-2 top-2 text-sidebar-foreground/30 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-            aria-label={t("library.deleteTooltip")}
-          >
-            <Trash2 className="size-3.5" />
-          </button>
-        </div>
-      ))}
-      {confirmId && (
-        <div className="bg-sidebar/95 absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 px-6 text-center">
-          <p className="text-xs">{t("library.deleteConfirm")}</p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                void remove(confirmId);
-                setConfirmId(null);
-              }}
-              className="bg-destructive text-destructive-foreground rounded px-3 py-1 text-xs"
-            >
-              Delete
-            </button>
-            <button
-              onClick={() => setConfirmId(null)}
-              className="bg-sidebar-accent rounded px-3 py-1 text-xs"
-            >
-              Cancel
+              <Trash2 className="size-3.5" />
             </button>
           </div>
-        </div>
-      )}
+        );
+      })}
     </div>
   );
 }

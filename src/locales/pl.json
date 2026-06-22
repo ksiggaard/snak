@@ -689,7 +689,7 @@
     "planner.pill.directSelf": "Answered directly",
     "planner.pill.dispatching": "Spawning {n} sub-agents",
     "planner.pill.executing": "Running {n} steps",
-    "planner.pill.planning": "Breaking down task…",
+    "planner.pill.planning": "Planning…",
     "planner.pill.critiquing": "Critiquing plan…",
     "planner.pill.revising": "Revising plan ({round}/{max})…",
     "planner.pill.stepDone": "Done",
