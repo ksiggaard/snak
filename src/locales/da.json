@@ -535,8 +535,8 @@
     "mcp.searchApiKeyPlaceholder": "{provider}-API-nøgle",
     "mcp.searchApiKeySaved": "Gemt ✓",
     "skills.title": "Færdigheder",
-    "skills.description": "Færdigheder er genbrugelige instruktionspakker, som modellen kan trække på. Slå en færdighed til for at få dens vejledning ind i systemkonteksten i hver chat. Installer flere som skill-plugins (se Plugins-kortet).",
-    "skills.none": "Ingen færdigheder installeret endnu.",
+    "skills.description": "Færdigheder er genbrugelige instruktionspakker i SKILL.md-formatet (kompatibelt med Claude Code og Claude API). Kun en færdigheds navn og beskrivelse er altid i konteksten; modellen indlæser de fulde instruktioner efter behov, så det forbliver billigt at aktivere mange færdigheder.",
+    "skills.none": "Ingen færdigheder endnu. Opret en nedenfor, eller importér eksisterende SKILL.md-mapper.",
     "plugins.title": "Plugins",
     "plugins.description": "Udvid appen med udbydere, temaer, færdigheder og skråstregskommandoer. Indbyggede plugins følger med appen og kan slås fra, men ikke fjernes. Bruger-plugins ligger i appdata-mappen plugins/.",
     "plugins.category.provider": "Udbydere",
@@ -754,6 +754,18 @@
     "density.label": "Mellemrums tæthed",
     "bgGradient.title": "Baggrundsgradient",
     "bgGradient.description": "En subtil diagonal gradient fra baggrund til farvetone bag hele brugergrænsefladen.",
-    "bgGradient.label": "Baggrundsgradient"
+    "bgGradient.label": "Baggrundsgradient",
+    "skills.new": "Ny færdighed",
+    "skills.import": "Importér…",
+    "skills.importHint": "Vælg en mappe med SKILL.md, eller en overordnet mappe med færdighedsmapper (f.eks. ~/.claude/skills).",
+    "skills.imported": "Importerede {count} færdighed(er).",
+    "skills.nameLabel": "Navn",
+    "skills.namePlaceholder": "f.eks. SQL-stil",
+    "skills.descriptionLabel": "Beskrivelse",
+    "skills.descriptionPlaceholder": "Én linje — hvornår modellen skal bruge denne færdighed (vises i det altid-aktive indeks).",
+    "skills.instructionsLabel": "Instruktioner",
+    "skills.instructionsPlaceholder": "Hele færdighedens indhold (markdown). Indlæses efter behov, når modellen vælger denne færdighed.",
+    "skills.saving": "Gemmer…",
+    "skills.deleteTitle": "Slet færdigheden “{name}”?"
   }
 }

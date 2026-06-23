@@ -35,7 +35,6 @@ import type { Provider } from "@/types/db";
 const CATEGORY_KEYS: Record<PluginCategory, MessageKey> = {
   provider: "plugins.category.provider",
   theme: "plugins.category.theme",
-  skill: "plugins.category.skill",
   "slash-command": "plugins.category.slashCommand",
   renderer: "plugins.category.renderer",
   audio: "plugins.category.audio",

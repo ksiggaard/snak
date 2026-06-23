@@ -535,8 +535,8 @@
     "mcp.searchApiKeyPlaceholder": "Clave de API de {provider}",
     "mcp.searchApiKeySaved": "Guardado ✓",
     "skills.title": "Habilidades",
-    "skills.description": "Las habilidades son paquetes de instrucciones reutilizables para el modelo. Activa una para inyectar sus pautas en el contexto de sistema de cada chat. Instala más añadiendo plugins de tipo skill (mira la tarjeta Plugins).",
-    "skills.none": "Todavía no hay habilidades instaladas.",
+    "skills.description": "Las habilidades son paquetes de instrucciones reutilizables en formato SKILL.md (compatibles con Claude Code y la API de Claude). Solo el nombre y la descripción de una habilidad están siempre en el contexto; el modelo carga las instrucciones completas cuando hacen falta, así que activar muchas habilidades sigue siendo económico.",
+    "skills.none": "Aún no hay habilidades. Crea una abajo o importa carpetas SKILL.md existentes.",
     "plugins.title": "Plugins",
     "plugins.description": "Amplía la aplicación con proveedores, temas, habilidades y comandos de barra. Los plugins integrados vienen con la aplicación y pueden desactivarse pero no eliminarse. Los plugins de usuario viven en la carpeta plugins/ de los datos de la aplicación.",
     "plugins.category.provider": "Proveedores",
@@ -754,6 +754,18 @@
     "density.label": "Densidad de espaciado",
     "bgGradient.title": "Degradado de fondo",
     "bgGradient.description": "Un sutil degradado diagonal del fondo al tinte detrás de toda la interfaz.",
-    "bgGradient.label": "Degradado de fondo"
+    "bgGradient.label": "Degradado de fondo",
+    "skills.new": "Nueva habilidad",
+    "skills.import": "Importar…",
+    "skills.importHint": "Elige una carpeta que contenga SKILL.md, o una carpeta superior con carpetas de habilidades (p. ej. ~/.claude/skills).",
+    "skills.imported": "Se importaron {count} habilidad(es).",
+    "skills.nameLabel": "Nombre",
+    "skills.namePlaceholder": "p. ej. Estilo SQL",
+    "skills.descriptionLabel": "Descripción",
+    "skills.descriptionPlaceholder": "Una línea — cuándo debe el modelo usar esta habilidad (se muestra en el índice siempre activo).",
+    "skills.instructionsLabel": "Instrucciones",
+    "skills.instructionsPlaceholder": "El contenido completo de la habilidad (markdown). Se carga cuando el modelo elige esta habilidad.",
+    "skills.saving": "Guardando…",
+    "skills.deleteTitle": "¿Eliminar la habilidad «{name}»?"
   }
 }

@@ -85,13 +85,11 @@ describe("buildRegistry", () => {
         keyHint: "k",
       }),
       mk("theme", true, { name: "Dark", css: ":root{}" }),
-      mk("skill", true, { name: "S", instructions: "do" }),
       mk("slash-command", true, { command: "/t", description: "d" }),
       mk("renderer", true, { language: "mermaid" }),
     ]);
     expect(reg.providers.map((p) => p.id)).toEqual(["anthropic"]);
     expect(reg.themes).toHaveLength(1);
-    expect(reg.skills).toHaveLength(1);
     expect(reg.slashCommands).toHaveLength(1);
     expect(reg.renderers.map((r) => r.language)).toEqual(["mermaid"]);
   });

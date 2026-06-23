@@ -5,10 +5,11 @@
 /** Host API version this build implements. Manifests must target this. */
 export const PLUGIN_API_VERSION = 1;
 
+// Note: skills are NOT a plugin category — they're SKILL.md folders managed by
+// the dedicated `skills` store (src/lib/skills.ts), the Agent Skills standard.
 export type PluginCategory =
   | "provider"
   | "theme"
-  | "skill"
   | "slash-command"
   | "renderer"
   | "audio";
@@ -16,7 +17,6 @@ export type PluginCategory =
 export const PLUGIN_CATEGORIES: PluginCategory[] = [
   "provider",
   "theme",
-  "skill",
   "slash-command",
   "renderer",
   "audio",
@@ -26,7 +26,6 @@ export const PLUGIN_CATEGORIES: PluginCategory[] = [
 export const CATEGORY_LABELS: Record<PluginCategory, string> = {
   provider: "Providers",
   theme: "Themes",
-  skill: "Skills",
   "slash-command": "Slash commands",
   renderer: "Renderers",
   audio: "Audio",
@@ -48,12 +47,6 @@ export interface ThemeContribution {
   name: string;
   /** CSS text, or an app-data file path (resolved by the theme loader, T11). */
   css: string;
-}
-
-/** Packaged instructions surfaced to the model (T15). */
-export interface SkillContribution {
-  name: string;
-  instructions: string;
 }
 
 /** A `/command` descriptor handled in the composer (T14). */
@@ -80,7 +73,6 @@ export interface AudioContribution {
 export type PluginContribution =
   | ProviderContribution
   | ThemeContribution
-  | SkillContribution
   | SlashCommandContribution
   | RendererContribution
   | AudioContribution;

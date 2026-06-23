@@ -15,7 +15,6 @@ import type { HostRegistry } from "@/lib/plugins";
 const registry = (languages: string[]): HostRegistry => ({
   providers: [],
   themes: [],
-  skills: [],
   slashCommands: [],
   renderers: languages.map((language) => ({ language })),
   audio: [],

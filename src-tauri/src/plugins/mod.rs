@@ -49,7 +49,8 @@ pub struct PluginManifest {
     pub id: String,
     pub name: String,
     pub version: String,
-    /// One of: provider | theme | skill | slash-command.
+    /// One of: provider | theme | slash-command | renderer | audio.
+    /// (Skills are not plugins — they're SKILL.md folders; see `crate::skills`.)
     pub category: String,
     #[serde(rename = "apiVersion")]
     pub api_version: u32,
@@ -72,10 +73,9 @@ pub struct PluginInfo {
 }
 
 /// The known plugin categories.
-const CATEGORIES: [&str; 6] = [
+const CATEGORIES: [&str; 5] = [
     "provider",
     "theme",
-    "skill",
     "slash-command",
     "renderer",
     "audio",

@@ -535,8 +535,8 @@
     "mcp.searchApiKeyPlaceholder": "Clé API {provider}",
     "mcp.searchApiKeySaved": "Enregistré ✓",
     "skills.title": "Compétences",
-    "skills.description": "Les compétences sont des packs d'instructions réutilisables pour le modèle. Activez-en une pour injecter ses consignes dans le contexte système de chaque discussion. Installez-en d'autres via des plugins skill (voir la carte Plugins).",
-    "skills.none": "Aucune compétence installée pour l'instant.",
+    "skills.description": "Les compétences sont des paquets d'instructions réutilisables au format SKILL.md (compatibles avec Claude Code et l'API Claude). Seuls le nom et la description d'une compétence sont toujours dans le contexte ; le modèle charge les instructions complètes au besoin, ce qui permet d'activer de nombreuses compétences à moindre coût.",
+    "skills.none": "Aucune compétence pour l'instant. Créez-en une ci-dessous, ou importez des dossiers SKILL.md existants.",
     "plugins.title": "Plugins",
     "plugins.description": "Étendez l'application avec des fournisseurs, des thèmes, des compétences et des commandes slash. Les plugins intégrés sont livrés avec l'application : ils peuvent être désactivés mais pas supprimés. Les plugins utilisateur vivent dans le dossier plugins/ des données de l'application.",
     "plugins.category.provider": "Fournisseurs",
@@ -754,6 +754,18 @@
     "density.label": "Densité d'espacement",
     "bgGradient.title": "Dégradé de fond",
     "bgGradient.description": "Un subtil dégradé diagonal du fond vers la teinte derrière toute l'interface.",
-    "bgGradient.label": "Dégradé de fond"
+    "bgGradient.label": "Dégradé de fond",
+    "skills.new": "Nouvelle compétence",
+    "skills.import": "Importer…",
+    "skills.importHint": "Choisissez un dossier contenant SKILL.md, ou un dossier parent de dossiers de compétences (p. ex. ~/.claude/skills).",
+    "skills.imported": "{count} compétence(s) importée(s).",
+    "skills.nameLabel": "Nom",
+    "skills.namePlaceholder": "p. ex. Style SQL",
+    "skills.descriptionLabel": "Description",
+    "skills.descriptionPlaceholder": "Une ligne — quand le modèle doit utiliser cette compétence (affichée dans l'index toujours actif).",
+    "skills.instructionsLabel": "Instructions",
+    "skills.instructionsPlaceholder": "Le contenu complet de la compétence (markdown). Chargé à la demande lorsque le modèle choisit cette compétence.",
+    "skills.saving": "Enregistrement…",
+    "skills.deleteTitle": "Supprimer la compétence « {name} » ?"
   }
 }

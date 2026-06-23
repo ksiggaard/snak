@@ -545,8 +545,8 @@
     "mcp.searchApiKeyPlaceholder": "Klucz API {provider}",
     "mcp.searchApiKeySaved": "Zapisano ✓",
     "skills.title": "Umiejętności",
-    "skills.description": "Umiejętności to wielokrotnego użytku pakiety instrukcji dla modelu. Włącz umiejętność, aby jej wskazówki trafiały do kontekstu systemowego każdego czatu. Kolejne zainstalujesz jako wtyczki typu skill (zobacz kartę Wtyczki).",
-    "skills.none": "Nie zainstalowano jeszcze umiejętności.",
+    "skills.description": "Umiejętności to wielokrotnego użytku pakiety instrukcji w formacie SKILL.md (zgodne z Claude Code i API Claude). Tylko nazwa i opis umiejętności są zawsze w kontekście; model wczytuje pełne instrukcje na żądanie, więc włączanie wielu umiejętności pozostaje tanie.",
+    "skills.none": "Nie ma jeszcze umiejętności. Utwórz jedną poniżej lub zaimportuj istniejące foldery SKILL.md.",
     "plugins.title": "Wtyczki",
     "plugins.description": "Rozszerzaj aplikację o dostawców, motywy, umiejętności i polecenia z ukośnikiem. Wtyczki wbudowane są częścią aplikacji — można je wyłączyć, ale nie usunąć. Wtyczki użytkownika znajdują się w folderze plugins/ danych aplikacji.",
     "plugins.category.provider": "Dostawcy",
@@ -766,6 +766,18 @@
     "density.label": "Gęstość odstępów",
     "bgGradient.title": "Gradient tła",
     "bgGradient.description": "Subtelny diagonalny gradient od tła do odcienia za całym interfejsem.",
-    "bgGradient.label": "Gradient tła"
+    "bgGradient.label": "Gradient tła",
+    "skills.new": "Nowa umiejętność",
+    "skills.import": "Importuj…",
+    "skills.importHint": "Wybierz folder zawierający SKILL.md lub folder nadrzędny z folderami umiejętności (np. ~/.claude/skills).",
+    "skills.imported": "Zaimportowano {count} umiejętność(i).",
+    "skills.nameLabel": "Nazwa",
+    "skills.namePlaceholder": "np. Styl SQL",
+    "skills.descriptionLabel": "Opis",
+    "skills.descriptionPlaceholder": "Jedna linia — kiedy model powinien użyć tej umiejętności (widoczne w zawsze aktywnym indeksie).",
+    "skills.instructionsLabel": "Instrukcje",
+    "skills.instructionsPlaceholder": "Pełna treść umiejętności (markdown). Wczytywana na żądanie, gdy model wybierze tę umiejętność.",
+    "skills.saving": "Zapisywanie…",
+    "skills.deleteTitle": "Usunąć umiejętność „{name}”?"
   }
 }

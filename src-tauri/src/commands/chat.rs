@@ -30,7 +30,7 @@ use std::sync::{Arc, Mutex};
 use futures_util::StreamExt;
 use serde::Deserialize;
 use tauri::ipc::Channel;
-use tauri::State;
+use tauri::{AppHandle, State};
 use tokio::sync::oneshot;
 
 use crate::commands::keys;
@@ -144,6 +144,7 @@ pub async fn chat_stream(
     cancel: State<'_, CancelFlag>,
     approvals: State<'_, PendingApprovals>,
     key_cache: State<'_, keys::KeyCache>,
+    app: AppHandle,
 ) -> Result<ChatResponse, String> {
     // Reset any leftover cancellation from a previous request.
     let flag = cancel.0.clone();
@@ -210,6 +211,14 @@ pub async fn chat_stream(
     });
     let history = with_system_prompt(messages, has_mcp_tools, deep_research);
 
+    // Resolve the skill paths (skills dir + per-thread workspace root) for the
+    // built-in `skill__*` tool. `Default` (empty paths) degrades gracefully if
+    // the app-data dir can't be resolved — the tools just report "not found".
+    let skill_rt = mcp::skill_tool::SkillRuntime {
+        skills_dir: crate::skills::skills_dir(&app).unwrap_or_default(),
+        workspace_root: crate::skills::workspace_root(&app).unwrap_or_default(),
+    };
+
     run_agent_loop(
         &client,
         &provider,
@@ -229,6 +238,7 @@ pub async fn chat_stream(
         captureReasoning.unwrap_or(false),
         captureTrace.unwrap_or(false),
         &plannerModels,
+        &skill_rt,
     )
     .await
 }
@@ -263,6 +273,7 @@ async fn run_agent_loop(
     reasoning: bool,
     trace: bool,
     planner_models: &Option<Vec<PlannerModelInfo>>,
+    skill_rt: &mcp::skill_tool::SkillRuntime,
 ) -> Result<ChatResponse, String> {
     // The full streamed transcript: text deltas across every round. Returned as
     // the authoritative content so the persisted message matches what streamed
@@ -329,6 +340,7 @@ async fn run_agent_loop(
                     cancel,
                     call,
                     subagent_concurrency,
+                    skill_rt,
                 )
                 .await;
                 extra_usage.add(&usage);
@@ -437,7 +449,8 @@ async fn run_agent_loop(
 
             // Runs the tool, streaming any live output to the UI as it arrives.
             let content =
-                mcp::call_tool(client, sessions, thread_id, servers, call, on_delta).await;
+                mcp::call_tool(client, sessions, thread_id, servers, call, on_delta, skill_rt)
+                    .await;
             let ok = !content.starts_with("tool error:");
             on_delta
                 .send(StreamDelta::tool_done(&call.id, ok))
@@ -548,6 +561,7 @@ async fn run_subagents(
     cancel: &AtomicBool,
     call: &ToolCall,
     concurrency: usize,
+    skill_rt: &mcp::skill_tool::SkillRuntime,
 ) -> (String, Usage) {
     let tasks = match research::parse_subtasks(&call.arguments) {
         Ok(t) => t,
@@ -638,6 +652,7 @@ async fn run_subagents(
                 false,
                 false,
                 &None, // no planner tools for subagents
+                skill_rt,
             ))
             .await;
             match res {

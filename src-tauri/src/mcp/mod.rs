@@ -23,6 +23,7 @@
 
 pub mod image_search;
 pub mod session;
+pub mod skill_tool;
 pub mod sysdebug;
 pub mod web_browse;
 pub mod web_search;
@@ -182,6 +183,7 @@ pub async fn list_tools(
 /// Execute one (namespaced) tool call by routing it to the owning server.
 /// Returns the tool's text result, or an error string the loop feeds back to the
 /// model as a failed `tool_result` (so a bad call doesn't abort the turn).
+#[allow(clippy::too_many_arguments)]
 pub async fn call_tool(
     client: &reqwest::Client,
     sessions: &session::McpSessions,
@@ -189,6 +191,7 @@ pub async fn call_tool(
     servers: &[ServerConfig],
     call: &ToolCall,
     on_delta: &Channel<StreamDelta>,
+    skill_rt: &skill_tool::SkillRuntime,
 ) -> String {
     // Live output is streamed to the UI as `tool_output` deltas keyed to this
     // call. A closed channel (frontend gone) is harmless — drop the chunk.
@@ -213,6 +216,7 @@ pub async fn call_tool(
         &emit,
         &emit_images,
         &emit_sources,
+        skill_rt,
     )
     .await
     {
@@ -231,6 +235,7 @@ async fn call_tool_inner(
     emit: LineSink<'_>,
     emit_images: ImageSink<'_>,
     emit_sources: SourceSink<'_>,
+    skill_rt: &skill_tool::SkillRuntime,
 ) -> anyhow::Result<String> {
     let (server_id, tool) = split_namespaced(&call.name);
     let server = servers
@@ -253,6 +258,8 @@ async fn call_tool_inner(
                 emit,
                 emit_images,
                 emit_sources,
+                skill_rt,
+                thread_id,
             )
             .await
         }
@@ -284,10 +291,12 @@ fn builtin_tools(server_id: &str) -> Vec<ToolDef> {
     match server_id {
         sysdebug::SERVER_ID => sysdebug::tools(),
         youtube::SERVER_ID => youtube::tools(),
+        skill_tool::SERVER_ID => skill_tool::tools(),
         _ => web_browse::tools(),
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn builtin_call(
     client: &reqwest::Client,
     server_id: &str,
@@ -297,10 +306,13 @@ async fn builtin_call(
     emit: LineSink<'_>,
     emit_images: ImageSink<'_>,
     emit_sources: SourceSink<'_>,
+    skill_rt: &skill_tool::SkillRuntime,
+    thread_id: &str,
 ) -> anyhow::Result<String> {
     match server_id {
         sysdebug::SERVER_ID => sysdebug::call_tool(tool, args, emit).await,
         youtube::SERVER_ID => youtube::call_tool(client, tool, args, emit_images).await,
+        skill_tool::SERVER_ID => skill_tool::call_tool(skill_rt, thread_id, tool, args, emit).await,
         _ => {
             web_browse::call_tool(
                 client,

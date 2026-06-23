@@ -43,6 +43,7 @@ import { useWorkspaces } from "@/store/workspaces";
 import { useBots } from "@/store/bots";
 import { useLibrary } from "@/store/library";
 import { usePlugins } from "@/store/plugins";
+import { useSkills } from "@/store/skills";
 import { useI18n, useT } from "@/store/i18n";
 import { useModels } from "@/store/models";
 import { useContextWindows } from "@/store/contextWindows";
@@ -148,6 +149,9 @@ function App() {
     // Audio plugin: load persisted TTS/STT selections + probe tool availability
     // (fire-and-forget) so the chat mic/speak buttons honor saved choices.
     void useAudio.getState().load();
+    // Skills (Agent Skills): load the discovered SKILL.md index so the system
+    // prompt and the `skill__*` tool gate are current from first send.
+    void useSkills.getState().list();
   }, [
     init,
     initWorkspaces,

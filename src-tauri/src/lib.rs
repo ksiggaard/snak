@@ -4,6 +4,7 @@ mod menu;
 mod plugins;
 mod providers;
 mod research;
+mod skills;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -427,6 +428,13 @@ pub fn run() {
             plugins::list_plugins,
             plugins::set_plugin_enabled,
             plugins::uninstall_plugin,
+            skills::list_skills,
+            skills::read_skill,
+            skills::save_skill,
+            skills::delete_skill,
+            skills::set_skill_enabled,
+            skills::import_skills,
+            skills::pick_skills_dir,
             mcp::mcp_list_tools,
             mcp::mcp_close_thread_sessions,
             mcp::mcp_close_server_sessions,

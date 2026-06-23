@@ -18,7 +18,6 @@ import {
   type PluginManifest,
   type ProviderContribution,
   type RendererContribution,
-  type SkillContribution,
   type SlashCommandContribution,
   type ThemeContribution,
 } from "@/types/plugins";
@@ -97,7 +96,6 @@ export function parseManifest(raw: unknown): PluginManifest {
 export interface HostRegistry {
   providers: ProviderContribution[];
   themes: ThemeContribution[];
-  skills: SkillContribution[];
   slashCommands: SlashCommandContribution[];
   renderers: RendererContribution[];
   audio: AudioContribution[];
@@ -108,7 +106,6 @@ export function buildRegistry(plugins: PluginInfo[]): HostRegistry {
   const reg: HostRegistry = {
     providers: [],
     themes: [],
-    skills: [],
     slashCommands: [],
     renderers: [],
     audio: [],
@@ -122,9 +119,6 @@ export function buildRegistry(plugins: PluginInfo[]): HostRegistry {
         break;
       case "theme":
         reg.themes.push(c as ThemeContribution);
-        break;
-      case "skill":
-        reg.skills.push(c as SkillContribution);
         break;
       case "slash-command":
         reg.slashCommands.push(c as SlashCommandContribution);

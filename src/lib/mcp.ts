@@ -13,6 +13,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getSetting, setSetting } from "@/lib/db";
 import { isKeylessProvider } from "@/lib/providers";
+import { useSkills } from "@/store/skills";
 import type { Provider } from "@/types/db";
 
 /** Settings key under which the server list JSON is persisted. */
@@ -129,6 +130,22 @@ export const BUILTIN_YOUTUBE_SERVER: McpServer = {
   builtin: true,
 };
 
+/**
+ * The built-in **skill** tool server (`skill`). Backs the Agent Skills feature:
+ * `skill__load_skill` reads a skill's full body on demand, plus bundled-file and
+ * per-thread workspace tools. It is NOT a user-facing MCP server (managed in the
+ * Skills settings card, not the MCP card), so it is excluded from
+ * `BUILTIN_SERVERS`; instead `enabledServersForChat` adds it only when ≥1 skill
+ * is enabled (preserving the no-tools invariant when skills are unused).
+ */
+export const BUILTIN_SKILL_SERVER: McpServer = {
+  id: "skill",
+  label: "Skills (built-in)",
+  transport: "builtin",
+  enabled: true,
+  builtin: true,
+};
+
 /** All built-in servers, in display order (always present, never removable). */
 export const BUILTIN_SERVERS: McpServer[] = [
   BUILTIN_WEB_SERVER,
@@ -214,6 +231,14 @@ export async function enabledServersForChat(
   const allowCloudSys = local ? true : await loadAllowCloudSysTools();
   let enabled = gateServersForChat(await loadServers(), local, allowCloudSys);
   enabled = gateServersForOffline(enabled, offline);
+  // Skills: expose the built-in `skill__*` tool only when ≥1 skill is enabled,
+  // so the no-tools invariant holds when skills are unused. Ensure the store is
+  // loaded so a send before the App-mount init still sees skills.
+  const skills = useSkills.getState();
+  if (!skills.loaded) await skills.list();
+  if (useSkills.getState().skills.some((s) => s.enabled)) {
+    enabled = [...enabled, BUILTIN_SKILL_SERVER];
+  }
   return enabled.length > 0 ? enabled : undefined;
 }
 

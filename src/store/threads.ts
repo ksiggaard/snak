@@ -63,7 +63,8 @@ import { buildBotSystemText, buildGroupChatSystemText } from "@/lib/bots";
 import { extractMentions } from "@/lib/mentions";
 import { runPersonaMemoryUpdate } from "@/lib/personaMemory";
 import { buildWorkspaceSystemText, filterWorkspaceFiles } from "@/lib/workspaces";
-import { buildSkillsSystemText } from "@/lib/skills";
+import { buildSkillsIndexText } from "@/lib/skills";
+import { useSkills } from "@/store/skills";
 import { buildArtifactsSystemText } from "@/lib/artifacts";
 import { buildChartsSystemText } from "@/lib/charts";
 import { buildMapsSystemText } from "@/lib/maps";
@@ -490,11 +491,19 @@ async function loadSharedSystemBlocks(
   const head: ApiMessage[] = [];
   const tail: ApiMessage[] = [];
 
-  // Enabled skills (T15): instruction packs from `skill` plugins.
+  // Enabled skills: inject only the INDEX (name + description). The model pulls
+  // a skill's full body on demand via the `skill__load_skill` tool, so the
+  // prompt isn't polluted with instructions it isn't using (progressive
+  // disclosure — the Agent Skills standard).
+  const sk = useSkills.getState();
+  if (!sk.loaded) await sk.list();
+  const skillsIndexText = buildSkillsIndexText(
+    useSkills.getState().skills.filter((s) => s.enabled),
+  );
+  if (skillsIndexText)
+    head.push({ role: "system", content: skillsIndexText, images: [] });
+
   const registry = selectRegistry(usePlugins.getState());
-  const skillsSystemText = buildSkillsSystemText(registry.skills);
-  if (skillsSystemText)
-    head.push({ role: "system", content: skillsSystemText, images: [] });
 
   // Charts auto-instruct (com.snak.charts): teach the model the ```vega-lite
   // fence when the charts renderer is enabled (empty otherwise).

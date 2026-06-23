@@ -783,8 +783,24 @@ export const en = {
   // --- Settings: skills ---------------------------------------------------------------------------------------------------------------------
   "skills.title": "Skills",
   "skills.description":
-    "Skills are reusable instruction packs the model can draw on. Enable a skill to inject its guidance into every chat's system context. Install more by adding skill plugins (see the Plugins card).",
-  "skills.none": "No skills installed yet.",
+    "Skills are reusable instruction packs in the SKILL.md format (compatible with Claude Code and the Claude API). Only a skill's name and description are always in context; the model loads the full instructions on demand when relevant, so enabling many skills stays cheap.",
+  "skills.none":
+    "No skills yet. Create one below, or import existing SKILL.md folders.",
+  "skills.new": "New skill",
+  "skills.import": "Import…",
+  "skills.importHint":
+    "Pick a folder containing SKILL.md, or a parent folder of skill folders (e.g. ~/.claude/skills).",
+  "skills.imported": "Imported {count} skill(s).",
+  "skills.nameLabel": "Name",
+  "skills.namePlaceholder": "e.g. SQL Style",
+  "skills.descriptionLabel": "Description",
+  "skills.descriptionPlaceholder":
+    "One line — when the model should use this skill (shown in the always-on index).",
+  "skills.instructionsLabel": "Instructions",
+  "skills.instructionsPlaceholder":
+    "The full skill body (markdown). Loaded on demand when the model picks this skill.",
+  "skills.saving": "Saving…",
+  "skills.deleteTitle": "Delete skill “{name}”?",
 
   // --- Settings: plugins ------------------------------------------------------------------------------------------------------------------------
   "plugins.title": "Plugins",

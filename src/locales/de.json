@@ -539,8 +539,8 @@
     "mcp.searchApiKeyPlaceholder": "{provider}-API-Schlüssel",
     "mcp.searchApiKeySaved": "Gespeichert ✓",
     "skills.title": "Skills",
-    "skills.description": "Skills sind wiederverwendbare Anweisungspakete für das Modell. Aktiviere einen Skill, um seine Anleitung in den Systemkontext jedes Chats einzufügen. Weitere installierst du als skill-Plugins (siehe Plugins-Karte).",
-    "skills.none": "Noch keine Skills installiert.",
+    "skills.description": "Skills sind wiederverwendbare Anweisungspakete im SKILL.md-Format (kompatibel mit Claude Code und der Claude API). Nur Name und Beschreibung eines Skills sind immer im Kontext; das Modell lädt die vollständigen Anweisungen bei Bedarf, sodass viele aktivierte Skills günstig bleiben.",
+    "skills.none": "Noch keine Skills. Erstelle unten einen oder importiere vorhandene SKILL.md-Ordner.",
     "plugins.title": "Plugins",
     "plugins.description": "Erweitere die App um Anbieter, Designs, Skills und Slash-Befehle. Integrierte Plugins gehören zur App und lassen sich deaktivieren, aber nicht entfernen. Benutzer-Plugins liegen im App-Datenordner plugins/.",
     "plugins.category.provider": "Anbieter",
@@ -754,6 +754,18 @@
     "planner.allowedModelsHint": "Wähle, welche Modelle der Planer nutzen darf und markiere ihre Fähigkeiten.",
     "planner.capabilityHint": "Fähigkeiten markieren, damit der Planer Modelle passend zuordnen kann.",
     "sidebar.threadRunning": "Aktiv",
-    "sidebar.threadUnread": "Neu"
+    "sidebar.threadUnread": "Neu",
+    "skills.new": "Neuer Skill",
+    "skills.import": "Importieren…",
+    "skills.importHint": "Wähle einen Ordner mit SKILL.md oder einen übergeordneten Ordner mit Skill-Ordnern (z. B. ~/.claude/skills).",
+    "skills.imported": "{count} Skill(s) importiert.",
+    "skills.nameLabel": "Name",
+    "skills.namePlaceholder": "z. B. SQL-Stil",
+    "skills.descriptionLabel": "Beschreibung",
+    "skills.descriptionPlaceholder": "Eine Zeile — wann das Modell diesen Skill verwenden soll (erscheint im immer aktiven Index).",
+    "skills.instructionsLabel": "Anweisungen",
+    "skills.instructionsPlaceholder": "Der vollständige Skill-Inhalt (Markdown). Wird bei Bedarf geladen, wenn das Modell diesen Skill wählt.",
+    "skills.saving": "Speichern…",
+    "skills.deleteTitle": "Skill „{name}“ löschen?"
   }
 }
