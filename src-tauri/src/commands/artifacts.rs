@@ -37,7 +37,7 @@ fn safe_relative(path: &str) -> Result<String, String> {
 /// Save an artifact's files to a user-chosen `.zip` via a native "Save as…"
 /// dialog. Returns `true` if written, `false` if the user cancelled.
 #[tauri::command]
-pub fn export_artifact_zip(
+pub async fn export_artifact_zip(
     app: AppHandle,
     files: Vec<ArtifactFileArg>,
     suggested_name: String,
@@ -67,12 +67,13 @@ pub fn export_artifact_zip(
     } else {
         suggested_name
     };
-    let Some(path) = app
-        .dialog()
-        .file()
-        .set_file_name(&name)
-        .blocking_save_file()
-    else {
+    // Async + the non-blocking `save_file` callback (see `save_image`): a blocking
+    // dialog on a sync command's main thread deadlocks the app on macOS.
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog().file().set_file_name(&name).save_file(move |path| {
+        let _ = tx.send(path);
+    });
+    let Some(path) = rx.await.map_err(|_| "dialog cancelled".to_string())? else {
         return Ok(false); // user cancelled
     };
     let path = path.into_path().map_err(|e| e.to_string())?;

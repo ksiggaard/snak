@@ -417,13 +417,26 @@ pub fn import_skills(app: AppHandle, dir: String) -> Result<usize, String> {
 /// Open a native folder picker and return the chosen path (None if cancelled).
 /// Used by the Skills card's "Import" button — folder selection happens in Rust
 /// (the JS dialog plugin isn't wired in), matching `save_image`.
+///
+/// **Async + the non-blocking `pick_folder` callback** is load-bearing: a *sync*
+/// command runs on the main thread, and `blocking_pick_folder` blocks that thread
+/// while the dialog needs it to pump its event loop → deadlock (app lockup on
+/// macOS). Awaiting a oneshot off the main thread keeps the UI responsive.
 #[tauri::command]
-pub fn pick_skills_dir(app: AppHandle) -> Result<Option<String>, String> {
-    let Some(fp) = app.dialog().file().blocking_pick_folder() else {
+pub async fn pick_skills_dir(app: AppHandle) -> Result<Option<String>, String> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog().file().pick_folder(move |path| {
+        let _ = tx.send(path);
+    });
+    let Some(fp) = rx.await.map_err(|_| "dialog cancelled".to_string())? else {
         return Ok(None);
     };
-    let path = fp.into_path().map_err(|e| e.to_string())?;
-    Ok(Some(path.to_string_lossy().into_owned()))
+    Ok(Some(
+        fp.into_path()
+            .map_err(|e| e.to_string())?
+            .to_string_lossy()
+            .into_owned(),
+    ))
 }
 
 /// Recursively copy `src` into `dest` (files + subdirs). Used by import.
