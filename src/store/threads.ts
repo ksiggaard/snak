@@ -68,6 +68,7 @@ import { useSkills } from "@/store/skills";
 import { buildArtifactsSystemText } from "@/lib/artifacts";
 import { buildChartsSystemText } from "@/lib/charts";
 import { buildMapsSystemText } from "@/lib/maps";
+import { useContributions } from "@/store/contributions";
 import { buildYouTubeSystemText } from "@/lib/youtube";
 import { hasRenderer } from "@/lib/plugins";
 import { selectRegistry, usePlugins } from "@/store/plugins";
@@ -528,6 +529,20 @@ async function loadSharedSystemBlocks(
   const mapsSystemText = buildMapsSystemText(registry);
   if (mapsSystemText)
     head.push({ role: "system", content: mapsSystemText, images: [] });
+
+  // Runtime plugin LLM hooks (the "llm-hook" permission): each enabled plugin
+  // may contribute extra system-prompt text. Append-only — plugins augment, not
+  // replace, the instructions above. (transformOutgoing/onResponse are wired in
+  // a later wave; systemPrompt is the safe, high-value slice.)
+  for (const { pluginId, hook } of useContributions.getState().llmHooks) {
+    try {
+      const text = hook.systemPrompt?.();
+      if (text && text.trim())
+        head.push({ role: "system", content: text, images: [] });
+    } catch (e) {
+      console.error(`[plugin ${pluginId}] systemPrompt hook threw`, e);
+    }
+  }
 
   // Global system context (T10): the custom system-prompt addendum + the
   // user's memory entries (applies to every thread/provider).

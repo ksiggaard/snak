@@ -22,11 +22,15 @@ import { useKeys } from "@/store/keys";
 import { t as tNow, useT, type MessageKey } from "@/store/i18n";
 import {
   PLUGIN_CATEGORIES,
+  isRuntimePlugin,
   type PluginCategory,
   type PluginInfo,
   type PluginManifest,
 } from "@/types/plugins";
 import { isKeylessProvider } from "@/lib/providers";
+import { pickPluginZip, restartApp } from "@/lib/plugins";
+import { missingDependencies } from "@/lib/pluginDeps";
+import { PluginSlot } from "@/components/PluginSlot";
 import { deleteApiKey, setApiKey } from "@/lib/keys";
 import type { Provider } from "@/types/db";
 
@@ -196,6 +200,19 @@ function ProviderPluginRow({ p }: { p: PluginInfo }) {
               {t("common.byAuthor", { author })}
             </span>
           )}
+          {p.manifest.permissions && p.manifest.permissions.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {p.manifest.permissions.map((perm) => (
+                <span
+                  key={perm}
+                  className="text-muted-foreground rounded border px-1 text-[10px]"
+                  title="Capability this plugin requested"
+                >
+                  {perm}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-3">
           <label className="text-muted-foreground flex cursor-pointer items-center gap-2 text-xs select-none">
@@ -289,6 +306,19 @@ function PluginRow({ p }: { p: PluginInfo }) {
               {t("common.byAuthor", { author })}
             </span>
           )}
+          {p.manifest.permissions && p.manifest.permissions.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {p.manifest.permissions.map((perm) => (
+                <span
+                  key={perm}
+                  className="text-muted-foreground rounded border px-1 text-[10px]"
+                  title="Capability this plugin requested"
+                >
+                  {perm}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-3">
           <label className="text-muted-foreground flex cursor-pointer items-center gap-2 text-xs select-none">
@@ -345,13 +375,52 @@ export function Plugins() {
   const loaded = usePlugins((s) => s.loaded);
   const error = usePlugins((s) => s.error);
   const load = usePlugins((s) => s.load);
+  const importFromZip = usePlugins((s) => s.importFromZip);
+  const needsRestart = usePlugins((s) => s.needsRestart);
+
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  // Built-in declarative features stay grouped by category; runtime plugins
+  // (those shipping executable code) get their own "Installed" section.
   const byCategory = (cat: PluginCategory) =>
-    plugins.filter((p) => p.manifest.category === cat);
+    plugins.filter(
+      (p) => p.manifest.category === cat && !isRuntimePlugin(p.manifest),
+    );
+  const runtimePlugins = plugins.filter((p) => isRuntimePlugin(p.manifest));
+
+  async function onImport() {
+    setImportMsg(null);
+    let zip: string | null;
+    try {
+      zip = await pickPluginZip();
+    } catch (e) {
+      setImportMsg(e instanceof Error ? e.message : String(e));
+      return;
+    }
+    if (!zip) return; // cancelled
+    setImporting(true);
+    try {
+      const manifest = await importFromZip(zip);
+      const installed = usePlugins.getState().plugins.map((p) => p.manifest);
+      const missing = missingDependencies(manifest, installed);
+      setImportMsg(
+        missing.length > 0
+          ? `Installed “${manifest.name}”, but it still needs: ${missing
+              .map((d) => d.id)
+              .join(", ")}. Install those, then restart.`
+          : `Installed “${manifest.name}”. Restart to activate it.`,
+      );
+    } catch (e) {
+      setImportMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setImporting(false);
+    }
+  }
 
   return (
     <Card className="w-full max-w-lg xl:max-w-2xl">
@@ -360,37 +429,79 @@ export function Plugins() {
         <CardDescription>{t("plugins.description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
-        {!loaded && (
-          <p className="text-muted-foreground text-sm">{t("common.loading")}</p>
+        {needsRestart && (
+          <div className="border-primary/40 bg-primary/5 flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+            <span className="text-sm">Restart to apply plugin changes.</span>
+            <Button size="sm" onClick={() => void restartApp()}>
+              Restart now
+            </Button>
+          </div>
         )}
+
+        {/* Installed runtime plugins (downloaded or bundled — all removable). */}
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center justify-between">
+            <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+              Installed plugins
+            </h3>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void onImport()}
+              disabled={importing}
+            >
+              {importing ? "Importing…" : "Import plugin…"}
+            </Button>
+          </div>
+          <p className="text-muted-foreground text-xs">
+            Plugins run unsandboxed with full access to the app. Only install
+            plugins you trust.
+          </p>
+          {importMsg && <p className="text-foreground text-xs">{importMsg}</p>}
+          {!loaded ? (
+            <p className="text-muted-foreground text-sm">
+              {t("common.loading")}
+            </p>
+          ) : runtimePlugins.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              No plugins installed yet. Import a .zip to add one.
+            </p>
+          ) : (
+            <div className="flex flex-col">
+              {runtimePlugins.map((p) => (
+                <PluginRow key={p.manifest.id} p={p} />
+              ))}
+            </div>
+          )}
+          {/* Plugin-contributed settings UI (registerUi("settings", …)). */}
+          <PluginSlot name="settings" />
+        </div>
+
+        {/* Built-in features (legacy declarative built-ins; theme is managed in
+            Appearance, so it's hidden here). */}
         {loaded &&
-          // Themes are managed elsewhere (the theme toggle / appearance), so
-          // the `theme` category is intentionally hidden from this list.
           PLUGIN_CATEGORIES.filter((cat) => cat !== "theme").map((cat) => {
             const items = byCategory(cat);
             return (
               <div key={cat} className="flex flex-col gap-1">
-                <h3 className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">
+                <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
                   {t(CATEGORY_KEYS[cat])}
                 </h3>
                 {items.length === 0 ? (
                   <p className="text-muted-foreground text-sm">
-                    {/* The category label is passed untransformed — casing
-                        rules differ per language (German capitalizes nouns). */}
                     {t("plugins.noneInCategory", {
                       category: t(CATEGORY_KEYS[cat]),
                     })}
                   </p>
                 ) : (
                   <div className="flex flex-col">
-                    {items.map((p) => (
-                      // Use ProviderPluginRow for provider plugins to show API key input
+                    {items.map((p) =>
                       p.manifest.category === "provider" ? (
                         <ProviderPluginRow key={p.manifest.id} p={p} />
                       ) : (
                         <PluginRow key={p.manifest.id} p={p} />
-                      )
-                    ))}
+                      ),
+                    )}
                   </div>
                 )}
               </div>

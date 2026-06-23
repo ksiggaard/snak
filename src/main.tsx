@@ -15,3 +15,10 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <ErrorBoundary>{isQuick ? <QuickInput /> : <App />}</ErrorBoundary>
   </React.StrictMode>,
 );
+
+// Load runtime plugins in the main window only (the quick overlay has no plugin
+// surfaces). Fire-and-forget after mount so first paint isn't blocked — plugins
+// register their contributions into the live stores as they activate.
+if (!isQuick) {
+  void import("@/lib/pluginLoader").then((m) => m.loadEnabledPlugins());
+}

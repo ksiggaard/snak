@@ -1,0 +1,12 @@
+{
+  "id": "com.snak.mermaid",
+  "name": "Mermaid diagrams",
+  "version": "1.0.0",
+  "category": "renderer",
+  "apiVersion": 1,
+  "description": "Renders ```mermaid fenced code blocks as diagrams (flowcharts, sequence, gantt, and more). Disable to keep the raw source.",
+  "author": "snak",
+  "enabledByDefault": true,
+  "entry": "main.js",
+  "permissions": ["ui"]
+}

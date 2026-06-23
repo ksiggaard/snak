@@ -32,6 +32,13 @@ fn set_close_to_tray(state: State<'_, CloseToTray>, enabled: bool) {
     state.0.store(enabled, Ordering::Relaxed);
 }
 
+/// Restart the app. Used after a runtime plugin is installed/uninstalled so the
+/// frontend plugin loader re-runs and the change takes effect. Never returns.
+#[tauri::command]
+fn restart(app: tauri::AppHandle) {
+    app.restart();
+}
+
 /// Grant the webview microphone access so the audio plugin's in-webview recorder
 /// (`getUserMedia`) works. WebKitGTK denies media-stream requests by default and
 /// never prompts, so we enable the media-stream setting and auto-allow permission
@@ -268,6 +275,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/030_library_artifacts.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 31,
+            description: "plugin_storage: scoped key-value store for runtime plugins",
+            sql: include_str!("../migrations/031_plugin_storage.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -310,6 +323,12 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
+            // Seed bundled runtime plugins into app-data (idempotent, if-absent)
+            // so the loader discovers them like any installed plugin.
+            if let Err(e) = plugins::runtime::seed_bundled_plugins(app.handle()) {
+                eprintln!("[plugins] seeding bundled plugins failed: {e}");
+            }
+
             // Register the default shortcut; the frontend overrides it with the
             // user's saved accelerator (if any) once it loads.
             let _ = app.global_shortcut().register(DEFAULT_SHORTCUT);
@@ -423,11 +442,15 @@ pub fn run() {
             commands::routing::route_directions,
             commands::geocode::geocode,
             set_close_to_tray,
+            restart,
             menu::set_menu_visible,
             menu::quit_app,
             plugins::list_plugins,
             plugins::set_plugin_enabled,
             plugins::uninstall_plugin,
+            plugins::runtime::read_plugin_entry,
+            plugins::runtime::import_plugin,
+            plugins::runtime::pick_plugin_zip,
             skills::list_skills,
             skills::read_skill,
             skills::save_skill,

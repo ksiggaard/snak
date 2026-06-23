@@ -1,15 +1,16 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Copy, SquareTerminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { codeText, languageFromClassName } from "@/lib/markdown";
 import { hasRenderer } from "@/lib/plugins";
 import { isShellLanguage, openInTerminal } from "@/lib/terminal";
-import { Mermaid } from "@/components/chat/Mermaid";
 import { MapView } from "@/components/chat/MapView";
 import { VegaChart } from "@/components/chat/VegaChart";
 import { ArtifactCard } from "@/components/chat/ArtifactCard";
 import { ARTIFACT_LANGUAGE, parseArtifact } from "@/lib/artifacts";
 import { selectRegistry, usePlugins } from "@/store/plugins";
+import { useContributions, type RendererItem } from "@/store/contributions";
+import { useStreaming } from "@/components/chat/streamingContext";
 import { useT } from "@/store/i18n";
 
 interface CodeBlockProps {
@@ -40,6 +41,17 @@ export function CodeBlock({ className, children }: CodeBlockProps) {
   // manifest claiming any other language has no effect here. Disabling the
   // plugin falls through to the normal code block (shows the raw source).
   const registry = usePlugins(selectRegistry);
+
+  // Runtime-plugin renderers (registered via ctx.ui.registerRenderer) take
+  // precedence: an installed plugin can render any fenced language as a custom
+  // view. Falls through to the built-in renderers / plain block otherwise.
+  const pluginRenderer = useContributions((s) =>
+    language ? s.renderers[language.toLowerCase()] : undefined,
+  );
+  if (language && pluginRenderer) {
+    return <PluginRenderedBlock item={pluginRenderer} code={text} />;
+  }
+
   // Artifacts (com.snak.artifacts): a ```artifact block becomes a live, editable
   // multi-file web app card instead of a highlighted block.
   if (
@@ -58,13 +70,6 @@ export function CodeBlock({ className, children }: CodeBlockProps) {
     parseArtifact(text)
   ) {
     return <ArtifactCard code={text} />;
-  }
-  if (
-    language &&
-    language.toLowerCase() === "mermaid" &&
-    hasRenderer(registry, "mermaid")
-  ) {
-    return <Mermaid code={text} />;
   }
   // Charts (com.snak.charts): both ```vega-lite and ```vega fences are governed
   // by the single "vega-lite" renderer contribution.
@@ -155,4 +160,49 @@ export function CodeBlock({ className, children }: CodeBlockProps) {
       </pre>
     </div>
   );
+}
+
+/** Mounts a runtime-plugin renderer for a fenced block — the plugin's
+ * `mount(el, code)` draws into the container; cleanup runs on unmount. */
+function PluginRenderedBlock({
+  item,
+  code,
+}: {
+  item: RendererItem;
+  code: string;
+}) {
+  // Don't mount mid-stream: the source grows token-by-token, so a renderer would
+  // repaint partial/invalid content and flicker. Show the raw "source so far"
+  // until the reply completes, then render once. (Generalises the old Mermaid
+  // streaming guard to every plugin renderer.)
+  const streaming = useStreaming();
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (streaming) return;
+    const el = ref.current;
+    if (!el) return;
+    let cleanup: void | (() => void);
+    try {
+      cleanup = item.mount(el, code);
+    } catch (e) {
+      console.error(`[plugin ${item.pluginId}] renderer mount threw`, e);
+    }
+    return () => {
+      try {
+        if (typeof cleanup === "function") cleanup();
+      } catch (e) {
+        console.error(`[plugin ${item.pluginId}] renderer cleanup threw`, e);
+      }
+      el.replaceChildren();
+    };
+  }, [item, code, streaming]);
+
+  if (streaming) {
+    return (
+      <pre className="border-border bg-background/60 my-2 overflow-x-auto rounded-md border p-3 font-mono text-xs">
+        {code}
+      </pre>
+    );
+  }
+  return <div ref={ref} className="my-2" />;
 }

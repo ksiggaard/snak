@@ -29,10 +29,31 @@ describe("parseManifest", () => {
     expect(() => parseManifest("nope")).toThrow();
   });
 
-  it("rejects an unknown category", () => {
-    expect(() => parseManifest({ ...valid, category: "wizardry" })).toThrow(
-      /unknown plugin category/,
+  it("accepts a free-form category but rejects a blank one", () => {
+    // Category is now a display label (behaviour comes from code), so a
+    // previously-"unknown" value is accepted...
+    expect(parseManifest({ ...valid, category: "wizardry" }).category).toBe(
+      "wizardry",
     );
+    // ...but it must still be present.
+    expect(() => parseManifest({ ...valid, category: "  " })).toThrow(
+      /`category`/,
+    );
+  });
+
+  it("parses runtime fields (entry, permissions, dependencies)", () => {
+    const m = parseManifest({
+      ...valid,
+      category: "extension",
+      entry: "main.js",
+      permissions: ["ui", "storage", 42],
+      dependencies: [{ id: "com.example.dep", minVersion: "1.2.0" }, { bad: 1 }],
+    });
+    expect(m.entry).toBe("main.js");
+    expect(m.permissions).toEqual(["ui", "storage"]); // non-strings dropped
+    expect(m.dependencies).toEqual([
+      { id: "com.example.dep", minVersion: "1.2.0" },
+    ]); // malformed dep row dropped
   });
 
   it("rejects a missing/blank id", () => {

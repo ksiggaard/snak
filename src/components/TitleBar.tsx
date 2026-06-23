@@ -18,6 +18,7 @@ import { useLayout } from "@/store/layout";
 import { useTitleBar } from "@/store/titlebar";
 import { useConnectivity, useIsOffline } from "@/store/connectivity";
 import { useT } from "@/store/i18n";
+import { PluginSlot } from "@/components/PluginSlot";
 import { runMenuAction, shortcutLabel } from "@/lib/menuActions";
 import type { ControlsStyle } from "@/lib/titlebar";
 
@@ -89,6 +90,11 @@ export function TitleBar() {
 
       {/* Drag region fills remaining space */}
       <div data-tauri-drag-region className="min-w-0 flex-1 self-stretch" />
+
+      {/* Runtime-plugin header contributions (buttons etc.). */}
+      <div className="flex items-center">
+        <PluginSlot name="header" />
+      </div>
 
       {/* Offline badge — visible only when offline (auto-detected or forced).
           Clicking re-probes connectivity. */}

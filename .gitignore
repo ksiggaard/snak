@@ -30,3 +30,6 @@ dist-ssr
 
 # Superpowers brainstorming companion (local mockups)
 .superpowers/
+
+# Generated bundled plugins (built from plugins/ by scripts/build-plugins.mjs)
+src-tauri/resources/plugins/

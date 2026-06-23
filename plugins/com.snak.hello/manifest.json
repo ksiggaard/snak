@@ -1,0 +1,12 @@
+{
+  "id": "com.snak.hello",
+  "name": "Hello (sample plugin)",
+  "version": "1.0.0",
+  "category": "extension",
+  "apiVersion": 1,
+  "description": "Sample runtime plugin: adds a header button that greets you and remembers how many times you've clicked it. Demonstrates the plugin API (a UI slot + scoped storage + lifecycle cleanup).",
+  "author": "snak",
+  "enabledByDefault": true,
+  "entry": "main.js",
+  "permissions": ["ui", "storage"]
+}

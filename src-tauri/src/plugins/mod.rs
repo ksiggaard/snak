@@ -29,6 +29,9 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
+/// Runtime-loaded plugins: zip import, entry-source reads, bundled seeding.
+pub mod runtime;
+
 /// Host API version this build implements. Manifests must target this version.
 pub const API_VERSION: u32 = 1;
 
@@ -41,16 +44,27 @@ pub enum PluginSource {
     User,
 }
 
+/// A dependency on another plugin (by id, optional minimum version). Mirrors
+/// `PluginDependency` in `src/types/plugins.ts`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PluginDependency {
+    pub id: String,
+    #[serde(default, rename = "minVersion", skip_serializing_if = "Option::is_none")]
+    pub min_version: Option<String>,
+}
+
 /// A validated plugin manifest. Mirrors `PluginManifest` in
-/// `src/types/plugins.ts`. `contributes` is an opaque (category-specific)
-/// descriptor this wave only round-trips; later waves interpret it.
+/// `src/types/plugins.ts`. `contributes` is the legacy declarative descriptor
+/// (built-ins only); **runtime** plugins ship an `entry` file and register their
+/// contributions in code (see `crate::plugins::runtime`).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PluginManifest {
     pub id: String,
     pub name: String,
     pub version: String,
-    /// One of: provider | theme | slash-command | renderer | audio.
-    /// (Skills are not plugins — they're SKILL.md folders; see `crate::skills`.)
+    /// Free-form display/grouping label. Behaviour comes from the plugin's
+    /// code, not its category. (Skills are not plugins — they're SKILL.md
+    /// folders; see `crate::skills`.)
     pub category: String,
     #[serde(rename = "apiVersion")]
     pub api_version: u32,
@@ -60,6 +74,17 @@ pub struct PluginManifest {
     pub author: Option<String>,
     #[serde(default, rename = "enabledByDefault")]
     pub enabled_by_default: bool,
+    /// Compiled ESM entry file relative to the plugin folder (e.g. "main.js").
+    /// Present on runtime plugins; absent on declarative built-ins.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry: Option<String>,
+    /// Declared capabilities the host grants this plugin (advisory, not a
+    /// sandbox — runtime plugins are trusted JS with full webview authority).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub permissions: Vec<String>,
+    /// Other plugins (by id) that must be installed + enabled first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dependencies: Vec<PluginDependency>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub contributes: Option<serde_json::Value>,
 }
@@ -72,17 +97,8 @@ pub struct PluginInfo {
     pub enabled: bool,
 }
 
-/// The known plugin categories.
-const CATEGORIES: [&str; 5] = [
-    "provider",
-    "theme",
-    "slash-command",
-    "renderer",
-    "audio",
-];
-
 /// Parse + validate a manifest from JSON text. Pure (no IO) so it is unit-tested.
-/// Rejects unknown categories, blank required fields, and mismatched `apiVersion`.
+/// Rejects blank required fields and mismatched `apiVersion`.
 pub fn parse_manifest(json: &str) -> Result<PluginManifest, String> {
     let manifest: PluginManifest =
         serde_json::from_str(json).map_err(|e| format!("invalid manifest JSON: {e}"))?;
@@ -91,6 +107,8 @@ pub fn parse_manifest(json: &str) -> Result<PluginManifest, String> {
 }
 
 /// Validate a parsed manifest. Pure; shared by `parse_manifest` and built-ins.
+/// `category` is a free-form display label (behaviour comes from the plugin's
+/// code), so it is only required to be non-empty — not a fixed enum.
 pub fn validate_manifest(m: &PluginManifest) -> Result<(), String> {
     if m.id.trim().is_empty() {
         return Err("manifest `id` is required".into());
@@ -101,12 +119,8 @@ pub fn validate_manifest(m: &PluginManifest) -> Result<(), String> {
     if m.version.trim().is_empty() {
         return Err("manifest `version` is required".into());
     }
-    if !CATEGORIES.contains(&m.category.as_str()) {
-        return Err(format!(
-            "unknown plugin category `{}` (expected one of {})",
-            m.category,
-            CATEGORIES.join(", ")
-        ));
+    if m.category.trim().is_empty() {
+        return Err("manifest `category` is required".into());
     }
     if m.api_version != API_VERSION {
         return Err(format!(
@@ -128,7 +142,6 @@ fn builtin_manifests() -> Vec<PluginManifest> {
         include_str!("builtin/gemini.json"),
         include_str!("builtin/ollama.json"),
         include_str!("builtin/terminal.json"),
-        include_str!("builtin/mermaid.json"),
         include_str!("builtin/charts.json"),
         include_str!("builtin/youtube.json"),
         include_str!("builtin/artifacts.json"),
@@ -142,7 +155,7 @@ fn builtin_manifests() -> Vec<PluginManifest> {
 }
 
 /// App-data plugins directory (`…/plugins`). Created on demand.
-fn plugins_dir(app: &AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn plugins_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .app_data_dir()
@@ -285,6 +298,9 @@ mod tests {
             description: None,
             author: None,
             enabled_by_default: false,
+            entry: None,
+            permissions: Vec::new(),
+            dependencies: Vec::new(),
             contributes: None,
         }
     }
@@ -302,10 +318,31 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unknown_category() {
+    fn accepts_free_form_category_but_rejects_empty() {
+        // Category is now a free-form display label (behaviour comes from code),
+        // so a previously-"unknown" value validates...
         let mut m = base();
         m.category = "wizardry".into();
+        assert!(validate_manifest(&m).is_ok());
+        // ...but it must still be non-empty.
+        m.category = "  ".into();
         assert!(validate_manifest(&m).is_err());
+    }
+
+    #[test]
+    fn round_trips_runtime_fields() {
+        let json = r#"{
+            "id": "com.example.rt", "name": "RT", "version": "1.0.0",
+            "category": "extension", "apiVersion": 1, "entry": "main.js",
+            "permissions": ["ui", "storage"],
+            "dependencies": [{ "id": "com.example.dep", "minVersion": "1.2.0" }]
+        }"#;
+        let m = parse_manifest(json).expect("should parse");
+        assert_eq!(m.entry.as_deref(), Some("main.js"));
+        assert_eq!(m.permissions, vec!["ui", "storage"]);
+        assert_eq!(m.dependencies.len(), 1);
+        assert_eq!(m.dependencies[0].id, "com.example.dep");
+        assert_eq!(m.dependencies[0].min_version.as_deref(), Some("1.2.0"));
     }
 
     #[test]
@@ -331,10 +368,11 @@ mod tests {
     fn all_builtins_valid_with_expected_default_enablement() {
         let builtins = builtin_manifests();
         // Five provider plugins (T18/T37) + the /terminal slash-command plugin
-        // (T14) + five renderer plugins: mermaid (T42), charts, youtube,
-        // artifacts, and maps (disabled by default) + the audio plugin
-        // (TTS/STT, disabled by default).
-        assert_eq!(builtins.len(), 12, "expected 12 built-in plugins");
+        // (T14) + four renderer plugins: charts, youtube, artifacts, and maps
+        // (disabled by default) + the audio plugin (TTS/STT, disabled by
+        // default). Mermaid migrated to a runtime plugin (Phase B), so it is no
+        // longer a declarative built-in here.
+        assert_eq!(builtins.len(), 11, "expected 11 built-in plugins");
         let providers = builtins.iter().filter(|m| m.category == "provider").count();
         assert_eq!(providers, 5, "expected 5 built-in providers");
         for m in &builtins {
@@ -366,13 +404,6 @@ mod tests {
                 .iter()
                 .any(|m| m.category == "slash-command" && m.id == "com.snak.terminal"),
             "expected the built-in /terminal slash-command plugin",
-        );
-        // The renderer built-in is present and contributes the mermaid language.
-        assert!(
-            builtins
-                .iter()
-                .any(|m| m.category == "renderer" && m.id == "com.snak.mermaid"),
-            "expected the built-in mermaid renderer plugin",
         );
     }
 

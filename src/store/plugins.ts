@@ -1,24 +1,33 @@
 import { create } from "zustand";
 import {
   buildRegistry,
+  importPlugin,
   listPlugins,
   setPluginEnabled,
   uninstallPlugin,
   type HostRegistry,
 } from "@/lib/plugins";
-import type { PluginInfo } from "@/types/plugins";
+import { isRuntimePlugin, type PluginInfo, type PluginManifest } from "@/types/plugins";
+import { deactivatePlugin } from "@/lib/pluginLoader";
 
 interface PluginsState {
   plugins: PluginInfo[];
   loaded: boolean;
   error: string | null;
+  /** A runtime plugin was enabled/imported but not yet loaded — the UI offers a
+   * restart so the loader runs (in dependency order). */
+  needsRestart: boolean;
 
   /** Load (or reload) the installed plugins from the backend. */
   load: () => Promise<void>;
-  /** Enable/disable a plugin (persisted backend-side), then refresh. */
+  /** Enable/disable a plugin (persisted backend-side), then refresh. Disabling a
+   * runtime plugin tears it down live; enabling one flags a restart. */
   setEnabled: (id: string, enabled: boolean) => Promise<void>;
-  /** Uninstall a user plugin (built-ins reject), then refresh. */
+  /** Uninstall a plugin (live-teardown + remove its folder), then refresh. */
   uninstall: (id: string) => Promise<void>;
+  /** Import a plugin from a `.zip`; returns its manifest and flags a restart. */
+  importFromZip: (zipPath: string) => Promise<PluginManifest>;
+  clearRestart: () => void;
 }
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -27,6 +36,7 @@ export const usePlugins = create<PluginsState>((set, get) => ({
   plugins: [],
   loaded: false,
   error: null,
+  needsRestart: false,
 
   load: async () => {
     try {
@@ -39,8 +49,16 @@ export const usePlugins = create<PluginsState>((set, get) => ({
 
   setEnabled: async (id, enabled) => {
     try {
+      const runtime = get().plugins.some(
+        (p) => p.manifest.id === id && isRuntimePlugin(p.manifest),
+      );
       await setPluginEnabled(id, enabled);
       await get().load();
+      if (runtime) {
+        // Disable tears down live; enable needs the loader to run (restart).
+        if (!enabled) deactivatePlugin(id);
+        else set({ needsRestart: true });
+      }
     } catch (e) {
       set({ error: errMsg(e) });
     }
@@ -48,12 +66,22 @@ export const usePlugins = create<PluginsState>((set, get) => ({
 
   uninstall: async (id) => {
     try {
+      deactivatePlugin(id); // remove its contributions immediately (no-op if not loaded)
       await uninstallPlugin(id);
       await get().load();
     } catch (e) {
       set({ error: errMsg(e) });
     }
   },
+
+  importFromZip: async (zipPath) => {
+    const manifest = await importPlugin(zipPath);
+    await get().load();
+    set({ needsRestart: true });
+    return manifest;
+  },
+
+  clearRestart: () => set({ needsRestart: false }),
 }));
 
 /**

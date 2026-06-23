@@ -77,17 +77,53 @@ export type PluginContribution =
   | RendererContribution
   | AudioContribution;
 
+/** Capabilities a runtime plugin can declare in its manifest. The host only
+ * hands a plugin the slice of its context matching what it declared. NOTE:
+ * this is advisory ergonomics, not a security boundary — runtime plugins are
+ * trusted, unsandboxed JS with full webview authority (see the plugin docs). */
+export const PLUGIN_PERMISSIONS = [
+  "ui",
+  "storage",
+  "network",
+  "llm-hook",
+  "read-messages",
+] as const;
+export type PluginPermission = (typeof PLUGIN_PERMISSIONS)[number];
+
+/** A dependency on another plugin (by id, optional minimum version). */
+export interface PluginDependency {
+  id: string;
+  minVersion?: string;
+}
+
 export interface PluginManifest {
   id: string;
   name: string;
   version: string;
-  category: PluginCategory;
+  /** Display/grouping label. The legacy built-ins use a `PluginCategory`;
+   * runtime plugins may use any non-empty string (behaviour comes from code,
+   * not the category). */
+  category: string;
   apiVersion: number;
   description?: string;
   author?: string;
   enabledByDefault?: boolean;
-  /** Category-specific descriptor; interpreted by later waves. */
+  /** Compiled ESM entry file relative to the plugin folder (e.g. "main.js").
+   * Present on **runtime** plugins (loaded + executed by `pluginLoader`);
+   * absent on the legacy declarative built-ins. */
+  entry?: string;
+  /** Declared capabilities (see `PLUGIN_PERMISSIONS`). Runtime plugins only. */
+  permissions?: string[];
+  /** Other plugins (by id) that must be installed + enabled first. */
+  dependencies?: PluginDependency[];
+  /** Legacy declarative descriptor (built-ins only; runtime plugins register
+   * their contributions via code in `activate(ctx)`). */
   contributes?: PluginContribution;
+}
+
+/** A runtime plugin is one that ships executable code (an `entry` file). */
+export function isRuntimePlugin(m: PluginManifest): boolean {
+  return typeof m.entry === "string" && m.entry.trim() !== "";
 }
 
 export type PluginSource = "builtin" | "user";

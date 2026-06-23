@@ -10,10 +10,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
   PLUGIN_API_VERSION,
-  PLUGIN_CATEGORIES,
-  type PluginCategory,
   type PluginContribution,
   type AudioContribution,
+  type PluginDependency,
   type PluginInfo,
   type PluginManifest,
   type ProviderContribution,
@@ -36,12 +35,49 @@ export function uninstallPlugin(id: string): Promise<void> {
   return invoke("uninstall_plugin", { id });
 }
 
+/** Open a native picker for a plugin `.zip`; resolves to its path or null. */
+export function pickPluginZip(): Promise<string | null> {
+  return invoke<string | null>("pick_plugin_zip");
+}
+
+/** Import (unzip + validate) a plugin from a `.zip`; returns its manifest. The
+ * caller then checks dependencies and prompts a restart so the loader runs. */
+export function importPlugin(zipPath: string): Promise<PluginManifest> {
+  return invoke<PluginManifest>("import_plugin", { zipPath });
+}
+
+/** Restart the app (so the plugin loader re-runs after install/uninstall). */
+export function restartApp(): Promise<void> {
+  return invoke("restart");
+}
+
 // --- Pure manifest validation (unit-tested) ----------------------------------
+
+/** Parse a manifest's `dependencies` field (tolerant: skips malformed rows). */
+function parseDependencies(raw: unknown): PluginDependency[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: PluginDependency[] = [];
+  for (const dep of raw) {
+    if (typeof dep === "object" && dep !== null) {
+      const d = dep as Record<string, unknown>;
+      if (typeof d.id === "string" && d.id.trim() !== "") {
+        out.push({
+          id: d.id,
+          minVersion:
+            typeof d.minVersion === "string" ? d.minVersion : undefined,
+        });
+      }
+    }
+  }
+  return out.length > 0 ? out : undefined;
+}
 
 /**
  * Validate an untrusted manifest object. Pure, no IO — mirrors the Rust
  * `validate_manifest`. Returns the typed manifest or throws with a reason.
- * Rejects unknown categories, blank required fields, and mismatched apiVersion.
+ * Rejects blank required fields and mismatched apiVersion. `category` is a
+ * free-form display label (behaviour comes from the plugin's code, not its
+ * category), so it is no longer constrained to a fixed set.
  */
 export function parseManifest(raw: unknown): PluginManifest {
   if (typeof raw !== "object" || raw === null) {
@@ -59,25 +95,27 @@ export function parseManifest(raw: unknown): PluginManifest {
   const name = reqStr("name");
   const version = reqStr("version");
   const category = reqStr("category");
-  if (!PLUGIN_CATEGORIES.includes(category as PluginCategory)) {
-    throw new Error(
-      `unknown plugin category \`${category}\` (expected one of ${PLUGIN_CATEGORIES.join(", ")})`,
-    );
-  }
   if (m.apiVersion !== PLUGIN_API_VERSION) {
     throw new Error(
       `plugin targets apiVersion ${String(m.apiVersion)} but host implements ${PLUGIN_API_VERSION}`,
     );
   }
+  const permissions = Array.isArray(m.permissions)
+    ? m.permissions.filter((p): p is string => typeof p === "string")
+    : undefined;
   return {
     id,
     name,
     version,
-    category: category as PluginCategory,
+    category,
     apiVersion: PLUGIN_API_VERSION,
     description: typeof m.description === "string" ? m.description : undefined,
     author: typeof m.author === "string" ? m.author : undefined,
     enabledByDefault: m.enabledByDefault === true,
+    entry:
+      typeof m.entry === "string" && m.entry.trim() !== "" ? m.entry : undefined,
+    permissions: permissions && permissions.length > 0 ? permissions : undefined,
+    dependencies: parseDependencies(m.dependencies),
     contributes:
       typeof m.contributes === "object" && m.contributes !== null
         ? (m.contributes as PluginContribution)
