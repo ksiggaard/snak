@@ -87,6 +87,7 @@ export const PLUGIN_PERMISSIONS = [
   "network",
   "llm-hook",
   "read-messages",
+  "commands",
 ] as const;
 export type PluginPermission = (typeof PLUGIN_PERMISSIONS)[number];
 

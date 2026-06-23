@@ -54,6 +54,10 @@ for (const id of ids) {
       target: "es2022",
       legalComments: "none",
       logLevel: "warning",
+      // Let bundled plugins import the app's pure helper modules (e.g. @/lib/geo)
+      // and CSS-as-text (e.g. leaflet/dist/leaflet.css → injected at runtime).
+      alias: { "@": join(root, "src") },
+      loader: { ".css": "text" },
     });
     console.log(`[build-plugins] bundled ${id}`);
   } else if (existsSync(js)) {

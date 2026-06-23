@@ -4,8 +4,6 @@ import { cn } from "@/lib/utils";
 import { codeText, languageFromClassName } from "@/lib/markdown";
 import { hasRenderer } from "@/lib/plugins";
 import { isShellLanguage, openInTerminal } from "@/lib/terminal";
-import { MapView } from "@/components/chat/MapView";
-import { VegaChart } from "@/components/chat/VegaChart";
 import { ArtifactCard } from "@/components/chat/ArtifactCard";
 import { ARTIFACT_LANGUAGE, parseArtifact } from "@/lib/artifacts";
 import { selectRegistry, usePlugins } from "@/store/plugins";
@@ -71,33 +69,6 @@ export function CodeBlock({ className, children }: CodeBlockProps) {
   ) {
     return <ArtifactCard code={text} />;
   }
-  // Charts (com.snak.charts): both ```vega-lite and ```vega fences are governed
-  // by the single "vega-lite" renderer contribution.
-  if (
-    language &&
-    (language.toLowerCase() === "vega-lite" ||
-      language.toLowerCase() === "vega") &&
-    hasRenderer(registry, "vega-lite")
-  ) {
-    return (
-      <VegaChart
-        code={text}
-        mode={language.toLowerCase() === "vega" ? "vega" : "vega-lite"}
-      />
-    );
-  }
-
-  // Maps (com.snak.maps): a ```map or ```geojson fence becomes an interactive
-  // OpenStreetMap map when the plugin is enabled (raw source otherwise).
-  if (
-    language &&
-    (language.toLowerCase() === "map" ||
-      language.toLowerCase() === "geojson") &&
-    hasRenderer(registry, "map")
-  ) {
-    return <MapView code={text} />;
-  }
-
   const onCopy = async () => {
     try {
       await navigator.clipboard.writeText(text);

@@ -1,0 +1,12 @@
+{
+  "id": "com.snak.maps",
+  "name": "Maps",
+  "version": "1.0.0",
+  "category": "renderer",
+  "apiVersion": 1,
+  "description": "Renders ```map (and ```geojson) fenced blocks as interactive OpenStreetMap maps with markers and road-snapped routes. No API key. Disabled by default; enable it to draw the map.",
+  "author": "snak",
+  "enabledByDefault": false,
+  "entry": "main.js",
+  "permissions": ["ui", "commands", "llm-hook"]
+}

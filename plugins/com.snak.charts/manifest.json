@@ -1,0 +1,12 @@
+{
+  "id": "com.snak.charts",
+  "name": "Charts (Vega-Lite)",
+  "version": "1.0.0",
+  "category": "renderer",
+  "apiVersion": 1,
+  "description": "Renders ```vega-lite (and ```vega) fenced blocks as charts. Inline data only — remote data URLs are blocked. Disable to keep the raw spec.",
+  "author": "snak",
+  "enabledByDefault": true,
+  "entry": "main.js",
+  "permissions": ["ui", "llm-hook"]
+}

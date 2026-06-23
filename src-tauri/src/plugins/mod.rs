@@ -142,10 +142,8 @@ fn builtin_manifests() -> Vec<PluginManifest> {
         include_str!("builtin/gemini.json"),
         include_str!("builtin/ollama.json"),
         include_str!("builtin/terminal.json"),
-        include_str!("builtin/charts.json"),
         include_str!("builtin/youtube.json"),
         include_str!("builtin/artifacts.json"),
-        include_str!("builtin/maps.json"),
         include_str!("builtin/audio.json"),
     ];
     BUILTINS
@@ -368,17 +366,16 @@ mod tests {
     fn all_builtins_valid_with_expected_default_enablement() {
         let builtins = builtin_manifests();
         // Five provider plugins (T18/T37) + the /terminal slash-command plugin
-        // (T14) + four renderer plugins: charts, youtube, artifacts, and maps
-        // (disabled by default) + the audio plugin (TTS/STT, disabled by
-        // default). Mermaid migrated to a runtime plugin (Phase B), so it is no
-        // longer a declarative built-in here.
-        assert_eq!(builtins.len(), 11, "expected 11 built-in plugins");
+        // (T14) + two renderer plugins (youtube, artifacts) + the audio plugin
+        // (TTS/STT, disabled by default). Mermaid, charts, and maps migrated to
+        // runtime plugins (Phase B), so they are no longer declarative built-ins.
+        assert_eq!(builtins.len(), 9, "expected 9 built-in plugins");
         let providers = builtins.iter().filter(|m| m.category == "provider").count();
         assert_eq!(providers, 5, "expected 5 built-in providers");
         for m in &builtins {
             validate_manifest(m).expect("built-in must validate");
-            if m.id == "com.snak.maps" || m.id == "com.snak.audio" {
-                assert!(!m.enabled_by_default, "maps and audio default disabled");
+            if m.id == "com.snak.audio" {
+                assert!(!m.enabled_by_default, "audio defaults disabled");
             } else {
                 assert!(m.enabled_by_default, "other built-ins default enabled");
             }
@@ -389,14 +386,6 @@ mod tests {
                 && m.id == "com.snak.audio"
                 && !m.enabled_by_default),
             "expected the built-in audio plugin (disabled by default)",
-        );
-        // The maps renderer built-in is present, contributes the map language,
-        // and is disabled by default.
-        assert!(
-            builtins.iter().any(|m| m.category == "renderer"
-                && m.id == "com.snak.maps"
-                && !m.enabled_by_default),
-            "expected the built-in maps renderer plugin (disabled by default)",
         );
         // The slash-command built-in is present and contributes /terminal.
         assert!(

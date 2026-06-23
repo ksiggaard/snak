@@ -5,6 +5,7 @@
 // declines to populate, and warns about, capabilities a plugin didn't declare —
 // it can't actually stop trusted JS from reaching globals. See pluginApi.ts.
 
+import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { useContributions } from "@/store/contributions";
 import { pluginStorage } from "@/lib/pluginStorage";
 import type { PluginContext, UiApi, LlmApi } from "@/types/pluginApi";
@@ -46,6 +47,10 @@ export function contextFor(manifest: PluginManifest): PluginContext {
     // `net` is a marker for the declared intent; fetch is globally reachable
     // anyway, so this can't restrict — it just documents + binds it.
     net: perms.has("network") ? ((...args) => fetch(...args)) : undefined,
+    invoke: perms.has("commands")
+      ? <T = unknown>(command: string, args?: Record<string, unknown>) =>
+          tauriInvoke<T>(command, args)
+      : undefined,
     llm,
     onDisable: (fn) => {
       const list = onDisableHandlers.get(id) ?? [];

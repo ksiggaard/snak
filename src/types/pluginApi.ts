@@ -68,6 +68,12 @@ export interface PluginContext {
   storage?: KVStore;
   /** Network access (bound `fetch`) — present only if "network" was declared. */
   net?: typeof fetch;
+  /** Call a Tauri command (present only if "commands" was declared). Broad host
+   * access — only bundled/trusted plugins should declare it. */
+  invoke?: <T = unknown>(
+    command: string,
+    args?: Record<string, unknown>,
+  ) => Promise<T>;
   /** LLM hooks — present only if "llm-hook" was declared. */
   llm?: LlmApi;
   /** Register a cleanup to run when this plugin is disabled/unloaded. */

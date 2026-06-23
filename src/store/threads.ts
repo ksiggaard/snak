@@ -66,8 +66,6 @@ import { buildWorkspaceSystemText, filterWorkspaceFiles } from "@/lib/workspaces
 import { buildSkillsIndexText } from "@/lib/skills";
 import { useSkills } from "@/store/skills";
 import { buildArtifactsSystemText } from "@/lib/artifacts";
-import { buildChartsSystemText } from "@/lib/charts";
-import { buildMapsSystemText } from "@/lib/maps";
 import { useContributions } from "@/store/contributions";
 import { buildYouTubeSystemText } from "@/lib/youtube";
 import { hasRenderer } from "@/lib/plugins";
@@ -506,12 +504,6 @@ async function loadSharedSystemBlocks(
 
   const registry = selectRegistry(usePlugins.getState());
 
-  // Charts auto-instruct (com.snak.charts): teach the model the ```vega-lite
-  // fence when the charts renderer is enabled (empty otherwise).
-  const chartsSystemText = buildChartsSystemText(registry);
-  if (chartsSystemText)
-    head.push({ role: "system", content: chartsSystemText, images: [] });
-
   // YouTube embeds auto-instruct (com.snak.youtube): tell the model to put video
   // URLs on their own line so the inline player can replace them.
   const youTubeSystemText = buildYouTubeSystemText(registry);
@@ -523,12 +515,6 @@ async function loadSharedSystemBlocks(
   const artifactsSystemText = buildArtifactsSystemText(registry);
   if (artifactsSystemText)
     head.push({ role: "system", content: artifactsSystemText, images: [] });
-
-  // Maps auto-instruct (com.snak.maps): teach the model the ```map GeoJSON fence
-  // when the maps renderer is enabled (empty otherwise).
-  const mapsSystemText = buildMapsSystemText(registry);
-  if (mapsSystemText)
-    head.push({ role: "system", content: mapsSystemText, images: [] });
 
   // Runtime plugin LLM hooks (the "llm-hook" permission): each enabled plugin
   // may contribute extra system-prompt text. Append-only — plugins augment, not
