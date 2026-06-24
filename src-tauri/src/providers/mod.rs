@@ -479,6 +479,9 @@ pub struct CompletionRequest<'a> {
     pub api_key: &'a str,
     pub messages: &'a [ChatMessage],
     pub tools: &'a [ToolDef],
+    /// Base URL for a user-added OpenAI-compatible provider (`{base}/chat/completions`).
+    /// `None` for the five built-in providers, which use their own hardcoded endpoints.
+    pub base_url: Option<&'a str>,
     /// Capture the model's reasoning/thinking this request (global setting): the
     /// provider adds the relevant request param and emits `reasoning` deltas.
     /// `false` keeps the request byte-identical to before.
@@ -647,7 +650,12 @@ pub async fn stream(
         "mistral" => mistral::Mistral.stream(client, req, channel, cancel).await,
         "gemini" => gemini::Gemini.stream(client, req, channel, cancel).await,
         "ollama" => ollama::Ollama.stream(client, req, channel, cancel).await,
-        other => anyhow::bail!("unknown provider: {other}"),
+        // User-added OpenAI-compatible provider: any unknown id streams through the
+        // shared OpenAI engine against the base URL carried on the request.
+        other => match req.base_url {
+            Some(base) => openai::chat_completions_stream(client, base, req, channel, cancel).await,
+            None => anyhow::bail!("unknown provider: {other}"),
+        },
     }
 }
 

@@ -436,6 +436,7 @@ export const en = {
   // --- Settings: section nav ------------------------------------------------------------
   "settings.nav.apiKeys": "API Keys",
   "settings.nav.models": "Models",
+  "settings.nav.customProviders": "Custom providers",
   "settings.nav.defaultModel": "Default Model",
   "settings.nav.memory": "Memory",
   "settings.nav.behavior": "Behavior",
@@ -476,6 +477,24 @@ export const en = {
   "apiKeys.notSet": "Not set",
   "apiKeys.storedPlaceholder": "•••••••• (stored)",
 
+  // --- Settings: custom providers -----------------------------------------------------------
+  "customProviders.title": "Custom providers",
+  "customProviders.description":
+    "Add any OpenAI-compatible endpoint (Groq, OpenRouter, Together, DeepSeek, or a local server like LM Studio / vLLM). The key is stored in your OS keychain; leave it blank for a local server that needs none.",
+  "customProviders.nameLabel": "Name",
+  "customProviders.namePlaceholder": "Groq",
+  "customProviders.endpointLabel": "Endpoint URL",
+  "customProviders.endpointPlaceholder": "https://api.groq.com/openai/v1",
+  "customProviders.endpointHelp":
+    "The base URL — “/chat/completions” is appended automatically.",
+  "customProviders.modelLabel": "Default model",
+  "customProviders.modelPlaceholder": "llama-3.3-70b-versatile",
+  "customProviders.keyLabel": "API key (optional)",
+  "customProviders.add": "Add provider",
+  "customProviders.none": "No custom providers yet.",
+  "customProviders.removeConfirm":
+    "Remove this provider? Its models and stored key are deleted.",
+
   // --- Settings: default model ------------------------------------------------------------------
   "defaultModel.title": "Default Model",
   "defaultModel.description":
@@ -492,7 +511,8 @@ export const en = {
   "models.labelPlaceholder": "Label (e.g. Opus 4.8)",
   "models.idPlaceholder": "model id",
   "models.notesLabel": "Notes",
-  "models.notesPlaceholder": "What this model is good at (e.g. great for coding)",
+  "models.notesPlaceholder":
+    "What this model is good at (e.g. great for coding)",
 
   // --- Settings: planner model -----------------------------------------------
   "planner.title": "Planner model",
@@ -515,7 +535,7 @@ export const en = {
     "Let the planner model decide how to handle your requests — routing to the best model or breaking into parallel steps.",
   "planner.instructions": "Instructions",
   "planner.instructionsPlaceholder":
-    "Tell the planner how to prefer or prioritize models. E.g. \"Use local models whenever it makes sense. Prefer Claude for creative tasks.\"",
+    'Tell the planner how to prefer or prioritize models. E.g. "Use local models whenever it makes sense. Prefer Claude for creative tasks."',
   "planner.criticLabel": "Critic model",
   "planner.criticReset": "Same as planner",
   "planner.criticFallback": "Same as planner model ({model})",
@@ -888,8 +908,7 @@ export const en = {
   "workspace.sourceUrl": "Source: {url}",
   "workspace.youtubeNoCaptions":
     "This video has no closed captions available — the summary can't be generated.",
-  "workspace.youtubeSummarizeError":
-    "Couldn't summarize the video: {error}",
+  "workspace.youtubeSummarizeError": "Couldn't summarize the video: {error}",
   "workspace.quickActions": "Quick actions",
   "workspace.quickActionsHint":
     "Override the global quick actions for chats in this workspace. Leave empty to use the global ones.",

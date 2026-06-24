@@ -118,8 +118,7 @@ export async function setThreadWorkspaceFilesExcluded(
   excludedIds: string[],
 ): Promise<void> {
   const db = await getDb();
-  const value =
-    excludedIds.length === 0 ? null : JSON.stringify(excludedIds);
+  const value = excludedIds.length === 0 ? null : JSON.stringify(excludedIds);
   await db.execute(
     `UPDATE threads SET workspace_files_excluded = $1 WHERE id = $2`,
     [value, id],
@@ -779,6 +778,63 @@ export async function setQuickActions(json: string): Promise<void> {
   await setSetting(QUICK_ACTIONS_KEY, json);
 }
 
+/** A user-added OpenAI-compatible provider: an id, a label, an endpoint base URL
+ * (`{baseUrl}/chat/completions`), and the model new threads default to. */
+export interface CustomProvider {
+  id: string;
+  label: string;
+  baseUrl: string;
+  defaultModel: string;
+}
+
+/** Settings key for the user-added OpenAI-compatible providers (JSON array). */
+export const CUSTOM_PROVIDERS_KEY = "custom_providers";
+
+/** Parse the stored custom-providers JSON. Pure / unit-tested. Tolerant of a
+ * missing/malformed value (returns `[]`); only entries with a non-empty `id` and
+ * `baseUrl` (and string label/defaultModel) are kept. */
+export function parseCustomProviders(raw: string | null): CustomProvider[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const out: CustomProvider[] = [];
+    for (const p of parsed as Record<string, unknown>[]) {
+      if (
+        p &&
+        typeof p.id === "string" &&
+        typeof p.baseUrl === "string" &&
+        p.id &&
+        p.baseUrl &&
+        (p.label === undefined || typeof p.label === "string") &&
+        (p.defaultModel === undefined || typeof p.defaultModel === "string")
+      ) {
+        out.push({
+          id: p.id,
+          label: (p.label as string) || p.id,
+          baseUrl: p.baseUrl,
+          defaultModel: (p.defaultModel as string) ?? "",
+        });
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+/** Read the stored custom providers (see `parseCustomProviders`). */
+export async function getCustomProviders(): Promise<CustomProvider[]> {
+  return parseCustomProviders(await getSetting(CUSTOM_PROVIDERS_KEY));
+}
+
+/** Persist the custom providers list. */
+export async function setCustomProviders(
+  providers: CustomProvider[],
+): Promise<void> {
+  await setSetting(CUSTOM_PROVIDERS_KEY, JSON.stringify(providers));
+}
+
 // ---------------------------------------------------------------------------
 // Workspaces (T20/T58) — grouped threads with shared instructions + reference files
 // ---------------------------------------------------------------------------
@@ -861,10 +917,9 @@ export async function deleteWorkspace(id: string): Promise<void> {
     [id],
   );
   await db.execute(`DELETE FROM workspace_files WHERE workspace_id = $1`, [id]);
-  await db.execute(
-    `DELETE FROM workspace_memory WHERE workspace_id = $1`,
-    [id],
-  );
+  await db.execute(`DELETE FROM workspace_memory WHERE workspace_id = $1`, [
+    id,
+  ]);
   await db.execute(`DELETE FROM workspaces WHERE id = $1`, [id]);
 }
 
@@ -890,7 +945,13 @@ export async function addWorkspaceFile(input: {
   await db.execute(
     `INSERT INTO workspace_files (id, workspace_id, name, content, source_url)
      VALUES ($1, $2, $3, $4, $5)`,
-    [id, input.workspace_id, input.name, input.content, input.source_url ?? null],
+    [
+      id,
+      input.workspace_id,
+      input.name,
+      input.content,
+      input.source_url ?? null,
+    ],
   );
   await db.execute(
     `UPDATE workspaces SET updated_at = datetime('now') WHERE id = $1`,
@@ -1562,12 +1623,21 @@ export async function addModel(input: {
     `INSERT INTO models (provider, model_id, label, sort_order, notes)
      SELECT $1, $2, $3, COALESCE(MAX(sort_order), -1) + 1, $5
         FROM models WHERE provider = $4`,
-    [input.provider, input.modelId, input.label, input.provider, input.notes ?? ""],
+    [
+      input.provider,
+      input.modelId,
+      input.label,
+      input.provider,
+      input.notes ?? "",
+    ],
   );
 }
 
 /** Update the notes field for a model. */
-export async function updateModelNotes(id: number, notes: string): Promise<void> {
+export async function updateModelNotes(
+  id: number,
+  notes: string,
+): Promise<void> {
   const db = await getDb();
   await db.execute(`UPDATE models SET notes = $1 WHERE id = $2`, [notes, id]);
 }

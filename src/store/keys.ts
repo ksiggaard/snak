@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { getSetting, setSetting } from "@/lib/db";
+import { getCustomProviders, getSetting, setSetting } from "@/lib/db";
 import { readApiKeyPresence } from "@/lib/keys";
 import { isKeylessProvider, KNOWN_PROVIDER_IDS } from "@/lib/providers";
 import type { Provider } from "@/types/db";
@@ -69,9 +69,12 @@ export const useKeys = create<KeysState>((set) => ({
         );
         await setSetting(PRESENCE_SYNCED_KEY, "1");
       }
-      // Read the cached flags (pure DB — no keychain access).
+      // Read the cached flags (pure DB — no keychain access). Custom providers
+      // (key-optional) are included so a stored key is reflected across reloads.
+      const customIds = (await getCustomProviders()).map((p) => p.id);
+      const idsToRead: Provider[] = [...KEYED_PROVIDER_IDS, ...customIds];
       const pairs = await Promise.all(
-        KEYED_PROVIDER_IDS.map(
+        idsToRead.map(
           async (provider) =>
             [
               provider,

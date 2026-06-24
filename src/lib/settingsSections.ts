@@ -5,6 +5,7 @@ import {
   Languages,
   ListTodo,
   Palette,
+  Plug,
   Puzzle,
   Server,
   SlidersHorizontal,
@@ -22,6 +23,7 @@ import type { MessageKey } from "@/store/i18n";
  *  clicks) and SettingsView's id→component lookup. Order here is the list order. */
 export type SettingsCategoryId =
   | "models"
+  | "custom-providers"
   | "default-model"
   | "memory"
   | "bots"
@@ -45,6 +47,11 @@ export interface SettingsSection {
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "models", label: "settings.nav.models", Icon: Boxes },
+  {
+    id: "custom-providers",
+    label: "settings.nav.customProviders",
+    Icon: Plug,
+  },
   { id: "default-model", label: "settings.nav.defaultModel", Icon: Star },
   { id: "memory", label: "settings.nav.memory", Icon: Brain },
   { id: "bots", label: "settings.nav.bots", Icon: Bot },

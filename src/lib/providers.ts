@@ -18,6 +18,7 @@ import { useMemo } from "react";
 import type { ProviderContribution } from "@/types/plugins";
 import { buildRegistry } from "@/lib/plugins";
 import { usePlugins } from "@/store/plugins";
+import { useCustomProviders } from "@/store/customProviders";
 import type { Provider } from "@/types/db";
 
 export interface ProviderMeta {
@@ -115,7 +116,10 @@ export function withKeylessProviders(
 ): Set<Provider> {
   const out = new Set(present);
   for (const p of providers) {
-    if (isKeylessProvider(p.id)) out.add(p.id);
+    // Keyless built-ins (Ollama) and user-added custom providers (any id not in
+    // the built-in set) are available regardless of a stored key — a custom
+    // provider's key is optional (a local server may need none).
+    if (isKeylessProvider(p.id) || !isKnownProvider(p.id)) out.add(p.id);
   }
   return out;
 }
@@ -171,8 +175,19 @@ export function useProviders(): ProviderMeta[] {
   // in a memo. Selecting a freshly-built registry array directly would return a
   // new reference every render and loop zustand's Object.is subscription.
   const plugins = usePlugins((s) => s.plugins);
+  // User-added OpenAI-compatible providers, appended after the built-ins. Their
+  // ids never collide with built-ins (the store excludes KNOWN_PROVIDER_IDS).
+  const custom = useCustomProviders((s) => s.providers);
   return useMemo(
-    () => selectActiveProviders(loaded, buildRegistry(plugins).providers),
-    [loaded, plugins],
+    () => [
+      ...selectActiveProviders(loaded, buildRegistry(plugins).providers),
+      ...custom.map((c) => ({
+        id: c.id,
+        label: c.label,
+        defaultModel: c.defaultModel,
+        keyHint: "",
+      })),
+    ],
+    [loaded, plugins, custom],
   );
 }

@@ -140,6 +140,8 @@ pub async fn chat_stream(
     #[allow(non_snake_case)] captureTrace: Option<bool>,
     #[allow(non_snake_case)] skipTools: Option<bool>,
     #[allow(non_snake_case)] plannerModels: Option<Vec<PlannerModelInfo>>,
+    // Base URL for a user-added OpenAI-compatible provider; absent for built-ins.
+    #[allow(non_snake_case)] baseUrl: Option<String>,
     sessions: State<'_, McpSessions>,
     cancel: State<'_, CancelFlag>,
     approvals: State<'_, PendingApprovals>,
@@ -158,6 +160,11 @@ pub async fn chat_stream(
     // Authorization, so an empty key is passed through.
     let api_key = if providers::is_keyless(&provider) {
         String::new()
+    } else if baseUrl.is_some() {
+        // User-added OpenAI-compatible provider: the key is optional (a local
+        // server may need none), so a missing key streams with an empty Bearer
+        // rather than erroring.
+        keys::get_api_key_cached(&key_cache, &provider)?.unwrap_or_default()
     } else {
         // Cached read: the keychain (and its OS authorization prompt) is hit at
         // most once per provider per app run, not on every message send.
@@ -224,6 +231,7 @@ pub async fn chat_stream(
         &provider,
         &model,
         &api_key,
+        baseUrl.as_deref(),
         history,
         &tools,
         &servers,
@@ -259,6 +267,7 @@ async fn run_agent_loop(
     provider: &str,
     model: &str,
     api_key: &str,
+    base_url: Option<&str>,
     mut history: Vec<ChatMessage>,
     tools: &[ToolDef],
     servers: &[ServerConfig],
@@ -289,6 +298,7 @@ async fn run_agent_loop(
             api_key,
             messages: &history,
             tools,
+            base_url,
             reasoning,
             trace,
             round: _round as u32,
@@ -332,6 +342,7 @@ async fn run_agent_loop(
                     provider,
                     model,
                     api_key,
+                    base_url,
                     tools,
                     servers,
                     sessions,
@@ -514,6 +525,7 @@ async fn run_agent_loop(
         api_key,
         messages: &history,
         tools: &[],
+        base_url,
         reasoning,
         trace,
         round: max_rounds as u32,
@@ -553,6 +565,7 @@ async fn run_subagents(
     provider: &str,
     model: &str,
     api_key: &str,
+    base_url: Option<&str>,
     orchestrator_tools: &[ToolDef],
     servers: &[ServerConfig],
     sessions: &McpSessions,
@@ -635,6 +648,7 @@ async fn run_subagents(
                 provider,
                 model,
                 api_key,
+                base_url,
                 history,
                 sub_tools,
                 servers,

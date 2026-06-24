@@ -48,6 +48,7 @@ import { useI18n, useT } from "@/store/i18n";
 import { useModels } from "@/store/models";
 import { useContextWindows } from "@/store/contextWindows";
 import { useKeys } from "@/store/keys";
+import { useCustomProviders } from "@/store/customProviders";
 import { useOllama } from "@/store/ollama";
 import { useConnectivity } from "@/store/connectivity";
 import { useView } from "@/store/view";
@@ -132,6 +133,9 @@ function App() {
     void loadKeys();
     void loadPlugins();
     void loadModels();
+    // User-added OpenAI-compatible providers (endpoint + optional key) — they
+    // appear in the model picker / API-keys card once loaded.
+    void useCustomProviders.getState().load();
     // Per-model max context windows (T53) — used by the composer's context
     // readout; empty by default so it just shows an estimate until configured.
     void loadContextWindows();

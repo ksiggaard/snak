@@ -1,6 +1,7 @@
 import { type ComponentType } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Models } from "@/components/settings/Models";
+import { CustomProviders } from "@/components/settings/CustomProviders";
 import { DefaultModel } from "@/components/settings/DefaultModel";
 import { Memory } from "@/components/settings/Memory";
 import { Bots } from "@/components/settings/Bots";
@@ -22,6 +23,7 @@ import type { SettingsCategoryId } from "@/lib/settingsSections";
 // the picker that used to sit here has moved there.
 const COMPONENTS: Record<SettingsCategoryId, ComponentType> = {
   models: Models,
+  "custom-providers": CustomProviders,
   "default-model": DefaultModel,
   memory: Memory,
   bots: Bots,

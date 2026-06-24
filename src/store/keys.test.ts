@@ -8,6 +8,8 @@ vi.mock("@/lib/db", () => ({
   setSetting: vi.fn(async (key: string, value: string) => {
     settings.set(key, value);
   }),
+  // No custom providers in these tests — load() reads their presence too.
+  getCustomProviders: vi.fn(async () => []),
 }));
 
 vi.mock("@/lib/keys", () => ({

@@ -146,4 +146,14 @@ describe("keyless providers (T37)", () => {
     ]);
     expect([...out]).toEqual(["openai"]);
   });
+
+  it("withKeylessProviders treats custom (non-builtin) providers as available, key or not", () => {
+    // A user-added OpenAI-compatible provider (id not in KNOWN_PROVIDER_IDS) is
+    // key-optional, so it counts as available even with an empty presence set.
+    const out = withKeylessProviders(new Set<Provider>(), [
+      meta("openai"), // built-in, keyed → NOT auto-added without a key
+      meta("groq"), // custom → auto-added
+    ]);
+    expect([...out]).toEqual(["groq"]);
+  });
 });

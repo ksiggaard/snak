@@ -7,6 +7,7 @@ import {
 } from "@/lib/db";
 import { enabledServersForChat } from "@/lib/mcp";
 import { useConnectivity, deriveOffline } from "@/store/connectivity";
+import { useCustomProviders } from "@/store/customProviders";
 
 export interface ApiImage {
   media_type: string;
@@ -206,6 +207,12 @@ export async function chatStream(
   // connectivity store here so `send()`'s call site stays unchanged.
   const { status, forceOffline } = useConnectivity.getState();
   const offline = deriveOffline(status, forceOffline);
+  // For a user-added OpenAI-compatible provider, the endpoint to stream against.
+  // Undefined for built-ins (Rust uses their hardcoded URLs). Resolved here so
+  // every caller (send / planner / deep-research / regenerate) gets it for free.
+  const baseUrl = useCustomProviders
+    .getState()
+    .providers.find((p) => p.id === provider)?.baseUrl;
   const mcpServers = skipTools
     ? undefined
     : await enabledServersForChat(provider, offline);
@@ -233,6 +240,7 @@ export async function chatStream(
     captureTrace,
     skipTools,
     plannerModels: plannerModels ?? undefined,
+    baseUrl,
   });
 }
 
