@@ -242,7 +242,7 @@ function MarkdownImpl({
   );
 
   return (
-    <div className="text-sm break-words">
+    <div className="min-w-0 text-sm break-words">
       <StreamingContext.Provider value={streaming ?? false}>
         <ArtifactContext.Provider value={artifactCtx}>
           <SuppressedVideosContext.Provider

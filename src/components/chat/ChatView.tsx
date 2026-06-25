@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Ghost, PanelRight, ShieldAlert } from "lucide-react";
+import { Ghost, ShieldAlert } from "lucide-react";
 import { MessageList } from "@/components/chat/MessageList";
+import { ChatTopBar, CHAT_TOPBAR_H } from "@/components/chat/ChatTopBar";
 import { Composer } from "@/components/chat/Composer";
 import { PlannerProgress } from "@/components/chat/PlannerProgress";
 import { ChatPanel } from "@/components/chat/ChatPanel";
@@ -113,6 +114,7 @@ export function ChatView() {
   const error = useThreads((s) => s.error);
   const send = useThreads((s) => s.send);
   const cancel = useThreads((s) => s.cancel);
+  const rename = useThreads((s) => s.rename);
   const onSend = useCallback(
     (text: string, images: PreparedImage[], documents: PendingDocument[]) =>
       void send(text, images, documents),
@@ -187,13 +189,27 @@ export function ChatView() {
     <div className="relative flex flex-1 flex-row gap-4 overflow-hidden">
       <motion.div
         className={cn(
-          "flex min-w-0 flex-1 flex-col gap-4 overflow-hidden",
+          "relative flex min-w-0 flex-1 flex-col gap-4 overflow-hidden",
           // Incognito identity (T36): the whole chat surface reads as a
           // distinct, temporary space — dashed border + muted tint.
           incognito &&
             "border-muted-foreground/40 bg-muted/20 rounded-lg border border-dashed p-2",
         )}
       >
+        {/* ponytail: incognito already has its own banner-header (below), so no
+            topbar there — avoids the overlay covering/flickering over it. The
+            panel toggle is then unavailable in incognito; wire it in if needed. */}
+        {!incognito && (
+          <ChatTopBar
+            title={current?.title ?? t("thread.newChat")}
+            panelOpen={panelOpen}
+            onOpenPanel={() => setPanelOpen(true)}
+            canRename={!!currentThreadId}
+            onRename={(title) =>
+              currentThreadId && void rename(currentThreadId, title)
+            }
+          />
+        )}
         {incognito && (
           <div className="border-muted-foreground/40 bg-muted/40 text-muted-foreground flex items-center gap-2 rounded-md border border-dashed px-3 py-1.5 text-xs">
             <Ghost className="size-4 shrink-0" aria-hidden />
@@ -208,17 +224,23 @@ export function ChatView() {
         {incognito && messages.length === 0 && !pending ? (
           <IncognitoExplainer />
         ) : (
-          <MessageList messages={messages} pending={pending} busy={busy} bot={bot} />
+          <MessageList
+            messages={messages}
+            pending={pending}
+            busy={busy}
+            bot={bot}
+            topInset={incognito ? undefined : CHAT_TOPBAR_H}
+          />
         )}
         <div
           // Match the message column's inset: the same base horizontal padding
           // as the message scroll container, plus — on the right — the width of
-          // that container's reserved scrollbar gutter (`--snak-scrollbar-width`),
-          // so the centered composer lines up with the centered messages whether
-          // the width cap is on or off, and whether or not the chat is scrolling.
+          // that container's space-taking scrollbar (`--snak-chat-scrollbar`,
+          // styled in index.css), so the centered composer lines up with the
+          // centered messages whether the width cap is on or off.
           style={{
             paddingLeft: CHAT_X_PADDING[chatStyle],
-            paddingRight: `calc(${CHAT_X_PADDING[chatStyle]} + var(--snak-scrollbar-width, 0px))`,
+            paddingRight: `calc(${CHAT_X_PADDING[chatStyle]} + var(--snak-chat-scrollbar, 0px))`,
           }}
         >
           <div
@@ -241,26 +263,6 @@ export function ChatView() {
         </div>
       </motion.div>
       <AnimatePresence mode="popLayout">
-        {!panelOpen && (
-          <motion.div
-            key="panel-toggle"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="hidden w-9 shrink-0 flex-col items-center pt-0.5 md:flex"
-          >
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={t("panel.open")}
-              title={t("panel.open")}
-              onClick={() => setPanelOpen(true)}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <PanelRight className="size-4" />
-            </Button>
-          </motion.div>
-        )}
         {panelOpen && (
           <ChatPanel
             key="chat-panel"

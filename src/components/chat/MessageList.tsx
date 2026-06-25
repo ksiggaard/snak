@@ -1,4 +1,12 @@
-import { forwardRef, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import {
@@ -93,6 +101,9 @@ interface MessageListProps {
   /** Bot persona of this thread (T38) — assistant messages render its avatar
    *  + name. null/undefined (no bot) leaves rendering unchanged. */
   bot?: Bot | null;
+  /** Top inset (px) reserved as a spacer so the first message clears the
+   *  overlaid ChatTopBar. */
+  topInset?: number;
 }
 
 /**
@@ -922,6 +933,23 @@ const ChatMessage = memo(function ChatMessage({
       };
     }, [ytEnabled, m.role, m.content, m.images, videoLabelStart]);
 
+  // A model that ignores the ```artifact fence and emits the whole artifact as
+  // raw JSON / delimiter text (common with local models) still renders as an
+  // artifact: detect a fence-less, whole-message artifact and show the card.
+  // Computed before the early return below so the hook order stays stable.
+  const wholeArtifact = useMemo(
+    () =>
+      // Skip the streaming placeholder: parseArtifact (JSON.parse) would run on
+      // the growing text every ~100ms flush. Only the finished message matters.
+      m.role === "assistant" &&
+      m.id !== STREAM_ID &&
+      m.content &&
+      !m.content.includes("```")
+        ? parseArtifact(m.content)
+        : null,
+    [m.role, m.id, m.content],
+  );
+
   // Planner plan messages (route / multi_step) carry internal plan JSON and
   // are hidden from the chat — the user sees only the progress indicator and
   // the final synthesis answer.
@@ -1012,21 +1040,6 @@ const ChatMessage = memo(function ChatMessage({
       ))}
     </div>
   );
-  // A model that ignores the ```artifact fence and emits the whole artifact as
-  // raw JSON / delimiter text (common with local models) still renders as an
-  // artifact: detect a fence-less, whole-message artifact and show the card.
-  const wholeArtifact = useMemo(
-    () =>
-      // Skip the streaming placeholder: parseArtifact (JSON.parse) would run on
-      // the growing text every ~100ms flush. Only the finished message matters.
-      m.role === "assistant" &&
-      m.id !== STREAM_ID &&
-      m.content &&
-      !m.content.includes("```")
-        ? parseArtifact(m.content)
-        : null,
-    [m.role, m.id, m.content],
-  );
   const realMessageId = m.id === STREAM_ID ? null : m.id;
   const body =
     m.content &&
@@ -1064,9 +1077,7 @@ const ChatMessage = memo(function ChatMessage({
     ));
   // Planner plan panel: shown above the message body when a plan exists.
   const planPanel =
-    m.role === "assistant" && m.plan ? (
-      <PlanPanel plan={m.plan} />
-    ) : null;
+    m.role === "assistant" && m.plan ? <PlanPanel plan={m.plan} /> : null;
   // Model attribution: collapsible detail showing which model generated this
   // message (useful for planner/worker-step attribution).
   const attribution =
@@ -1191,7 +1202,10 @@ const ChatMessage = memo(function ChatMessage({
       <div
         ref={containerRef}
         data-mid={m.id}
-        className={cn("mx-auto flex w-full scroll-mt-4 gap-2.5", isUser && "mb-5")}
+        className={cn(
+          "mx-auto flex w-full scroll-mt-4 gap-2.5",
+          isUser && "mb-5",
+        )}
         style={{ maxWidth }}
       >
         {asBot ? (
@@ -1306,7 +1320,10 @@ const ChatMessage = memo(function ChatMessage({
         className={cn(
           // chat-content: hook for the custom chat font/size overrides
           // (T33, src/lib/appearance.ts) — no styling unless customized.
-          "chat-content flex flex-col gap-2",
+          // min-w-0: WebKit's default `min-width:auto` on flex items lets long
+          // unbreakable content (URLs) refuse to shrink and overflow the row —
+          // the compact/cozy paths already carry it; the default path didn't.
+          "chat-content flex min-w-0 flex-col gap-2",
           content,
           flashRing,
         )}
@@ -1339,7 +1356,13 @@ function useNow(): number {
   return now;
 }
 
-export function MessageList({ messages, pending, busy, bot }: MessageListProps) {
+export function MessageList({
+  messages,
+  pending,
+  busy,
+  bot,
+  topInset,
+}: MessageListProps) {
   const t = useT();
   // Persona roster for @-mention attribution (T43): a message with `bot_id`
   // set renders that persona's avatar + name regardless of the thread's bot.
@@ -1432,7 +1455,11 @@ export function MessageList({ messages, pending, busy, bot }: MessageListProps) 
     if (scrollToMessageId) {
       const idx = messages.findIndex((m) => m.id === scrollToMessageId);
       if (idx !== -1) {
-        virtuosoRef.current?.scrollToIndex({ index: idx, align: "center", behavior: "smooth" });
+        virtuosoRef.current?.scrollToIndex({
+          index: idx,
+          align: "center",
+          behavior: "smooth",
+        });
         // eslint-disable-next-line react-hooks/set-state-in-effect -- flash is a direct side-effect of the scroll target arriving
         setFlashId(scrollToMessageId);
         const t = setTimeout(() => setFlashId(null), 2000);
@@ -1474,7 +1501,10 @@ export function MessageList({ messages, pending, busy, bot }: MessageListProps) 
   // correctly suppresses controls on the prior reply while a reply is in flight.
   let lastAssistantIndex = -1;
   for (let k = 0; k < displayItems.length; k++) {
-    if (displayItems[k].role === "assistant" && displayItems[k].kind === "normal")
+    if (
+      displayItems[k].role === "assistant" &&
+      displayItems[k].kind === "normal"
+    )
       lastAssistantIndex = k;
   }
 
@@ -1486,7 +1516,10 @@ export function MessageList({ messages, pending, busy, bot }: MessageListProps) 
   const ytEnabled = usePlugins((s) =>
     hasRenderer(selectRegistry(s), "youtube"),
   );
-  const { imageOffsets, videoOffsets } = mediaLabelOffsets(displayItems, ytEnabled);
+  const { imageOffsets, videoOffsets } = mediaLabelOffsets(
+    displayItems,
+    ytEnabled,
+  );
 
   // Stable lookup map for mention-bot resolution (avoids .find() per message
   // which would defeat React.memo by returning new object references).
@@ -1517,7 +1550,7 @@ export function MessageList({ messages, pending, busy, bot }: MessageListProps) 
   return (
     <Virtuoso
       ref={virtuosoRef}
-      className="flex flex-1 flex-col"
+      className="flex min-w-0 flex-1 flex-col"
       data={displayItems}
       computeItemKey={(_, m) => m.id}
       // ponytail: "auto" (instant stick-to-bottom), not "smooth" — a smooth
@@ -1570,9 +1603,7 @@ export function MessageList({ messages, pending, busy, bot }: MessageListProps) 
             latestReply={idx === lastAssistantIndex}
             imageLabelStart={imageOffsets[idx]}
             videoLabelStart={videoOffsets[idx]}
-            mentionBot={
-              m.bot_id ? (botsById.get(m.bot_id) ?? null) : null
-            }
+            mentionBot={m.bot_id ? (botsById.get(m.bot_id) ?? null) : null}
             maxWidth={capped && !wideIds.has(m.id) ? chatMaxWidth : undefined}
             wide={wideIds.has(m.id)}
             onToggleWide={getToggleWide(m.id)}
@@ -1584,21 +1615,37 @@ export function MessageList({ messages, pending, busy, bot }: MessageListProps) 
           HTMLDivElement,
           React.HTMLAttributes<HTMLDivElement>
         >(function Scroller(props, ref) {
+          // Soft top-edge fade so messages dissolve as they scroll out the top
+          // instead of a hard clip — fixes the "ugly cutoff", independent of the
+          // topbar (which only covers the top while it's shown).
+          const topFade = "linear-gradient(to bottom, transparent, #000 40px)";
           return (
             <div
               {...props}
               ref={ref}
               data-chat-scroll
+              style={{
+                ...props.style,
+                maskImage: topFade,
+                WebkitMaskImage: topFade,
+              }}
               className={cn(
                 props.className,
                 "overflow-x-hidden",
-                "[scrollbar-gutter:stable]",
+                // Thin, space-taking scrollbar (styled in index.css under
+                // `[data-chat-scroll]`) — the native overlay scrollbar floated
+                // over and clipped the text, and `scrollbar-gutter: stable`
+                // can't reserve space for an overlay scrollbar. The styled bar
+                // takes layout width, so content insets instead of hiding.
                 `chat-style-${chatStyle}`,
                 CHAT_CONTAINER_CLASSES[chatStyle],
               )}
             />
           );
         }),
+        Header: topInset
+          ? () => <div aria-hidden style={{ height: topInset }} />
+          : undefined,
         Footer: () => {
           if (!pending) return null;
           return (
