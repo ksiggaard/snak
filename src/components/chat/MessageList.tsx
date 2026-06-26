@@ -57,6 +57,7 @@ import { useAppearance } from "@/store/appearance";
 import { timeLabels, useIntlLocale, useT, type MessageKey } from "@/store/i18n";
 import {
   CHAT_CONTAINER_CLASSES,
+  CHAT_X_PADDING,
   styleClasses,
   type ChatStyle,
 } from "@/lib/appearance";
@@ -1624,14 +1625,28 @@ export function MessageList({
               {...props}
               ref={ref}
               data-chat-scroll
-              style={{
-                ...props.style,
-                maskImage: topFade,
-                WebkitMaskImage: topFade,
-              }}
+              style={
+                {
+                  ...props.style,
+                  maskImage: topFade,
+                  WebkitMaskImage: topFade,
+                  // Horizontal inset moves to the item-list (index.css, via
+                  // `--chat-x-pad`) so it applies to the rows — Virtuoso's list
+                  // ignores the scroller's side padding. Keep `p-6`'s vertical
+                  // padding, zero the sides here.
+                  paddingLeft: 0,
+                  paddingRight: 0,
+                  // Always reserve the scrollbar gutter so the column width —
+                  // and thus its centered axis — matches the composer's fixed
+                  // `--snak-chat-scrollbar` reserve whether or not the thread is
+                  // currently long enough to scroll.
+                  overflowX: "hidden",
+                  overflowY: "scroll",
+                  "--chat-x-pad": CHAT_X_PADDING[chatStyle],
+                } as React.CSSProperties
+              }
               className={cn(
                 props.className,
-                "overflow-x-hidden",
                 // Thin, space-taking scrollbar (styled in index.css under
                 // `[data-chat-scroll]`) — the native overlay scrollbar floated
                 // over and clipped the text, and `scrollbar-gutter: stable`

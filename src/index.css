@@ -247,6 +247,27 @@ html.overlay #root {
   background-color: color-mix(in oklch, var(--muted-foreground) 55%, transparent);
 }
 
+/* Keep wide content (code blocks, tables) from stretching the whole thread,
+   and own the message column's horizontal inset here rather than on the
+   scroller. react-virtuoso's item-list sizes to its widest child and does NOT
+   honor the scroller's left/right padding, so a long `<pre>` ballooned the list
+   past the scroller and dragged every `w-full` row off the right edge, and the
+   scroller's `p-6` sides never inset the rows. Capping the list at the scroller
+   width (`max-width:100%`) forces wide content to scroll inside its own
+   `overflow-x-auto` box; padding the list (symmetric — the always-reserved
+   scrollbar gutter already accounts for the right-side bar) insets the rows so
+   they center on the same axis as the composer, whose right padding adds the
+   matching `--snak-chat-scrollbar`. `box-sizing:border-box` keeps that padding
+   inside the cap. `--chat-x-pad` is set per chat-style on the scroller
+   (MessageList). The `min-width:0` on the row's content chain
+   (MessageList/Markdown) is what lets the inner `<pre>` actually shrink to fit. */
+[data-chat-scroll] [data-testid="virtuoso-item-list"] {
+  box-sizing: border-box;
+  max-width: 100%;
+  padding-left: var(--chat-x-pad, 1.5rem);
+  padding-right: var(--chat-x-pad, 1.5rem);
+}
+
 /* Read-along (audio plugin): the sentence currently being spoken aloud, lit up
    in place. Painted via the CSS Custom Highlight API (no DOM mutation), so it
    rides over react-markdown's output without disturbing it — see
