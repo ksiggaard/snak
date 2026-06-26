@@ -21,6 +21,7 @@
 //! the persisted server config (Stage-1 rule) and passes the enabled list into
 //! `chat_stream`; an empty/all-disabled list produces an empty tool slice.
 
+pub mod device;
 pub mod image_search;
 pub mod session;
 pub mod skill_tool;
@@ -291,6 +292,7 @@ fn builtin_tools(server_id: &str) -> Vec<ToolDef> {
     match server_id {
         sysdebug::SERVER_ID => sysdebug::tools(),
         youtube::SERVER_ID => youtube::tools(),
+        device::SERVER_ID => device::tools(),
         skill_tool::SERVER_ID => skill_tool::tools(),
         _ => web_browse::tools(),
     }
@@ -312,6 +314,7 @@ async fn builtin_call(
     match server_id {
         sysdebug::SERVER_ID => sysdebug::call_tool(tool, args, emit).await,
         youtube::SERVER_ID => youtube::call_tool(client, tool, args, emit_images).await,
+        device::SERVER_ID => device::call_tool(client, tool, args).await,
         skill_tool::SERVER_ID => skill_tool::call_tool(skill_rt, thread_id, tool, args, emit).await,
         _ => {
             web_browse::call_tool(

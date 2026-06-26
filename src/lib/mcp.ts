@@ -146,11 +146,30 @@ export const BUILTIN_SKILL_SERVER: McpServer = {
   builtin: true,
 };
 
+/**
+ * The built-in **device & location** server (`device`). Ships **enabled** — three
+ * keyless tools answering "where / when am I" from the machine: `get_datetime`
+ * (local date/year/time + timezone), `get_ip_addresses` (internal LAN + external
+ * public IP), and `get_geolocation` (coarse IP-based, or precise via an OS
+ * location helper when installed). The datetime + LAN-IP tools work offline; the
+ * public-IP and geolocation lookups need the internet and error gracefully
+ * otherwise. These read potentially sensitive data (IP/location) that is sent to
+ * the chat model — toggle the server off here to disable it.
+ */
+export const BUILTIN_DEVICE_SERVER: McpServer = {
+  id: "device",
+  label: "Device & location (built-in)",
+  transport: "builtin",
+  enabled: true,
+  builtin: true,
+};
+
 /** All built-in servers, in display order (always present, never removable). */
 export const BUILTIN_SERVERS: McpServer[] = [
   BUILTIN_WEB_SERVER,
   BUILTIN_YOUTUBE_SERVER,
   BUILTIN_SYSDEBUG_SERVER,
+  BUILTIN_DEVICE_SERVER,
 ];
 
 /**
