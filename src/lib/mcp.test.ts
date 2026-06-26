@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  BUILTIN_DEVICE_SERVER,
   BUILTIN_SERVERS,
   BUILTIN_SYSDEBUG_SERVER,
   BUILTIN_WEB_SERVER,
@@ -21,7 +22,7 @@ const custom: McpServer = {
   enabled: true,
 };
 
-const N_BUILTINS = BUILTIN_SERVERS.length; // web + youtube + sys
+const N_BUILTINS = BUILTIN_SERVERS.length; // web + youtube + sys + device
 
 describe("withBuiltins", () => {
   it("prepends every built-in (with default enabled state) when absent", () => {
@@ -64,6 +65,7 @@ describe("parseServers", () => {
       { ...BUILTIN_WEB_SERVER, enabled: true },
       { ...BUILTIN_YOUTUBE_SERVER, enabled: true },
       { ...BUILTIN_SYSDEBUG_SERVER, enabled: false },
+      { ...BUILTIN_DEVICE_SERVER, enabled: true },
     ]);
   });
 

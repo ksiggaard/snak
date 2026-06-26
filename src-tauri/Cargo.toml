@@ -49,6 +49,11 @@ pdf-extract = "0.10"
 quick-xml = "0.40"
 calamine = "0.35"
 zip = { version = "8.6", default-features = false, features = ["deflate"] }
+# Local date/time + timezone for the built-in `device` tool server. Both are
+# already in the tree transitively; `chrono`'s `clock` gives `Local::now()` and
+# the offset, `iana-time-zone` gives the IANA timezone name.
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+iana-time-zone = "0.1"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2"
