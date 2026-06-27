@@ -6,8 +6,8 @@ import { useT } from "@/store/i18n";
 import { cn } from "@/lib/utils";
 
 /** Height of the chat topbar in px. MessageList reserves this much top inset (a
- *  Virtuoso Header spacer) so the first message clears the overlaid bar. Keep
- *  in sync with the `h-11` class below. */
+ *  spacer div above the first row) so the first message clears the overlaid bar.
+ *  Keep in sync with the `h-11` class below. */
 export const CHAT_TOPBAR_H = 44;
 
 interface ChatTopBarProps {
@@ -40,8 +40,8 @@ export function ChatTopBar({
   // position, not direction), so a small JS listener is the minimal correct
   // approach. Scroll events don't bubble but ARE dispatched through the capture
   // phase, so one capturing listener on `document` catches scroll from whatever
-  // node currently has [data-chat-scroll] — robust to Virtuoso remounting its
-  // (inline-defined) Scroller on re-render, which a direct addEventListener is
+  // node currently has [data-chat-scroll] — robust to the scroll container
+  // mounting/unmounting (e.g. thread switch), which a direct addEventListener is
   // not (it would be left on a detached node).
   useEffect(() => {
     let lastY: number | null = null;

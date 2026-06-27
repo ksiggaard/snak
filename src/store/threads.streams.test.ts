@@ -51,7 +51,7 @@ vi.mock("@/lib/personaMemory", () => ({
 
 import { useThreads } from "@/store/threads";
 import { addMessage, createThread } from "@/lib/db";
-import { chatStream } from "@/lib/chat";
+import { chatStream, type ChatResult } from "@/lib/chat";
 import { loadThreadMessages, type MessageView } from "@/lib/messages";
 import { PROVIDERS } from "@/lib/providers";
 import type { Message, Thread } from "@/types/db";
@@ -137,9 +137,9 @@ beforeEach(() => {
       toolCalls: [],
       subagents: [],
       duration_ms: m.duration_ms ?? null,
-      bot_id: (m as any).bot_id ?? null,
-      variant_group: (m as any).variant_group ?? null,
-      variant_selected: (m as any).variant_selected ?? 1,
+      bot_id: m.bot_id,
+      variant_group: m.variant_group,
+      variant_selected: m.variant_selected,
     } as MessageView)) ?? [];
   });
   vi.mocked(addMessage).mockImplementation(async (input) => {
@@ -148,15 +148,15 @@ beforeEach(() => {
       thread_id: input.thread_id,
       role: input.role,
       content: input.content ?? "",
-      kind: (input as any).kind ?? "normal",
-      duration_ms: (input as any).duration_ms ?? null,
-      bot_id: (input as any).bot_id ?? null,
-      variant_group: (input as any).variant_group ?? null,
-      variant_selected: (input as any).variant_selected ?? 1,
+      kind: input.kind ?? "normal",
+      duration_ms: input.duration_ms ?? null,
+      bot_id: input.bot_id ?? null,
+      variant_group: input.variant_group ?? null,
+      variant_selected: 1,
       created_at: "2026-06-13 00:00:00",
       updated_at: "2026-06-13 00:00:00",
-      provider: (input as any).provider ?? "anthropic",
-      model: (input as any).model ?? "m",
+      provider: input.provider ?? "anthropic",
+      model: input.model ?? "m",
     } as Message;
     if (!dbMessages[input.thread_id]) dbMessages[input.thread_id] = [];
     dbMessages[input.thread_id].push(m);
@@ -167,12 +167,12 @@ beforeEach(() => {
     title: input.title ?? "",
     provider: input.provider,
     model: input.model,
-    workspace_id: (input as any).workspace_id ?? null,
+    workspace_id: input.workspaceId ?? null,
     favorite: 0,
-    ephemeral: (input as any).ephemeral ? 1 : 0,
+    ephemeral: input.ephemeral ? 1 : 0,
     archived: 0,
-    deep_research: (input as any).deep_research ? 1 : 0,
-    bot_id: (input as any).bot_id ?? null,
+    deep_research: 0,
+    bot_id: input.botId ?? null,
     workspace_files_excluded: null,
     planner_active: 0,
     pre_planner_provider: null,
@@ -185,7 +185,7 @@ beforeEach(() => {
 describe("runningStreams lifecycle", () => {
   it("adds thread to runningStreams when send starts", async () => {
     let resolver: () => void;
-    const p = new Promise<{ content: string; model: string; usage: any }>((r) => { resolver = () => r(reply("done")); });
+    const p = new Promise<ChatResult>((r) => { resolver = () => r(reply("done")); });
     vi.mocked(chatStream).mockReturnValue(p);
 
     const sendPromise = useThreads.getState().send("hello", []);
@@ -198,7 +198,7 @@ describe("runningStreams lifecycle", () => {
 
   it("blocks send on the same thread while a stream is active", async () => {
     let resolver: () => void;
-    const p = new Promise<{ content: string; model: string; usage: any }>((r) => { resolver = () => r(reply("done")); });
+    const p = new Promise<ChatResult>((r) => { resolver = () => r(reply("done")); });
     vi.mocked(chatStream).mockReturnValue(p);
 
     const firstSend = useThreads.getState().send("first", []);
@@ -216,8 +216,8 @@ describe("runningStreams lifecycle", () => {
   it("allows send on a different thread while another is busy", async () => {
     let t1Resolver: () => void;
     let t2Resolver: () => void;
-    const t1Promise = new Promise<{ content: string; model: string; usage: any }>((r) => { t1Resolver = () => r(reply("done")); });
-    const t2Promise = new Promise<{ content: string; model: string; usage: any }>((r) => { t2Resolver = () => r(reply("done")); });
+    const t1Promise = new Promise<ChatResult>((r) => { t1Resolver = () => r(reply("done")); });
+    const t2Promise = new Promise<ChatResult>((r) => { t2Resolver = () => r(reply("done")); });
     let callCount = 0;
     vi.mocked(chatStream).mockImplementation(() => {
       callCount++;
@@ -250,7 +250,7 @@ describe("thread switching during stream", () => {
     await useThreads.getState().selectThread("t2");
     // Start a stream on t2 that we'll let complete.
     let t2R: () => void;
-    const t2P = new Promise<{ content: string; model: string; usage: any }>((r) => { t2R = () => r(reply("done")); });
+    const t2P = new Promise<ChatResult>((r) => { t2R = () => r(reply("done")); });
     vi.mocked(chatStream).mockReturnValue(t2P);
     const t2Send = useThreads.getState().send("pre-existing", []);
     await vi.waitFor(() => expect(useThreads.getState().runningStreams.has("t2")).toBe(true));
@@ -262,7 +262,7 @@ describe("thread switching during stream", () => {
     // Start a stream on t1 that will be paused.
     await useThreads.getState().selectThread("t1");
     let t1R: () => void;
-    const t1P = new Promise<{ content: string; model: string; usage: any }>((r) => { t1R = () => r(reply("t1 reply")); });
+    const t1P = new Promise<ChatResult>((r) => { t1R = () => r(reply("t1 reply")); });
     vi.mocked(chatStream).mockReturnValue(t1P);
     const t1Send = useThreads.getState().send("t1 message", []);
     // Wait for chatStream to be invoked (the call is stuck on t1P).
@@ -285,7 +285,7 @@ describe("thread switching during stream", () => {
   it("marks thread as unread when stream completes while viewing a different thread", async () => {
     // Start a controlled stream on t1.
     let t1Resolver: () => void;
-    const t1Promise = new Promise<{ content: string; model: string; usage: any }>((r) => { t1Resolver = () => r(reply("t1 reply")); });
+    const t1Promise = new Promise<ChatResult>((r) => { t1Resolver = () => r(reply("t1 reply")); });
     vi.mocked(chatStream).mockReturnValue(t1Promise);
 
     const t1Send = useThreads.getState().send("t1 message", []);
@@ -305,7 +305,7 @@ describe("thread switching during stream", () => {
   it("clears unread flag when selecting the thread", async () => {
     // Start and finish stream on t1 while viewing t2.
     let t1Resolver: () => void;
-    const t1Promise = new Promise<{ content: string; model: string; usage: any }>((r) => { t1Resolver = () => r(reply("done")); });
+    const t1Promise = new Promise<ChatResult>((r) => { t1Resolver = () => r(reply("done")); });
     vi.mocked(chatStream).mockReturnValue(t1Promise);
 
     const t1Send = useThreads.getState().send("hello", []);
@@ -329,7 +329,7 @@ describe("savedMessages cache", () => {
     useThreads.setState({ messages: [msg("t1", "user", "hello world")] });
 
     let resolver: () => void;
-    const p = new Promise<{ content: string; model: string; usage: any }>((r) => { resolver = () => r(reply("ok")); });
+    const p = new Promise<ChatResult>((r) => { resolver = () => r(reply("ok")); });
     vi.mocked(chatStream).mockReturnValue(p);
 
     const t1Send = useThreads.getState().send("hi", []);

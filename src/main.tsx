@@ -1,3 +1,6 @@
+// MUST be first: in a plain browser this installs the Tauri IPC/window mocks
+// (web-only mode) before any getCurrentWindow()/invoke call runs. No-op in Tauri.
+import "./lib/webShim";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -6,8 +9,14 @@ import { QuickInput } from "./components/QuickInput";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./index.css";
 
-// One bundle serves both windows; render by window label.
-const isQuick = getCurrentWindow().label === "quick";
+// One bundle serves both windows; render by window label. Guarded so a missing
+// Tauri runtime (web-only, if the mock ever isn't ready) can't crash boot.
+let isQuick: boolean;
+try {
+  isQuick = getCurrentWindow().label === "quick";
+} catch {
+  isQuick = false;
+}
 if (isQuick) document.documentElement.classList.add("overlay");
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(

@@ -1,14 +1,13 @@
 import {
-  forwardRef,
   memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import {
   BookOpenText,
   Brain,
@@ -98,7 +97,6 @@ import type { Bot } from "@/types/db";
 interface MessageListProps {
   messages: MessageView[];
   pending?: boolean;
-  busy?: boolean;
   /** Bot persona of this thread (T38) — assistant messages render its avatar
    *  + name. null/undefined (no bot) leaves rendering unchanged. */
   bot?: Bot | null;
@@ -1357,10 +1355,15 @@ function useNow(): number {
   return now;
 }
 
+// Soft top-edge fade so messages dissolve as they scroll out the top instead of
+// a hard clip, independent of the overlaid topbar.
+const TOP_FADE = "linear-gradient(to bottom, transparent, #000 40px)";
+// How close to the bottom (px) still counts as "at the bottom" for follow.
+const BOTTOM_THRESHOLD = 120;
+
 export function MessageList({
   messages,
   pending,
-  busy,
   bot,
   topInset,
 }: MessageListProps) {
@@ -1368,7 +1371,12 @@ export function MessageList({
   // Persona roster for @-mention attribution (T43): a message with `bot_id`
   // set renders that persona's avatar + name regardless of the thread's bot.
   const bots = useBots((s) => s.bots);
-  const virtuosoRef = useRef<VirtuosoHandle>(null);
+  // The scroll container (native, no virtualization lib). `atBottomRef` is a
+  // *ref* not state: it's written synchronously from onScroll so each streaming
+  // flush's stick-to-bottom effect reads the latest position with no stale
+  // closure — do NOT convert it to state (that reintroduces the follow race).
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const atBottomRef = useRef(true);
   const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const scrollToMessageId = useSearch((s) => s.scrollToMessageId);
   const consumeScroll = useSearch((s) => s.consumeScroll);
@@ -1450,52 +1458,86 @@ export function MessageList({
     LOADING_MESSAGE_KEYS,
   ) as MessageKey;
 
-  // When a search-result / chat-panel jump targets a message, scroll to +
-  // flash it via Virtuoso's scrollToIndex.
+  // When a search-result / chat-panel jump targets a message, scroll to + flash
+  // it. The target row registers itself in `messageRefs` (ChatMessage's effect);
+  // depend on displayItems so this re-runs once the row has mounted after a
+  // thread switch. content-visibility:auto does not block scrollIntoView to an
+  // off-screen row.
   useEffect(() => {
-    if (scrollToMessageId) {
-      const idx = messages.findIndex((m) => m.id === scrollToMessageId);
-      if (idx !== -1) {
-        virtuosoRef.current?.scrollToIndex({
-          index: idx,
-          align: "center",
-          behavior: "smooth",
-        });
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- flash is a direct side-effect of the scroll target arriving
-        setFlashId(scrollToMessageId);
-        const t = setTimeout(() => setFlashId(null), 2000);
-        consumeScroll();
-        return () => clearTimeout(t);
-      }
+    if (!scrollToMessageId) return;
+    const el = messageRefs.current.get(scrollToMessageId);
+    if (el) {
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+      setFlashId(scrollToMessageId);
+      const t = setTimeout(() => setFlashId(null), 2000);
       consumeScroll();
+      return () => clearTimeout(t);
     }
-  }, [scrollToMessageId, messages, consumeScroll]);
+    consumeScroll();
+  }, [scrollToMessageId, displayItems, consumeScroll]);
 
-  // Auto-scroll to bottom on thread switch / initial load.
-  const prevMessagesRef = useRef(messages);
-  useEffect(() => {
-    if (prevMessagesRef.current !== messages && messages.length > 0) {
-      prevMessagesRef.current = messages;
-      virtuosoRef.current?.scrollToIndex({ index: "LAST", behavior: "auto" });
-    }
+  // Track whether the user is parked at the bottom (within a threshold). Written
+  // synchronously on every scroll so the stick-to-bottom effect below reads a
+  // fresh value. The same native scroll event also drives ChatTopBar's show/hide
+  // (its capturing document listener matches [data-chat-scroll]).
+  const onScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    atBottomRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight <= BOTTOM_THRESHOLD;
+  }, []);
+
+  // Stick to the bottom as content grows (streaming flushes + sends), but only
+  // when the user is parked at the bottom. This runs on every render where the
+  // streaming text or the item list changed — i.e. every ~100ms flush — and
+  // reads fresh refs, so unlike a one-shot ResizeObserver it has no
+  // attach-timing hole (the list mounts after messages load). `overflow-anchor:
+  // none` on the scroller keeps content growth from shifting scrollTop, so the
+  // only scroll events are the user's (→ disengage via onScroll) or our pin.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (atBottomRef.current) el.scrollTop = el.scrollHeight;
+  }, [streamingContent, displayItems]);
+
+  // Jump to the bottom when the message *list is replaced* (thread switch /
+  // load) — keyed on the first message's id, which changes when the whole list is
+  // swapped but NOT on append. The rAF re-assert handles the first paint of a
+  // long thread settling to its real height.
+  // Seeded undefined (not messages[0]?.id) so the FIRST run with a populated
+  // list counts as a replacement → initial load jumps to the bottom.
+  const prevFirstIdRef = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    const firstId = messages[0]?.id;
+    const replaced = firstId !== prevFirstIdRef.current;
+    prevFirstIdRef.current = firstId;
+    if (!replaced || messages.length === 0) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    atBottomRef.current = true;
+    requestAnimationFrame(() => {
+      const e2 = scrollRef.current;
+      if (e2) e2.scrollTop = e2.scrollHeight;
+    });
   }, [messages]);
 
-  // Follow the reply as it streams. Virtuoso's `followOutput` re-pins on item
-  // *count* changes, but here the last item (the streaming placeholder) grows
-  // in place on every ~100ms flush — so we re-pin on each streamingContent
-  // change while the user is still parked at the bottom. `atBottomThreshold`
-  // gives hysteresis so a single flush's growth doesn't read as "scrolled up";
-  // scrolling up past it opts out of the follow until they return to the bottom.
-  const atBottomRef = useRef(true);
-  useEffect(() => {
-    if (busy && streamingContent !== null && atBottomRef.current) {
-      virtuosoRef.current?.scrollToIndex({
-        index: "LAST",
-        align: "end",
-        behavior: "auto",
-      });
-    }
-  }, [streamingContent, busy]);
+  // Sending your own message always jumps to the bottom and re-engages follow —
+  // even if you'd scrolled up to read earlier history. Detected by the last
+  // message becoming a freshly-appended `user` row (the assistant reply append
+  // at stream end has role `assistant`, so it never yanks a scrolled-up reader).
+  const prevLastIdRef = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    const last = messages[messages.length - 1];
+    const isNewUserSend =
+      last && last.id !== prevLastIdRef.current && last.role === "user";
+    prevLastIdRef.current = last?.id;
+    if (!isNewUserSend) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    atBottomRef.current = true;
+  }, [messages]);
 
   // The thread's most recent assistant reply gets the variation controls (T54).
   // Includes the streaming placeholder (no variantIds → renders nothing), which
@@ -1549,152 +1591,124 @@ export function MessageList({
   }
 
   return (
-    <Virtuoso
-      ref={virtuosoRef}
-      className="flex min-w-0 flex-1 flex-col"
-      data={displayItems}
-      computeItemKey={(_, m) => m.id}
-      // ponytail: "auto" (instant stick-to-bottom), not "smooth" — a smooth
-      // scroll tween was being launched on every ~100ms stream flush and
-      // stacking up on WebKitGTK. Upgrade path: one rAF-debounced smooth
-      // scroll if instant reads too jumpy.
-      followOutput={busy ? "auto" : false}
-      atBottomThreshold={120}
-      atBottomStateChange={(atBottom) => {
-        atBottomRef.current = atBottom;
-      }}
-      itemContent={(idx, m) => {
-        if (m.kind === "summary") {
-          return (
-            <div
-              ref={(el: HTMLDivElement | null) => {
-                if (el) messageRefs.current.set(m.id, el);
-                else messageRefs.current.delete(m.id);
-              }}
-              className={cn(
-                "mx-auto w-full scroll-mt-4",
-                flashId === m.id &&
-                  "ring-primary rounded-lg ring-2 ring-offset-2",
-              )}
-              style={{ maxWidth: chatMaxWidth ?? undefined }}
-            >
-              <div className="text-muted-foreground flex items-center gap-2 text-xs">
-                <div className="bg-border h-px flex-1" />
-                <FoldVertical className="size-3 shrink-0" aria-hidden />
-                <details className="min-w-0">
-                  <summary className="cursor-pointer select-none">
-                    {t("chat.compacted")}
-                  </summary>
-                  <div className="bg-muted/40 text-foreground/90 mt-2 rounded-md border p-3 text-sm">
-                    <Markdown content={m.content} />
-                  </div>
-                </details>
-                <div className="bg-border h-px flex-1" />
-              </div>
-            </div>
-          );
-        }
-        return (
-          <ChatMessage
-            m={m}
-            chatStyle={chatStyle}
-            flashed={flashId === m.id}
-            messageRefs={messageRefs}
-            bot={bot}
-            latestReply={idx === lastAssistantIndex}
-            imageLabelStart={imageOffsets[idx]}
-            videoLabelStart={videoOffsets[idx]}
-            mentionBot={m.bot_id ? (botsById.get(m.bot_id) ?? null) : null}
-            maxWidth={capped && !wideIds.has(m.id) ? chatMaxWidth : undefined}
-            wide={wideIds.has(m.id)}
-            onToggleWide={getToggleWide(m.id)}
-          />
-        );
-      }}
-      components={{
-        Scroller: forwardRef<
-          HTMLDivElement,
-          React.HTMLAttributes<HTMLDivElement>
-        >(function Scroller(props, ref) {
-          // Soft top-edge fade so messages dissolve as they scroll out the top
-          // instead of a hard clip — fixes the "ugly cutoff", independent of the
-          // topbar (which only covers the top while it's shown).
-          const topFade = "linear-gradient(to bottom, transparent, #000 40px)";
-          return (
-            <div
-              {...props}
-              ref={ref}
-              data-chat-scroll
-              style={
-                {
-                  ...props.style,
-                  maskImage: topFade,
-                  WebkitMaskImage: topFade,
-                  // Horizontal inset moves to the item-list (index.css, via
-                  // `--chat-x-pad`) so it applies to the rows — Virtuoso's list
-                  // ignores the scroller's side padding. Keep `p-6`'s vertical
-                  // padding, zero the sides here.
-                  paddingLeft: 0,
-                  paddingRight: 0,
-                  // Always reserve the scrollbar gutter so the column width —
-                  // and thus its centered axis — matches the composer's fixed
-                  // `--snak-chat-scrollbar` reserve whether or not the thread is
-                  // currently long enough to scroll.
-                  overflowX: "hidden",
-                  overflowY: "scroll",
-                  "--chat-x-pad": CHAT_X_PADDING[chatStyle],
-                } as React.CSSProperties
-              }
-              className={cn(
-                props.className,
-                // Thin, space-taking scrollbar (styled in index.css under
-                // `[data-chat-scroll]`) — the native overlay scrollbar floated
-                // over and clipped the text, and `scrollbar-gutter: stable`
-                // can't reserve space for an overlay scrollbar. The styled bar
-                // takes layout width, so content insets instead of hiding.
-                `chat-style-${chatStyle}`,
-                CHAT_CONTAINER_CLASSES[chatStyle],
-              )}
-            />
-          );
-        }),
-        Header: topInset
-          ? () => <div aria-hidden style={{ height: topInset }} />
-          : undefined,
-        Footer: () => {
-          if (!pending) return null;
-          return (
-            <div
-              className="mx-auto flex w-full justify-start"
-              style={{ maxWidth: chatMaxWidth ?? undefined }}
-            >
-              <div className="text-muted-foreground flex items-center gap-1.5 text-sm">
-                <span
-                  key={animations ? loadingKey : undefined}
-                  className={animations ? "snak-loading-message" : undefined}
-                >
-                  {t(loadingKey)}
-                </span>
-                {animations ? (
-                  <span
-                    aria-hidden
-                    className="bg-muted-foreground/30 inline-block h-3 w-8 animate-pulse rounded-full"
-                  />
-                ) : (
-                  <span aria-hidden className="flex gap-0.5">
-                    {[0, 0.2, 0.4].map((_delay, i) => (
-                      <span
-                        key={i}
-                        className="bg-muted-foreground inline-block size-1 rounded-full opacity-30"
-                      />
-                    ))}
-                  </span>
+    // Native scroll container (no virtualization lib). `data-chat-scroll` keeps
+    // ChatTopBar's capturing scroll listener + the styled scrollbar working;
+    // `.chat-item-list` carries the width-cap/horizontal-inset CSS; `.chat-row`
+    // gets content-visibility (offscreen rows skip layout/paint — the perf lever
+    // that replaces virtualization). See src/index.css.
+    <div
+      ref={scrollRef}
+      onScroll={onScroll}
+      data-chat-scroll
+      style={
+        {
+          maskImage: TOP_FADE,
+          WebkitMaskImage: TOP_FADE,
+          // Horizontal inset lives on the item-list (index.css, via
+          // `--chat-x-pad`); keep the container's vertical padding, zero sides.
+          paddingLeft: 0,
+          paddingRight: 0,
+          // Always reserve the scrollbar gutter so the column's centered axis
+          // matches the composer's fixed `--snak-chat-scrollbar` reserve.
+          overflowX: "hidden",
+          overflowY: "scroll",
+          // We manage stick-to-bottom ourselves (ResizeObserver pin above); let
+          // the browser's scroll anchoring fight it and it silently shifts
+          // scrollTop on content growth, reading as "scrolled up".
+          overflowAnchor: "none",
+          "--chat-x-pad": CHAT_X_PADDING[chatStyle],
+        } as React.CSSProperties
+      }
+      className={cn(
+        "flex min-w-0 flex-1 flex-col",
+        `chat-style-${chatStyle}`,
+        CHAT_CONTAINER_CLASSES[chatStyle],
+      )}
+    >
+      {topInset ? <div aria-hidden style={{ height: topInset }} /> : null}
+      <div className="chat-item-list">
+        {displayItems.map((m, idx) =>
+          m.kind === "summary" ? (
+            <div key={m.id} className="chat-row">
+              <div
+                ref={(el: HTMLDivElement | null) => {
+                  if (el) messageRefs.current.set(m.id, el);
+                  else messageRefs.current.delete(m.id);
+                }}
+                className={cn(
+                  "mx-auto w-full scroll-mt-4",
+                  flashId === m.id &&
+                    "ring-primary rounded-lg ring-2 ring-offset-2",
                 )}
+                style={{ maxWidth: chatMaxWidth ?? undefined }}
+              >
+                <div className="text-muted-foreground flex items-center gap-2 text-xs">
+                  <div className="bg-border h-px flex-1" />
+                  <FoldVertical className="size-3 shrink-0" aria-hidden />
+                  <details className="min-w-0">
+                    <summary className="cursor-pointer select-none">
+                      {t("chat.compacted")}
+                    </summary>
+                    <div className="bg-muted/40 text-foreground/90 mt-2 rounded-md border p-3 text-sm">
+                      <Markdown content={m.content} />
+                    </div>
+                  </details>
+                  <div className="bg-border h-px flex-1" />
+                </div>
               </div>
             </div>
-          );
-        },
-      }}
-    />
+          ) : (
+            <div key={m.id} className="chat-row">
+              <ChatMessage
+                m={m}
+                chatStyle={chatStyle}
+                flashed={flashId === m.id}
+                messageRefs={messageRefs}
+                bot={bot}
+                latestReply={idx === lastAssistantIndex}
+                imageLabelStart={imageOffsets[idx]}
+                videoLabelStart={videoOffsets[idx]}
+                mentionBot={m.bot_id ? (botsById.get(m.bot_id) ?? null) : null}
+                maxWidth={
+                  capped && !wideIds.has(m.id) ? chatMaxWidth : undefined
+                }
+                wide={wideIds.has(m.id)}
+                onToggleWide={getToggleWide(m.id)}
+              />
+            </div>
+          ),
+        )}
+      </div>
+      {pending && (
+        <div
+          className="mx-auto flex w-full justify-start"
+          style={{ maxWidth: chatMaxWidth ?? undefined }}
+        >
+          <div className="text-muted-foreground flex items-center gap-1.5 text-sm">
+            <span
+              key={animations ? loadingKey : undefined}
+              className={animations ? "snak-loading-message" : undefined}
+            >
+              {t(loadingKey)}
+            </span>
+            {animations ? (
+              <span
+                aria-hidden
+                className="bg-muted-foreground/30 inline-block h-3 w-8 animate-pulse rounded-full"
+              />
+            ) : (
+              <span aria-hidden className="flex gap-0.5">
+                {[0, 0.2, 0.4].map((_delay, i) => (
+                  <span
+                    key={i}
+                    className="bg-muted-foreground inline-block size-1 rounded-full opacity-30"
+                  />
+                ))}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

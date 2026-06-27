@@ -12,8 +12,11 @@ Rust is installed via `rustup` (binaries in `~/.cargo/bin`; a new shell picks th
 
 Frontend (run from repo root):
 - `npm run tauri dev` — launch the desktop app (builds Rust + serves Vite). Use this to see the window.
+- `npm run dev` — Vite only. Open `http://localhost:1420` in a **browser** to debug the frontend with normal web devtools: **web-only mode** activates (no Tauri runtime), where every Rust command is stubbed and the SQLite layer is an in-memory fake persisted to `localStorage`. See "Web-only mode" below.
 - `npm run build` — typecheck (`tsc`) + production Vite build.
 - `npm run lint` — ESLint (flat config). `npm run format` / `format:check` — Prettier.
+
+**Web-only mode** (browser debugging, no Rust): gated by `WEB_ONLY` (`src/lib/webOnly.ts`, true when `window.isTauri` is absent — so it's inert inside the Tauri webview). `src/lib/webShim.ts` (imported first in `main.tsx`) installs Tauri's `mockIPC`/`mockWindows`: it stubs all commands (`list_plugins` returns the real built-in manifests so providers work; `has_api_key`→true; `connectivity_probe`→online; `chat_stream` is **simulated** as a chunked stream so the real streaming→store→MessageList path runs) and `src/lib/webdb.ts` backs `getDb()` with an in-memory SQLite fake (CRUD on threads/messages/settings, seeded demo thread, persisted to the `snak-webdb-v1` localStorage key — clear it to reset). It's a debug harness, not a full backend (no real keychain/screenshots/tray/search/FTS).
 
 Backend (run from `src-tauri/`):
 - `cargo build` — compile the Rust backend.

@@ -1,4 +1,6 @@
 import Database from "@tauri-apps/plugin-sql";
+import { WEB_ONLY } from "@/lib/webOnly";
+import { webDb } from "@/lib/webdb";
 import { buildFtsMatch, searchTerms } from "@/lib/search";
 import type {
   Artifact,
@@ -28,10 +30,11 @@ const DB_URL = "sqlite:snak.db";
 
 let dbPromise: Promise<Database> | null = null;
 
-/** Lazily open (once) and reuse the SQLite connection. */
+/** Lazily open (once) and reuse the SQLite connection. In WEB_ONLY mode there's
+ * no tauri-plugin-sql backend, so hand back an in-memory fake (lib/webdb.ts). */
 export function getDb(): Promise<Database> {
   if (!dbPromise) {
-    dbPromise = Database.load(DB_URL);
+    dbPromise = WEB_ONLY ? Promise.resolve(webDb) : Database.load(DB_URL);
   }
   return dbPromise;
 }

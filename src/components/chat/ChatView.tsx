@@ -227,7 +227,6 @@ export function ChatView() {
           <MessageList
             messages={messages}
             pending={pending}
-            busy={busy}
             bot={bot}
             topInset={incognito ? undefined : CHAT_TOPBAR_H}
           />
