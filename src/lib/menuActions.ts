@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isMac } from "@/lib/titlebar";
+import { getSetting } from "@/lib/db";
+import { t } from "@/store/i18n";
 import { useThreads } from "@/store/threads";
 import { useWorkspaces } from "@/store/workspaces";
 import { useBots } from "@/store/bots";
@@ -68,6 +70,43 @@ export function menuActionForKey(e: KeyboardEvent): MenuAction | null {
 /** Display label for a shortcut, e.g. `shortcutLabel("N")` → "Ctrl+N" / "⌘N". */
 export function shortcutLabel(key: string): string {
   return isMac ? `⌘${key}` : `Ctrl+${key}`;
+}
+
+/**
+ * Markdown cheat sheet of keyboard shortcuts, for the `/help` slash command.
+ * Reads the (customizable) global shortcut from settings; the rest are the
+ * menu/composer shortcuts handled in `menuActionForKey` and the Composer.
+ * ponytail: curated list — shortcuts rarely change; if it drifts from the
+ * `menuActionForKey` switch, fold both onto a shared table.
+ */
+export async function buildShortcutsHelp(): Promise<string> {
+  const globalShortcut = (await getSetting("global_shortcut")) ?? "Alt+Space";
+  const row = (keys: string, what: string) => `| ${keys} | ${what} |`;
+  const lines: string[] = [
+    `### ${t("help.title")}`,
+    "",
+    `| ${t("help.shortcut")} | ${t("help.action")} |`,
+    "| --- | --- |",
+    row(globalShortcut, t("help.quickInput")),
+    row(shortcutLabel("N"), t("help.newChat")),
+    row(shortcutLabel("K"), t("help.search")),
+    row(shortcutLabel("B"), t("help.toggleSidebar")),
+    row(shortcutLabel("L"), t("help.focusComposer")),
+    row(shortcutLabel(","), t("help.settings")),
+    row(shortcutLabel("U"), t("help.usage")),
+    row(shortcutLabel("Q"), t("help.quit")),
+    row(
+      `${shortcutLabel("+")} / ${shortcutLabel("-")} / ${shortcutLabel("0")}`,
+      t("help.zoom"),
+    ),
+    row("Enter", t("help.send")),
+    row("Shift+Enter", t("help.newline")),
+    row("/", t("help.commands")),
+    row("@", t("help.mentions")),
+    row("↑ / ↓", t("help.history")),
+    row("Esc", t("help.dismiss")),
+  ];
+  return lines.join("\n");
 }
 
 export function runMenuAction(action: MenuAction): void {

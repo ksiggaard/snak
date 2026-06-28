@@ -302,6 +302,10 @@ export const en = {
     "The `{command}` command is provided by a plugin but has no built-in action in this host, so it can't run here.",
   "composer.terminalStagedNote":
     "Staged this command in your terminal — review it and press Enter there to run it (it was not auto-executed):",
+  "composer.compactNothingNote":
+    "Nothing to compact yet — there aren't enough new messages since the last summary.",
+  "composer.researchEnabledNote":
+    "Deep research is on for this chat. Send your question and I'll dispatch research subagents.",
   "composer.attachFile": "Attach file",
   "composer.removeDocument": "Remove document",
   "composer.extracting": "Extracting text…",
@@ -449,6 +453,7 @@ export const en = {
   "settings.nav.planner": "Planner",
   "settings.nav.bots": "Personas",
   "settings.nav.quickActions": "Quick actions",
+  "settings.nav.slashCommands": "Slash commands",
   "settings.nav.advanced": "Advanced",
 
   // --- Settings: Advanced (T55) -------------------------------------------------------------
@@ -983,6 +988,49 @@ export const en = {
   "quickActions.reset": "Reset to defaults",
   "quickActions.moveUp": "Move up",
   "quickActions.moveDown": "Move down",
+
+  // --- Settings: Slash commands -----------------------------------------------------------
+  "slashCommands.title": "Slash commands",
+  "slashCommands.description":
+    "Your own /commands for the composer. Type the command, then your text — the model gets your instructions with that text. Built-in commands (/compact, /research, /help) and plugins also appear in the palette.",
+  "slashCommands.empty": "No slash commands yet. Add one to get started.",
+  "slashCommands.commandLabel": "Command",
+  "slashCommands.commandPlaceholder": "e.g. /proof-read",
+  "slashCommands.inputLabel": "Input",
+  "slashCommands.inputPlaceholder":
+    "e.g. the text to proofread (shown in the command list)",
+  "slashCommands.instructionsLabel": "Instructions",
+  "slashCommands.instructionsPlaceholder":
+    "e.g. Proofread the following and fix grammar and spelling:\n\n{input}",
+  "slashCommands.instructionsHint":
+    "Use {input} where your typed text should go. Without it, your text is added at the end.",
+  "slashCommands.add": "Add command",
+  "slashCommands.remove": "Remove command",
+  "slashCommands.invalidError":
+    "“{command}” isn't a valid command — use letters, digits, - or _ (e.g. /proof-read).",
+  "slashCommands.collisionError":
+    "“{command}” is a built-in command — pick a different name.",
+  "slashCommands.duplicateError": "“{command}” is listed more than once.",
+
+  // --- /help keyboard-shortcut cheat sheet ------------------------------------------------
+  "help.title": "Keyboard shortcuts",
+  "help.shortcut": "Shortcut",
+  "help.action": "Action",
+  "help.quickInput": "Open the quick-input overlay (global)",
+  "help.newChat": "New chat",
+  "help.search": "Toggle search",
+  "help.toggleSidebar": "Toggle sidebar",
+  "help.focusComposer": "Focus the composer",
+  "help.settings": "Open settings",
+  "help.usage": "Open usage",
+  "help.quit": "Quit",
+  "help.zoom": "Zoom in / out / reset",
+  "help.send": "Send message",
+  "help.newline": "Insert a newline",
+  "help.commands": "Open the slash-command palette",
+  "help.mentions": "Mention a persona",
+  "help.history": "Recall previous messages (in an empty composer)",
+  "help.dismiss": "Close palette / overlay / dialog",
 
   // --- Bots / personas (T38, T40) ---------------------------------------------------------------------------------------------------------------------
   "bots.title": "Personas",

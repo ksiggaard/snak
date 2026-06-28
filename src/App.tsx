@@ -44,6 +44,7 @@ import { useBots } from "@/store/bots";
 import { useLibrary } from "@/store/library";
 import { usePlugins } from "@/store/plugins";
 import { useSkills } from "@/store/skills";
+import { useUserCommands } from "@/store/userCommands";
 import { useI18n, useT } from "@/store/i18n";
 import { useModels } from "@/store/models";
 import { useContextWindows } from "@/store/contextWindows";
@@ -156,6 +157,8 @@ function App() {
     // Skills (Agent Skills): load the discovered SKILL.md index so the system
     // prompt and the `skill__*` tool gate are current from first send.
     void useSkills.getState().list();
+    // User-authored slash commands: load so the composer palette has them.
+    void useUserCommands.getState().init();
   }, [
     init,
     initWorkspaces,

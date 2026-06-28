@@ -10,6 +10,7 @@ import {
   Server,
   SlidersHorizontal,
   Sparkles,
+  SquareSlash,
   Star,
   Volume2,
   Wrench,
@@ -28,6 +29,7 @@ export type SettingsCategoryId =
   | "memory"
   | "bots"
   | "quick-actions"
+  | "slash-commands"
   | "behavior"
   | "appearance"
   | "language"
@@ -56,6 +58,11 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "memory", label: "settings.nav.memory", Icon: Brain },
   { id: "bots", label: "settings.nav.bots", Icon: Bot },
   { id: "quick-actions", label: "settings.nav.quickActions", Icon: Zap },
+  {
+    id: "slash-commands",
+    label: "settings.nav.slashCommands",
+    Icon: SquareSlash,
+  },
   { id: "behavior", label: "settings.nav.behavior", Icon: SlidersHorizontal },
   { id: "appearance", label: "settings.nav.appearance", Icon: Palette },
   { id: "language", label: "settings.nav.language", Icon: Languages },
