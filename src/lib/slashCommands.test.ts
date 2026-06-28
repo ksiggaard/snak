@@ -1,12 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyTemplate,
   availableCommands,
   BUILTIN_COMMANDS,
   matchCommands,
+  normalizeUserCommand,
   parseSlashInput,
+  parseUserCommands,
   resolveCommand,
+  type UserSlashCommand,
 } from "@/lib/slashCommands";
 import type { SlashCommandContribution } from "@/types/plugins";
+
+const user = (
+  command: string,
+  instructions = "",
+  input = "",
+): UserSlashCommand => ({ id: command, command, input, instructions });
 
 describe("parseSlashInput", () => {
   it("parses a command with args", () => {
@@ -153,5 +163,116 @@ describe("resolveCommand", () => {
   it("returns null for an unknown command", () => {
     const parsed = parseSlashInput("/nope x")!;
     expect(resolveCommand(parsed, cmds)).toBeNull();
+  });
+});
+
+describe("built-in shortcut commands", () => {
+  it("ships /compact, /research and /help", () => {
+    const cmds = availableCommands([]);
+    expect(cmds.find((c) => c.command === "/compact")?.kind).toBe("compact");
+    expect(cmds.find((c) => c.command === "/research")?.kind).toBe("research");
+    expect(cmds.find((c) => c.command === "/help")?.kind).toBe("help");
+  });
+});
+
+describe("applyTemplate", () => {
+  it("substitutes {input} with the typed args", () => {
+    expect(applyTemplate("Fix grammar:\n{input}\nthanks", "hello")).toBe(
+      "Fix grammar:\nhello\nthanks",
+    );
+  });
+
+  it("replaces every {input} occurrence", () => {
+    expect(applyTemplate("{input} / {input}", "x")).toBe("x / x");
+  });
+
+  it("appends args after the instructions when there is no placeholder", () => {
+    expect(applyTemplate("Proofread this", "my text")).toBe(
+      "Proofread this\n\nmy text",
+    );
+  });
+
+  it("sends the instructions as-is when args are empty", () => {
+    expect(applyTemplate("Tell me a joke", "   ")).toBe("Tell me a joke");
+  });
+});
+
+describe("availableCommands with user commands", () => {
+  it("folds a user command in as a prompt command", () => {
+    const cmds = availableCommands(
+      [],
+      [user("/proof-read", "Fix grammar", "text to fix")],
+    );
+    const pr = cmds.find((c) => c.command === "/proof-read");
+    expect(pr).toMatchObject({
+      kind: "prompt",
+      source: "user",
+      description: "text to fix",
+      instructions: "Fix grammar",
+    });
+  });
+
+  it("normalizes a user command word (leading slash + lowercase)", () => {
+    const cmds = availableCommands([], [user("Proof_Read", "x")]);
+    expect(cmds.some((c) => c.command === "/proof_read")).toBe(true);
+  });
+
+  it("skips a user command with an invalid word", () => {
+    const before = availableCommands([]).length;
+    const cmds = availableCommands([], [user("/bad word", "x"), user("", "y")]);
+    expect(cmds).toHaveLength(before);
+  });
+
+  it("honors precedence built-in > user > plugin", () => {
+    // A built-in name wins over a user command of the same name.
+    const overBuiltin = availableCommands(
+      [],
+      [user("/compact", "hijack")],
+    ).filter((c) => c.command === "/compact");
+    expect(overBuiltin).toHaveLength(1);
+    expect(overBuiltin[0].source).toBe("builtin");
+
+    // A user command wins over a plugin contribution of the same name.
+    const contribs: SlashCommandContribution[] = [
+      { command: "/summarize", description: "from plugin" },
+    ];
+    const cmds = availableCommands(contribs, [user("/summarize", "from user")]);
+    const sum = cmds.filter((c) => c.command === "/summarize");
+    expect(sum).toHaveLength(1);
+    expect(sum[0].source).toBe("user");
+  });
+});
+
+describe("normalizeUserCommand", () => {
+  it("adds a leading slash and lowercases", () => {
+    expect(normalizeUserCommand("Proof-Read")).toBe("/proof-read");
+    expect(normalizeUserCommand("/Hello")).toBe("/hello");
+  });
+
+  it("returns null for invalid words", () => {
+    expect(normalizeUserCommand("")).toBeNull();
+    expect(normalizeUserCommand("/bad word")).toBeNull();
+    expect(normalizeUserCommand("/-nope")).toBeNull();
+  });
+});
+
+describe("parseUserCommands", () => {
+  it("returns [] for null/empty/malformed input", () => {
+    expect(parseUserCommands(null)).toEqual([]);
+    expect(parseUserCommands("")).toEqual([]);
+    expect(parseUserCommands("not json")).toEqual([]);
+    expect(parseUserCommands('{"not":"array"}')).toEqual([]);
+  });
+
+  it("keeps well-formed entries and drops command-less ones", () => {
+    const json = JSON.stringify([
+      { id: "a", command: "/x", input: "i", instructions: "do x" },
+      { input: "no command" },
+      { id: "b", command: "  " },
+    ]);
+    const out = parseUserCommands(json);
+    expect(out).toEqual([
+      { id: "a", command: "/x", input: "i", instructions: "do x" },
+    ]);
   });
 });
