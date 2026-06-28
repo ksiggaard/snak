@@ -15,9 +15,10 @@ export function Updates() {
   const t = useT();
   const [version, setVersion] = useState<string>(WEB_ONLY ? "dev" : "");
   const [checking, setChecking] = useState(false);
-  const [feedback, setFeedback] = useState<
-    { kind: "ok" | "error"; text: string } | null
-  >(null);
+  const [feedback, setFeedback] = useState<{
+    kind: "ok" | "error";
+    text: string;
+  } | null>(null);
 
   useEffect(() => {
     if (WEB_ONLY) return;
@@ -54,7 +55,10 @@ export function Updates() {
             </p>
           )}
           <div>
-            <Button onClick={() => void check()} disabled={checking || WEB_ONLY}>
+            <Button
+              onClick={() => void check()}
+              disabled={checking || WEB_ONLY}
+            >
               {checking ? t("updates.checking") : t("updates.check")}
             </Button>
           </div>

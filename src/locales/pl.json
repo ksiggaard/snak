@@ -843,6 +843,17 @@
     "playful.label": "Zabawne efekty czatu",
     "stickyPrompts.title": "Przypięte wiadomości",
     "stickyPrompts.description": "Przypina Twoją wiadomość na górze czatu, gdy czytasz odpowiedź; przewinięcie do następnej wymiany podmienia ją na kolejną wiadomość.",
-    "stickyPrompts.label": "Nagłówki przypiętych wiadomości"
+    "stickyPrompts.label": "Nagłówki przypiętych wiadomości",
+    "settings.nav.updates": "Aktualizacje",
+    "updates.title": "Aktualizacje",
+    "updates.description": "Sprawdź i zainstaluj nowe wersje snak.",
+    "updates.currentVersion": "Używasz wersji {version}.",
+    "updates.check": "Sprawdź aktualizacje",
+    "updates.checking": "Sprawdzanie…",
+    "updates.uptodate": "Masz najnowszą wersję.",
+    "update.availableTitle": "Dostępna aktualizacja",
+    "update.availableBody": "Dostępna jest wersja {version}. Pobrać, zainstalować i uruchomić ponownie teraz?",
+    "update.install": "Zainstaluj i uruchom ponownie",
+    "notify.replyReady": "Odpowiedź gotowa"
   }
 }

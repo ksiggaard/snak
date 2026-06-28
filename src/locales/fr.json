@@ -831,6 +831,17 @@
     "playful.label": "Effets de chat ludiques",
     "stickyPrompts.title": "Messages épinglés",
     "stickyPrompts.description": "Épingle votre message en haut de la conversation pendant que vous lisez sa réponse ; en faisant défiler vers l'échange suivant, le message suivant prend sa place.",
-    "stickyPrompts.label": "En-têtes de messages épinglés"
+    "stickyPrompts.label": "En-têtes de messages épinglés",
+    "settings.nav.updates": "Mises à jour",
+    "updates.title": "Mises à jour",
+    "updates.description": "Rechercher et installer les nouvelles versions de snak.",
+    "updates.currentVersion": "Vous utilisez la version {version}.",
+    "updates.check": "Rechercher des mises à jour",
+    "updates.checking": "Recherche…",
+    "updates.uptodate": "Vous utilisez la dernière version.",
+    "update.availableTitle": "Mise à jour disponible",
+    "update.availableBody": "La version {version} est disponible. La télécharger, l’installer et redémarrer maintenant ?",
+    "update.install": "Installer et redémarrer",
+    "notify.replyReady": "Réponse prête"
   }
 }

@@ -831,6 +831,17 @@
     "playful.label": "Legende chateffekter",
     "stickyPrompts.title": "Fastgjorte beskeder",
     "stickyPrompts.description": "Fastgør din besked øverst i chatten, mens du læser svaret; når du ruller videre til næste udveksling, skiftes den ud med den næste besked.",
-    "stickyPrompts.label": "Overskrifter for fastgjorte beskeder"
+    "stickyPrompts.label": "Overskrifter for fastgjorte beskeder",
+    "settings.nav.updates": "Opdateringer",
+    "updates.title": "Opdateringer",
+    "updates.description": "Søg efter og installer nye versioner af snak.",
+    "updates.currentVersion": "Du bruger version {version}.",
+    "updates.check": "Søg efter opdateringer",
+    "updates.checking": "Søger …",
+    "updates.uptodate": "Du har den nyeste version.",
+    "update.availableTitle": "Opdatering tilgængelig",
+    "update.availableBody": "Version {version} er tilgængelig. Download, installer og genstart nu?",
+    "update.install": "Installer og genstart",
+    "notify.replyReady": "Svar klar"
   }
 }

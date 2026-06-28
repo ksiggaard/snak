@@ -831,6 +831,17 @@
     "playful.label": "Verspielte Chat-Effekte",
     "stickyPrompts.title": "Angeheftete Prompts",
     "stickyPrompts.description": "Heftet deine Nachricht oben im Chat an, während du die Antwort liest; beim Weiterscrollen zum nächsten Austausch wird der nächste Prompt eingeblendet.",
-    "stickyPrompts.label": "Angeheftete Prompt-Überschriften"
+    "stickyPrompts.label": "Angeheftete Prompt-Überschriften",
+    "settings.nav.updates": "Updates",
+    "updates.title": "Updates",
+    "updates.description": "Nach neuen snak-Versionen suchen und sie installieren.",
+    "updates.currentVersion": "Du nutzt Version {version}.",
+    "updates.check": "Nach Updates suchen",
+    "updates.checking": "Wird gesucht …",
+    "updates.uptodate": "Du nutzt die neueste Version.",
+    "update.availableTitle": "Update verfügbar",
+    "update.availableBody": "Version {version} ist verfügbar. Jetzt herunterladen, installieren und neu starten?",
+    "update.install": "Installieren & neu starten",
+    "notify.replyReady": "Antwort bereit"
   }
 }

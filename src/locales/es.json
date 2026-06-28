@@ -831,6 +831,17 @@
     "playful.label": "Efectos de chat lúdicos",
     "stickyPrompts.title": "Mensajes fijados",
     "stickyPrompts.description": "Fija tu mensaje en la parte superior del chat mientras lees su respuesta; al desplazarte al siguiente intercambio se cambia por el siguiente mensaje.",
-    "stickyPrompts.label": "Encabezados de mensajes fijados"
+    "stickyPrompts.label": "Encabezados de mensajes fijados",
+    "settings.nav.updates": "Actualizaciones",
+    "updates.title": "Actualizaciones",
+    "updates.description": "Busca e instala nuevas versiones de snak.",
+    "updates.currentVersion": "Tienes la versión {version}.",
+    "updates.check": "Buscar actualizaciones",
+    "updates.checking": "Buscando…",
+    "updates.uptodate": "Tienes la última versión.",
+    "update.availableTitle": "Actualización disponible",
+    "update.availableBody": "La versión {version} está disponible. ¿Descargar, instalar y reiniciar ahora?",
+    "update.install": "Instalar y reiniciar",
+    "notify.replyReady": "Respuesta lista"
   }
 }
