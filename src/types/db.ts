@@ -32,6 +32,10 @@ export interface Thread {
   /** 1 = deep research mode is on for this thread (T55): the model may dispatch
    * parallel research subagents. Persisted so reopening the thread keeps it. */
   deep_research: number;
+  /** Response-style selection for this thread (an `OutputTypeId`, e.g. "short",
+   * "json", "default"). Injects one system instruction at send time. Persisted
+   * so reopening the thread keeps it. "default" = no instruction. */
+  output_type: string;
   /** Bot (persona) this thread belongs to, or null (T38). Deleting a bot
    * orphans its threads back to null — chat history is preserved. */
   bot_id: string | null;

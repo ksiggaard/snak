@@ -23,6 +23,7 @@ import {
   setSetting,
   setThreadArchived,
   setThreadDeepResearch,
+  setThreadOutputType,
   setThreadFavorite,
   setThreadPlannerActive,
   setThreadWorkspace,
@@ -70,6 +71,11 @@ import { buildArtifactsSystemText } from "@/lib/artifacts";
 import { useContributions } from "@/store/contributions";
 import { buildYouTubeSystemText } from "@/lib/youtube";
 import { hasRenderer } from "@/lib/plugins";
+import {
+  buildOutputTypeSystemText,
+  DEFAULT_OUTPUT_TYPE,
+  type OutputTypeId,
+} from "@/lib/outputTypes";
 import { selectRegistry, usePlugins } from "@/store/plugins";
 import { useKeys } from "@/store/keys";
 import { useModels } from "@/store/models";
@@ -343,6 +349,10 @@ interface ThreadsState {
   /** Deep research draft (T55): the first send creates the thread with deep
    * research on. For a saved thread the mode lives on `thread.deep_research`. */
   draftDeepResearch: boolean;
+  /** Output-type draft (response-style picker): the first send creates the
+   * thread with this `OutputTypeId`. For a saved thread it lives on
+   * `thread.output_type`. */
+  draftOutputType: OutputTypeId;
   /** Bot (T38) a new (draft) chat will belong to, or null for none. */
   draftBotId: string | null;
   /** A compaction summarization call is in flight (T28). */
@@ -418,6 +428,9 @@ interface ThreadsState {
   /** Turn deep research mode on/off (T55) for the current thread, or the draft
    * if none. Persisted per thread. */
   setDeepResearch: (on: boolean) => Promise<void>;
+  /** Set the response-style output type for the current thread, or the draft if
+   * none. Persisted per thread. */
+  setOutputType: (id: OutputTypeId) => Promise<void>;
   /** Load `text` into the Composer and focus it (a quick action's `prefill`
    * mode). Bumps a nonce so the Composer re-applies even for identical text. */
   insertIntoComposer: (text: string) => void;
@@ -586,6 +599,7 @@ function parseExcludedFileIds(raw: string | null | undefined): string[] | null {
 async function loadSharedSystemBlocks(
   workspaceId: string | null,
   excludedFileIds?: string[] | null,
+  outputType: string = DEFAULT_OUTPUT_TYPE,
 ): Promise<{ head: ApiMessage[]; tail: ApiMessage[] }> {
   const head: ApiMessage[] = [];
   const tail: ApiMessage[] = [];
@@ -615,6 +629,13 @@ async function loadSharedSystemBlocks(
   const artifactsSystemText = buildArtifactsSystemText(registry);
   if (artifactsSystemText)
     head.push({ role: "system", content: artifactsSystemText, images: [] });
+
+  // Output type (response-style picker): one instruction shaping how the model
+  // replies (short/detailed/JSON/plain-text/etc.). "default" and renderer-gated
+  // entries whose plugin is disabled inject nothing.
+  const outputTypeText = buildOutputTypeSystemText(outputType, registry);
+  if (outputTypeText)
+    head.push({ role: "system", content: outputTypeText, images: [] });
 
   // Runtime plugin LLM hooks (the "llm-hook" permission): each enabled plugin
   // may contribute extra system-prompt text. Append-only — plugins augment, not
@@ -750,6 +771,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   draftExcludedFileIds: [],
   draftIncognito: false,
   draftDeepResearch: false,
+  draftOutputType: DEFAULT_OUTPUT_TYPE,
   draftBotId: null,
   compacting: false,
   cancelling: false,
@@ -891,6 +913,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       draftExcludedFileIds: [],
       draftIncognito: opts?.incognito ?? false,
       draftDeepResearch: false,
+      draftOutputType: DEFAULT_OUTPUT_TYPE,
       draftBotId: null,
       draftProvider: get().defaultProvider,
       draftModel: get().defaultModel,
@@ -912,6 +935,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       draftExcludedFileIds: [],
       draftIncognito: false,
       draftDeepResearch: false,
+      draftOutputType: DEFAULT_OUTPUT_TYPE,
       draftBotId: null,
       draftProvider: get().defaultProvider,
       draftModel: get().defaultModel,
@@ -937,6 +961,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       draftExcludedFileIds: [],
       draftIncognito: false,
       draftDeepResearch: false,
+      draftOutputType: DEFAULT_OUTPUT_TYPE,
       draftBotId: bot.id,
       draftProvider: hasDefault ? bot.default_provider! : get().defaultProvider,
       draftModel: hasDefault ? bot.default_model! : get().defaultModel,
@@ -991,6 +1016,16 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       return;
     }
     await setThreadDeepResearch(id, on);
+    await get().refreshThreads();
+  },
+
+  setOutputType: async (outputType) => {
+    const id = get().currentThreadId;
+    if (!id) {
+      set({ draftOutputType: outputType });
+      return;
+    }
+    await setThreadOutputType(id, outputType);
     await get().refreshThreads();
   },
 
@@ -1074,6 +1109,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       let workspaceId: string | null;
       let botId: string | null;
       let excludedFileIds: string[] | null;
+      let outputType: string;
       if (id) {
         const thread = get().threads.find((x) => x.id === id);
         workspaceId = thread?.workspace_id ?? null;
@@ -1081,14 +1117,20 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         excludedFileIds = parseExcludedFileIds(
           thread?.workspace_files_excluded,
         );
+        outputType = thread?.output_type ?? DEFAULT_OUTPUT_TYPE;
       } else {
         workspaceId = get().draftWorkspaceId;
         botId = get().draftBotId;
         excludedFileIds = get().draftExcludedFileIds;
+        outputType = get().draftOutputType;
       }
       // Reuse the exact builders send() uses, so the estimate tracks the real
       // request: skills + global/memory (head), persona (bot), workspace (tail).
-      const shared = await loadSharedSystemBlocks(workspaceId, excludedFileIds);
+      const shared = await loadSharedSystemBlocks(
+        workspaceId,
+        excludedFileIds,
+        outputType,
+      );
       const bot = botId ? await getBot(botId) : null;
       const botBlock = bot ? await botSystemBlock(bot) : null;
       const blocks = [
@@ -1151,6 +1193,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       let botId: string | null;
       let ephemeral: boolean;
       let deepResearch: boolean;
+      let outputType: string;
       let excludedFileIds: string[] | null;
 
       if (!id) {
@@ -1161,6 +1204,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         botId = get().draftBotId;
         ephemeral = get().draftIncognito;
         deepResearch = get().draftDeepResearch;
+        outputType = get().draftOutputType;
         excludedFileIds =
           get().draftExcludedFileIds.length > 0
             ? get().draftExcludedFileIds
@@ -1192,6 +1236,9 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         // Carry the draft's deep-research mode onto the new thread row (T55) so
         // it persists like incognito/workspace do.
         if (deepResearch) await setThreadDeepResearch(id, true);
+        // Carry the draft's output type onto the new thread row so it persists.
+        if (outputType !== DEFAULT_OUTPUT_TYPE)
+          await setThreadOutputType(id, outputType);
         // Carry the draft's excluded file ids onto the new thread row (T61).
         if (excludedFileIds && excludedFileIds.length > 0) {
           await setThreadWorkspaceFilesExcluded(id, excludedFileIds);
@@ -1210,6 +1257,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         botId = t.bot_id;
         ephemeral = t.ephemeral !== 0;
         deepResearch = t.deep_research !== 0;
+        outputType = t.output_type;
         excludedFileIds = parseExcludedFileIds(t.workspace_files_excluded);
       }
 
@@ -1271,7 +1319,11 @@ export const useThreads = create<ThreadsState>((set, get) => ({
 
       // System context shared by every reply of this send (skills/global/
       // workspace); the persona block is per-reply and slots in between.
-      const shared = await loadSharedSystemBlocks(workspaceId, excludedFileIds);
+      const shared = await loadSharedSystemBlocks(
+        workspaceId,
+        excludedFileIds,
+        outputType,
+      );
       const threadId = id; // non-null capture for the closures below
 
       // Planner mode: the planner model orchestrates the response instead of
@@ -2238,6 +2290,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       workspace_id: workspaceId,
       bot_id: threadBotId,
       workspace_files_excluded: workspaceFilesExcluded,
+      output_type: outputType,
     } = thread;
 
     set((s) => ({
@@ -2256,6 +2309,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       const shared = await loadSharedSystemBlocks(
         workspaceId,
         parseExcludedFileIds(workspaceFilesExcluded),
+        outputType,
       );
       const attributeBotId = target.bot_id;
       const replyBot = attributeBotId
@@ -2550,6 +2604,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       workspace_id: workspaceId,
       bot_id: threadBotId,
       workspace_files_excluded: workspaceFilesExcludedSrc,
+      output_type: outputType,
     } = thread;
 
     set((s) => ({
@@ -2565,6 +2620,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       const shared = await loadSharedSystemBlocks(
         workspaceId,
         parseExcludedFileIds(workspaceFilesExcludedSrc),
+        outputType,
       );
       const attributeBotId = target.bot_id;
       const replyBot = attributeBotId

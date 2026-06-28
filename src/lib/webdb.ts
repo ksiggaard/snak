@@ -55,6 +55,7 @@ function seed(): DbState {
       favorite: 0,
       archived: 0,
       deep_research: 0,
+      output_type: "default",
       planner_active: 0,
       pre_planner_provider: null,
       pre_planner_model: null,
@@ -162,8 +163,8 @@ function execute(query: string, values: unknown[] = []): void {
     const [id, title, provider, model, workspace_id, ephemeral, bot_id] = values;
     state.threads.unshift({
       id, title, provider, model, workspace_id, ephemeral, bot_id,
-      favorite: 0, archived: 0, deep_research: 0, planner_active: 0,
-      pre_planner_provider: null, pre_planner_model: null,
+      favorite: 0, archived: 0, deep_research: 0, output_type: "default",
+      planner_active: 0, pre_planner_provider: null, pre_planner_model: null,
       workspace_files_excluded: null, created_at: sqlNow(), updated_at: sqlNow(),
     });
   } else if (q.includes("into settings")) {
