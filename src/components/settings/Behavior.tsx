@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { getSetting, setSetting } from "@/lib/db";
 import { setGlobalShortcut } from "@/lib/quick";
+import { validateAccelerator } from "@/lib/shortcut";
 import { invoke } from "@tauri-apps/api/core";
 import { useT } from "@/store/i18n";
 
@@ -53,6 +54,12 @@ export function BehaviorSettings() {
   async function saveShortcut() {
     const accelerator = shortcutValue.trim();
     if (!accelerator) return;
+    const invalid = validateAccelerator(accelerator);
+    if (invalid) {
+      setShortcutStatus("error");
+      setShortcutError(invalid);
+      return;
+    }
     setShortcutError(null);
     try {
       await setGlobalShortcut(accelerator);

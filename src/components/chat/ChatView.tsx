@@ -4,7 +4,7 @@ import { Ghost, ShieldAlert } from "lucide-react";
 import { MessageList } from "@/components/chat/MessageList";
 import { ChatTopBar, CHAT_TOPBAR_H } from "@/components/chat/ChatTopBar";
 import { Composer } from "@/components/chat/Composer";
-import { PlannerProgress } from "@/components/chat/PlannerProgress";
+import { ProgressIndicator } from "@/components/chat/ProgressIndicator";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { Button } from "@/components/ui/button";
 import { useThreads } from "@/store/threads";
@@ -168,22 +168,9 @@ export function ChatView() {
     providers.find((p) => p.id === provider)?.label ?? provider;
   const providerLocal = isKeylessProvider(provider);
 
-  // Show "Thinking…" until the first streamed token arrives (after that the
-  // growing assistant bubble conveys progress), and again in the gap after a
-  // tool call finishes while the model composes its follow-up — so a slow
-  // post-tool round doesn't look like the persona stopped responding.
-  const last = messages[messages.length - 1];
-  const awaitingModel = useThreads((s) => s.awaitingModel);
-  // Subscribe to a boolean, not the raw growing string: streamingContent gets a
-  // new value on every ~100ms flush, and subscribing to it re-rendered all of
-  // ChatView (Composer, PlannerProgress, ApprovalGate) 10×/sec for nothing.
-  // The boolean only flips once (empty→non-empty), so the subtree stays quiet
-  // mid-stream; MessageList owns the live bubble via its own subscription.
-  const hasStreamedText = useThreads((s) => !!s.streamingContent);
-  const pending =
-    busy &&
-    (!last || last.role === "user" || awaitingModel) &&
-    (!hasStreamedText || awaitingModel);
+  // The ProgressIndicator pill (above the composer) is now the single loading
+  // indicator for both normal chat and planner — it carries the spinner, the
+  // elapsed counter, and the stale watchdog. No inline "Thinking…" bubble.
 
   return (
     <div className="relative flex flex-1 flex-row gap-4 overflow-hidden">
@@ -221,12 +208,11 @@ export function ChatView() {
             </span>
           </div>
         )}
-        {incognito && messages.length === 0 && !pending ? (
+        {incognito && messages.length === 0 && !busy ? (
           <IncognitoExplainer />
         ) : (
           <MessageList
             messages={messages}
-            pending={pending}
             bot={bot}
             topInset={incognito ? undefined : CHAT_TOPBAR_H}
           />
@@ -247,7 +233,7 @@ export function ChatView() {
             style={{ maxWidth: chatMaxWidth ? chatMaxWidth + 40 : undefined }}
           >
             {error && <p className="text-destructive px-1 text-sm">{error}</p>}
-            <PlannerProgress />
+            <ProgressIndicator />
             <ApprovalGate providerLabel={providerLabel} local={providerLocal} />
             <Composer
               onSend={onSend}

@@ -128,7 +128,7 @@ beforeEach(() => {
     runningStreams: new Set(),
     unreadThreads: new Set(),
     savedMessages: {},
-    threadPlannerProgress: {},
+    threadProgress: {},
     cancelling: false,
   });
   useModels.setState({

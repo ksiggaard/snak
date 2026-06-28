@@ -431,6 +431,13 @@ function ColorsCard() {
           onReset={() => resetColor(mode, "background")}
         />
         <ColorRow
+          label={t("colors.canvas")}
+          value={picks.canvas ?? DEFAULT_PICKER_COLORS[mode].canvas}
+          custom={picks.canvas !== undefined}
+          onChange={(hex) => setColor(mode, "canvas", hex)}
+          onReset={() => resetColor(mode, "canvas")}
+        />
+        <ColorRow
           label={t("colors.mixColor")}
           value={picks.surface ?? DEFAULT_PICKER_COLORS[mode].surface}
           custom={picks.surface !== undefined}

@@ -119,7 +119,12 @@ pub fn submit_quick(app: AppHandle, payload: serde_json::Value) -> Result<(), St
 pub fn set_global_shortcut(app: AppHandle, accelerator: String) -> Result<(), String> {
     let gs = app.global_shortcut();
     let _ = gs.unregister_all();
-    gs.register(accelerator.as_str()).map_err(|e| e.to_string())
+    gs.register(accelerator.as_str()).map_err(|e| e.to_string())?;
+    // Keep the tray "Quick Chat" item's shown shortcut in sync with the live one.
+    if let Some(item) = app.try_state::<crate::QuickChatItem>() {
+        let _ = item.0.set_text(format!("Quick Chat ({accelerator})"));
+    }
+    Ok(())
 }
 
 /// Interactive region screenshot, returned as base64. `None` if the user

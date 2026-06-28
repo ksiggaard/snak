@@ -53,14 +53,19 @@ import { STREAM_ID, useThreads } from "@/store/threads";
 import { openLightbox } from "@/store/lightbox";
 import { useSearch } from "@/store/search";
 import { useAppearance } from "@/store/appearance";
-import { timeLabels, useIntlLocale, useT, type MessageKey } from "@/store/i18n";
+import { timeLabels, useIntlLocale, useT } from "@/store/i18n";
 import {
   CHAT_CONTAINER_CLASSES,
   CHAT_X_PADDING,
   styleClasses,
   type ChatStyle,
 } from "@/lib/appearance";
-import { formatDuration, parseDbTime, relativeTime } from "@/lib/time";
+import {
+  formatClock,
+  formatDuration,
+  parseDbTime,
+  relativeTime,
+} from "@/lib/time";
 import { imageLabel } from "@/lib/imageLabels";
 import { audioEnabled, hasRenderer } from "@/lib/plugins";
 import {
@@ -80,10 +85,6 @@ import {
 } from "@/lib/readAlong";
 import { useAudio } from "@/store/audio";
 import {
-  LOADING_MESSAGE_KEYS,
-  pickLoadingMessage,
-} from "@/lib/loadingMessages";
-import {
   embeddedYouTubeIds,
   mediaLabelOffsets,
   parseYouTubeUrl,
@@ -96,7 +97,6 @@ import type { Bot } from "@/types/db";
 
 interface MessageListProps {
   messages: MessageView[];
-  pending?: boolean;
   /** Bot persona of this thread (T38) — assistant messages render its avatar
    *  + name. null/undefined (no bot) leaves rendering unchanged. */
   bot?: Bot | null;
@@ -474,7 +474,8 @@ function AssistantMeta({
     >
       <span>
         {relativeTime(date, new Date(now), timeLabels(), locale)}
-        {durationMs != null && ` · ${formatDuration(durationMs)}`}
+        {durationMs != null &&
+          ` · ${durationMs >= 60_000 ? formatClock(durationMs) : formatDuration(durationMs)}`}
       </span>
       <button
         type="button"
@@ -1363,7 +1364,6 @@ const BOTTOM_THRESHOLD = 120;
 
 export function MessageList({
   messages,
-  pending,
   bot,
   topInset,
 }: MessageListProps) {
@@ -1383,7 +1383,6 @@ export function MessageList({
   // How messages render (T34): default / bubbles / compact / document.
   const chatStyle = useAppearance((s) => s.chatStyle);
   const chatMaxWidth = useAppearance((s) => s.chatMaxWidth);
-  const animations = useAppearance((s) => s.animations);
   // Session-only set of reply ids expanded to full width. Not persisted —
   // resets on restart, mirroring other per-session chat UI state.
   const [wideIds, setWideIds] = useState<Set<string>>(() => new Set());
@@ -1442,21 +1441,6 @@ export function MessageList({
     streamingProvider,
     streamingModel,
   ]);
-
-  // T57 — rotating loading messages. The interval fires every 2.2 s while
-  // `pending` is true, bumping a counter that selects the next phrase.
-  // setState is only called from the timer callback (not synchronously in the
-  // effect body), so the react-hooks/set-state-in-effect rule is satisfied.
-  const [loadingTick, setLoadingTick] = useState(0);
-  useEffect(() => {
-    if (!pending) return;
-    const id = setInterval(() => setLoadingTick((n) => n + 1), 2200);
-    return () => clearInterval(id);
-  }, [pending]);
-  const loadingKey = pickLoadingMessage(
-    loadingTick,
-    LOADING_MESSAGE_KEYS,
-  ) as MessageKey;
 
   // When a search-result / chat-panel jump targets a message, scroll to + flash
   // it. The target row registers itself in `messageRefs` (ChatMessage's effect);
@@ -1584,7 +1568,7 @@ export function MessageList({
     return cb;
   };
 
-  if (displayItems.length === 0 && !pending) {
+  if (displayItems.length === 0) {
     // Empty chat: a persona greets with its own starters (T38); a plain new
     // chat shows configurable quick actions + persona starters.
     return <EmptySuggestions bot={bot} />;
@@ -1679,36 +1663,6 @@ export function MessageList({
           ),
         )}
       </div>
-      {pending && (
-        <div
-          className="mx-auto flex w-full justify-start"
-          style={{ maxWidth: chatMaxWidth ?? undefined }}
-        >
-          <div className="text-muted-foreground flex items-center gap-1.5 text-sm">
-            <span
-              key={animations ? loadingKey : undefined}
-              className={animations ? "snak-loading-message" : undefined}
-            >
-              {t(loadingKey)}
-            </span>
-            {animations ? (
-              <span
-                aria-hidden
-                className="bg-muted-foreground/30 inline-block h-3 w-8 animate-pulse rounded-full"
-              />
-            ) : (
-              <span aria-hidden className="flex gap-0.5">
-                {[0, 0.2, 0.4].map((_delay, i) => (
-                  <span
-                    key={i}
-                    className="bg-muted-foreground inline-block size-1 rounded-full opacity-30"
-                  />
-                ))}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

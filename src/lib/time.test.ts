@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  formatClock,
   formatDuration,
   formatThreadDate,
   parseDbTime,
@@ -57,6 +58,23 @@ describe("formatDuration", () => {
   it("clamps the sub-minute branch so it never rounds up to 60.0s", () => {
     expect(formatDuration(59_990)).toBe("59.9s");
     expect(formatDuration(59_500)).toBe("59.5s");
+  });
+});
+
+describe("formatClock", () => {
+  it("is M:SS under a minute", () => {
+    expect(formatClock(5_000)).toBe("0:05");
+    expect(formatClock(0)).toBe("0:00");
+  });
+  it("is M:SS / MM:SS under an hour", () => {
+    expect(formatClock(65_000)).toBe("1:05");
+    expect(formatClock(630_000)).toBe("10:30");
+  });
+  it("is H:MM:SS at an hour and above", () => {
+    expect(formatClock(3_725_000)).toBe("1:02:05");
+  });
+  it("clamps negatives to 0:00", () => {
+    expect(formatClock(-1)).toBe("0:00");
   });
 });
 

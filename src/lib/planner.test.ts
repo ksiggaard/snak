@@ -6,6 +6,7 @@ import {
   MAX_PLAN_STEPS,
   parseCriticResponse,
   parsePlan,
+  resolvePlannerTarget,
   resolveStepVariables,
   scoreModelForStep,
   topologicalSort,
@@ -505,5 +506,62 @@ describe("parsePlan robustness", () => {
     expect(result).not.toBeNull();
     expect(result!.plan.steps).toHaveLength(MAX_PLAN_STEPS);
     expect(result!.warnings.some((w) => /step/i.test(w))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolvePlannerTarget — local/cloud fallback
+// ---------------------------------------------------------------------------
+
+describe("resolvePlannerTarget", () => {
+  const ollamaModel = makeModel(6, "ollama", "llama3.2:1b", "llama3.2:1b");
+  const withOllama = [...allModels, ollamaModel];
+  const appDefault = { provider: "anthropic" as Provider, model: "claude-opus-4-8" };
+
+  it("keeps a usable cloud planner unchanged", () => {
+    const r = resolvePlannerTarget(appDefault, {
+      models: withOllama,
+      keyed: new Set<Provider>(["anthropic"]),
+      offline: false,
+      ollamaReady: true,
+      appDefault,
+    });
+    expect(r).toEqual({ ...appDefault, fellBack: false });
+  });
+
+  it("falls back local→cloud when Ollama is down", () => {
+    const r = resolvePlannerTarget(
+      { provider: "ollama" as Provider, model: "llama3.2:1b" },
+      {
+        models: withOllama,
+        keyed: new Set<Provider>(["anthropic"]),
+        offline: false,
+        ollamaReady: false,
+        appDefault,
+      },
+    );
+    expect(r).toEqual({ ...appDefault, fellBack: true });
+  });
+
+  it("falls back cloud→local when offline (first installed Ollama model)", () => {
+    const r = resolvePlannerTarget(appDefault, {
+      models: withOllama,
+      keyed: new Set<Provider>(["anthropic"]),
+      offline: true,
+      ollamaReady: true,
+      appDefault,
+    });
+    expect(r).toEqual({ provider: "ollama", model: "llama3.2:1b", fellBack: true });
+  });
+
+  it("keeps the configured target when neither tier is available", () => {
+    const r = resolvePlannerTarget(appDefault, {
+      models: withOllama,
+      keyed: new Set<Provider>(["anthropic"]),
+      offline: true,
+      ollamaReady: false,
+      appDefault,
+    });
+    expect(r).toEqual({ ...appDefault, fellBack: false });
   });
 });

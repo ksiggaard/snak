@@ -35,13 +35,13 @@ import {
   chatStream,
   type ApiMessage,
   type ApprovalRequestEvent,
+  type ChatUsage,
   type StreamEvent,
 } from "@/lib/chat";
 import {
   applySubagentEvent,
   applyToolEvent,
   applyTraceEvent,
-  isModelOutput,
   loadThreadMessages,
   persistableSubagent,
   persistableToolCall,
@@ -72,6 +72,7 @@ import { hasRenderer } from "@/lib/plugins";
 import { selectRegistry, usePlugins } from "@/store/plugins";
 import { useKeys } from "@/store/keys";
 import { useModels } from "@/store/models";
+import { useOllama } from "@/store/ollama";
 import {
   buildPlannerSystemPrompt,
   buildCriticSystemPrompt,
@@ -80,6 +81,7 @@ import {
   parseCriticResponse,
   executePlan,
   stripPlanJsonFence,
+  resolvePlannerTarget,
   type PlanStep,
   type StepResult,
   buildPlannerModels,
@@ -93,6 +95,7 @@ import { mcpCloseThreadSessions } from "@/lib/mcp";
 import { t } from "@/store/i18n";
 import { isKeylessProvider, PROVIDERS } from "@/lib/providers";
 import { createGate } from "@/lib/concurrency";
+import { evaluateStale, STALE_CHECK_MS } from "@/lib/staleness";
 import { deriveOffline, useConnectivity } from "@/store/connectivity";
 import type { PreparedImage } from "@/lib/image";
 import type { PendingDocument } from "@/lib/documents";
@@ -112,22 +115,104 @@ export const CRITIC_MODEL_KEY = "critic_model";
 // artifacts only persist once their message has a real id).
 export const STREAM_ID = "__streaming__";
 
-export interface StepProgress {
-  id: string;
-  description: string;
-  provider: Provider;
-  model: string;
-  status: "pending" | "running" | "done" | "error";
+/** One headline in the progress bar. The same shape drives both a normal chat
+ * (a single "Generating response" step) and the planner (four phase steps) so
+ * one component renders both. */
+export interface ProgressStep {
+  label: string;
+  /** Extra context surfaced in the hover state (model, "round 2/5", counts). */
+  detail?: string;
+  status: "pending" | "active" | "done" | "error";
 }
 
-export interface PlannerProgress {
-  phase: "planning" | "critiquing" | "revising" | "dispatching" | "executing" | "completing";
-  steps: StepProgress[];
-  directModel?: string;
-  /** Current critique round (1-based), set during critiquing/revising phases. */
-  round?: number;
-  /** Maximum critique rounds (default 5). */
-  maxRounds?: number;
+export interface ThreadProgress {
+  /** Run start (ms) — drives the live counter and the kept total duration. */
+  startedAt: number;
+  /** Current step start (ms) — the window the stale watchdog measures from. */
+  stepStartedAt: number;
+  status: "running" | "stale";
+  steps: ProgressStep[];
+  /** Index of the active step. */
+  current: number;
+}
+
+// --- Stream activity + stale watchdog -------------------------------------
+// Last stream activity per thread, kept OUT of the reactive store so a token
+// never triggers a render. The watchdog and the progress pill read it via
+// getLastActivity. Bumped on every stream event (text/tool/reasoning) and on
+// each progress-step transition.
+const lastActivity = new Map<string, number>();
+export function getLastActivity(tid: string): number | undefined {
+  return lastActivity.get(tid);
+}
+function bumpActivity(tid: string) {
+  lastActivity.set(tid, Date.now());
+}
+
+// Seed a single-step progress entry for a plain (non-planner) reply, so the
+// same ProgressIndicator pill + counter + stale watchdog cover normal chat,
+// regenerate, and variation streams. The planner builds its own multi-step
+// progress via setProgress.
+function startChatProgress(tid: string) {
+  const now = Date.now();
+  bumpActivity(tid);
+  ensureWatchdog();
+  useThreads.setState((s) => ({
+    threadProgress: {
+      ...s.threadProgress,
+      [tid]: {
+        startedAt: now,
+        stepStartedAt: now,
+        status: "running" as const,
+        current: 0,
+        steps: [
+          { label: t("progress.step.generating"), status: "active" as const },
+        ],
+      },
+    },
+  }));
+}
+
+// A single 1s interval, lazily started on the first running stream and stopped
+// when none remain. Once a step has run past the grace period it watches for
+// inactivity and stops a genuinely stuck stream (a slow-but-streaming run keeps
+// bumping activity, so it's never killed).
+// ponytail: cancelStream() is global — with concurrent streams it stops
+// whichever the backend is running (same ceiling as the manual Stop button).
+let watchdog: ReturnType<typeof setInterval> | null = null;
+function ensureWatchdog() {
+  if (watchdog) return;
+  watchdog = setInterval(() => {
+    const s = useThreads.getState();
+    if (s.runningStreams.size === 0) {
+      if (watchdog) clearInterval(watchdog);
+      watchdog = null;
+      return;
+    }
+    const now = Date.now();
+    for (const tid of s.runningStreams) {
+      const p = s.threadProgress[tid];
+      if (!p || p.status === "stale") continue;
+      const act = lastActivity.get(tid) ?? p.startedAt;
+      if (!evaluateStale(now, p.stepStartedAt, act).stale) continue;
+      useThreads.setState((st) =>
+        st.threadProgress[tid]
+          ? {
+              threadProgress: {
+                ...st.threadProgress,
+                [tid]: { ...st.threadProgress[tid], status: "stale" as const },
+              },
+            }
+          : {},
+      );
+      if (s.currentThreadId === tid) {
+        void s.postNote(
+          t("progress.stale.stopped", { n: String(STALE_CHECK_MS / 1000) }),
+        );
+      }
+      void cancelStream();
+    }
+  }, 1000);
 }
 
 /** Cap on the persisted API trace (serialized), so a long multi-round trace
@@ -226,10 +311,10 @@ interface ThreadsState {
   criticProvider: Provider | null;
   /** Critic model id (null = use planner's). */
   criticModel: string | null;
-  /** Live planner orchestration progress — per-thread, keyed by thread id.
-   *  Drives the PlannerProgress pill strip. Null = planner not active.
+  /** Live run progress — per-thread, keyed by thread id. Drives the unified
+   *  ProgressIndicator pill (both normal chat and planner). Absent = idle.
    *  Ephemeral (never persisted). */
-  threadPlannerProgress: Record<string, PlannerProgress>;
+  threadProgress: Record<string, ThreadProgress>;
   /** Threads with an active stream (send/regenerate/compact/etc.) — per-thread
    *  so the user can switch between threads while streams run in the background.
    *  Derived `busy` = runningStreams.has(currentThreadId). */
@@ -642,7 +727,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   draftUsePlanner: false,
   criticProvider: null,
   criticModel: null,
-  threadPlannerProgress: {},
+  threadProgress: {},
   runningStreams: new Set(),
   unreadThreads: new Set(),
   savedMessages: {},
@@ -1115,6 +1200,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         awaitingModel: true,
         error: null,
       }));
+      bumpActivity(id);
+      ensureWatchdog();
 
       const userMsg = await addMessage({
         thread_id: id,
@@ -1178,8 +1265,43 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         rows: MessageView[],
         sysBlocks: { head: ApiMessage[]; tail: ApiMessage[] },
       ) => {
-        const { plannerProvider, plannerModel } = get();
         const allModels = useModels.getState().models;
+        // Resolve the planner model against live availability, falling back
+        // between local (Ollama) and cloud tiers — see resolvePlannerTarget.
+        const { status: connStatus, forceOffline: connForce } =
+          useConnectivity.getState();
+        const offline = deriveOffline(connStatus, connForce);
+        const ollamaReady = useOllama.getState().status === "ok";
+        const appDefault = {
+          provider: get().defaultProvider,
+          model: get().defaultModel,
+        };
+        const resolved = resolvePlannerTarget(
+          { provider: get().plannerProvider, model: get().plannerModel },
+          {
+            models: allModels,
+            keyed: keyedProviders,
+            offline,
+            ollamaReady,
+            appDefault,
+          },
+        );
+        let plannerProvider = resolved.provider;
+        let plannerModel = resolved.model;
+        if (resolved.fellBack) {
+          await get().postNote(
+            t("planner.note.fallback", {
+              model: `${plannerProvider}:${plannerModel}`,
+            }),
+          );
+        }
+        // Providers reachable right now (cloud needs online; Ollama needs the
+        // daemon up) — the planner may only delegate to these.
+        const availableProviders = new Set(
+          [...keyedProviders].filter((p) =>
+            isKeylessProvider(p) ? ollamaReady : !offline,
+          ),
+        );
         const plannerInstructions =
           (await getSetting("planner_instructions")) ?? undefined;
         const plannerPrompt = buildPlannerSystemPrompt(
@@ -1201,64 +1323,59 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           ),
         ];
 
-        // Show the planning phase pill immediately.
-        set((s) => ({
-          threadPlannerProgress: { ...s.threadPlannerProgress, [tid]: { phase: "planning", steps: [] } },
-        }));
-
-        // Use the global streaming state fields — they hold the planner's live
-        // output during the planning phase.
-        let plannerAcc = "";
-        const plannerToolCalls: MessageToolCall[] = [];
-        const plannerSubagents: MessageSubagent[] = [];
-        let plannerReasoning = "";
-        const plannerApiTrace: ApiTraceEntry[] = [];
-        let plannerLastFlush = 0;
-        const plannerFlush = () => {
-          if (get().currentThreadId !== tid) return;
-          set({
-            streamingContent: plannerAcc,
-            streamingToolCalls: [...plannerToolCalls],
-            streamingSubagents: [...plannerSubagents],
-            streamingReasoning: plannerReasoning,
-            streamingApiTrace: [...plannerApiTrace],
-            streamingProvider: plannerProvider,
-            streamingModel: plannerModel,
-            ...(isModelOutput({ text: plannerAcc } as StreamEvent) ? { awaitingModel: false } : {}),
+        // The four planner headlines for the unified progress bar. `setProgress`
+        // moves the active step (marking earlier ones done) and resets the
+        // stale-watch window; `detail` rides into the pill's hover state.
+        const PLANNER_STEPS = [
+          t("progress.step.breakdown"),
+          t("progress.step.review"),
+          t("progress.step.work"),
+          t("progress.step.answer"),
+        ];
+        const setProgress = (current: number, detail?: string) =>
+          set((s) => {
+            const prev = s.threadProgress[tid];
+            const now = Date.now();
+            return {
+              threadProgress: {
+                ...s.threadProgress,
+                [tid]: {
+                  startedAt: prev?.startedAt ?? now,
+                  stepStartedAt: now,
+                  status: "running" as const,
+                  current,
+                  steps: PLANNER_STEPS.map((label, i) => ({
+                    label,
+                    detail: i === current ? detail : undefined,
+                    status: (i < current
+                      ? "done"
+                      : i === current
+                        ? "active"
+                        : "pending") as ProgressStep["status"],
+                  })),
+                },
+              },
+            };
           });
-        };
-        set({
-          streamingContent: "",
-          streamingToolCalls: [],
-          streamingSubagents: [],
-          streamingImages: [],
-          streamingReasoning: "",
-          streamingApiTrace: [],
-          streamingBotId: null,
-          streamingProvider: plannerProvider,
-          streamingModel: plannerModel,
-        });
-        const onDelta = (event: StreamEvent) => {
-          applyToolEvent(event, plannerToolCalls);
-          applySubagentEvent(event, plannerSubagents);
-          applyTraceEvent(event, plannerApiTrace);
-          if (event.reasoning) plannerReasoning += event.reasoning.text;
-          if (event.text) plannerAcc += event.text;
-          const now = performance.now();
-          if (now - plannerLastFlush > 100) {
-            plannerLastFlush = now;
-            plannerFlush();
-          }
-        };
+        // Show the breakdown phase immediately.
+        setProgress(0);
+        bumpActivity(tid);
 
+        // The planner phase runs UNDER THE SURFACE — no live streaming bubble.
+        // The "planning" progress pill is the only visible indicator; the full
+        // planner text comes back as `plannerResult.content`, so deltas are a
+        // no-op.
         const started = Date.now();
         const configRaw = await getSetting("planner_model_config");
         const config: PlannerModelConfig | null = configRaw
           ? (JSON.parse(configRaw) as PlannerModelConfig)
           : null;
-        // Only show models from providers that have API keys (or are keyless
-        // like Ollama) — the planner can't delegate to unkeyed providers.
-        const keyedModels = allModels.filter((m) => keyedProviders.has(m.provider));
+        // Only show models the planner can actually reach right now (keyed +
+        // online for cloud, daemon-up for Ollama) — so it never delegates to a
+        // dead provider.
+        const keyedModels = allModels.filter((m) =>
+          availableProviders.has(m.provider),
+        );
         const plannerModelsList = buildPlannerModels(keyedModels, config);
         // Compact text snapshot of the available models, embedded into the
         // critic + revision prompts so those calls (which don't expose the
@@ -1283,117 +1400,274 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           const n = criticRoundsRaw ? parseInt(criticRoundsRaw, 10) : 2;
           return Number.isNaN(n) ? 2 : Math.max(0, Math.min(5, n));
         })();
-        const plannerResult = await chatStream(
-          plannerProvider,
-          plannerModel,
-          history,
-          onDelta,
-          tid,
-          false,
-          false,
-          plannerModelsList,
+        const callPlanner = () =>
+          chatStream(
+            plannerProvider,
+            plannerModel,
+            history,
+            (e) => {
+              if (e.text) bumpActivity(tid);
+            },
+            tid,
+            false,
+            false,
+            plannerModelsList,
+          );
+        let plannerResult: Awaited<ReturnType<typeof callPlanner>>;
+        try {
+          plannerResult = await callPlanner();
+        } catch (err) {
+          // Reactive fallback: the planner model errored (down, rate-limited,
+          // model pulled…). Force the failed tier unavailable and try once more
+          // on the other tier.
+          const failedLocal = isKeylessProvider(plannerProvider);
+          const retry = resolvePlannerTarget(
+            { provider: plannerProvider, model: plannerModel },
+            {
+              models: allModels,
+              keyed: keyedProviders,
+              // Mark the failed tier unavailable so the resolver switches tiers.
+              offline: failedLocal ? offline : true,
+              ollamaReady: failedLocal ? false : ollamaReady,
+              appDefault,
+            },
+          );
+          if (!retry.fellBack) throw err;
+          plannerProvider = retry.provider;
+          plannerModel = retry.model;
+          await get().postNote(
+            t("planner.note.fallback", {
+              model: `${plannerProvider}:${plannerModel}`,
+            }),
+          );
+          plannerResult = await callPlanner();
+        }
+
+        // Parse the plan. The planner phase is never shown as a message — only
+        // the final answer (direct prose, or the synthesis step) surfaces, with
+        // the plan attached to it as a collapsed record (PlanPanel).
+        const parseResult = parsePlan(
+          plannerResult.content,
+          allModels,
+          PROVIDERS,
+          availableProviders,
         );
-        plannerFlush();
+        let plan = parseResult?.plan ?? null;
 
-        // Persist planner message.
-        if (
-          plannerResult.content.length > 0 ||
-          plannerToolCalls.length > 0 ||
-          plannerSubagents.length > 0
-        ) {
-          // Parse plan with model validation. Do this before persistence so we
-          // can strip the raw JSON fence from the displayed message content.
-          const parseResult = parsePlan(plannerResult.content, allModels, PROVIDERS, keyedProviders);
-          let plan = parseResult?.plan ?? null;
-
-          // Strip the JSON fence from the planner output so the raw JSON isn't
-          // displayed redundantly alongside the structured PlanPanel.
-          const displayContent = stripPlanJsonFence(plannerResult.content);
-
-          const plannerMsg = await addMessage({
-            thread_id: tid,
-            role: "assistant",
-            content: displayContent,
-            duration_ms: Math.round(Date.now() - started),
-            provider: plannerProvider,
-            model: plannerModel,
-          });
-          // Persist tool calls, subagents, transparency.
-          await Promise.all([
-            ...plannerToolCalls.map((tc) =>
-              addAttachment({
-                message_id: plannerMsg.id,
-                kind: "tool_call",
-                media_type: "application/json",
-                data: JSON.stringify(persistableToolCall(tc)),
-              }),
-            ),
-            ...plannerSubagents.map((s) =>
-              addAttachment({
-                message_id: plannerMsg.id,
-                kind: "subagent",
-                media_type: "application/json",
-                data: JSON.stringify(persistableSubagent(s)),
-              }),
-            ),
-            persistTransparency(plannerMsg.id, plannerReasoning, plannerApiTrace),
-          ]);
-          // Record usage.
-          const u = plannerResult.usage;
+        // Record a usage row for a model call on a given message.
+        const recordUsage = async (
+          messageId: string,
+          provider: Provider,
+          model: string,
+          usage: ChatUsage | undefined,
+        ) => {
           if (
-            u &&
-            (u.input_tokens > 0 ||
-              u.output_tokens > 0 ||
-              u.cache_creation_tokens > 0 ||
-              u.cache_read_tokens > 0)
+            usage &&
+            (usage.input_tokens > 0 ||
+              usage.output_tokens > 0 ||
+              usage.cache_creation_tokens > 0 ||
+              usage.cache_read_tokens > 0)
           ) {
             await addUsage({
-              message_id: plannerMsg.id,
+              message_id: messageId,
               thread_id: tid,
-              provider: plannerProvider,
-              model: plannerResult.model || plannerModel,
-              input_tokens: u.input_tokens,
-              output_tokens: u.output_tokens,
-              cache_creation_tokens: u.cache_creation_tokens,
-              cache_read_tokens: u.cache_read_tokens,
+              provider,
+              model,
+              input_tokens: usage.input_tokens,
+              output_tokens: usage.output_tokens,
+              cache_creation_tokens: usage.cache_creation_tokens,
+              cache_read_tokens: usage.cache_read_tokens,
             });
           }
+        };
 
-          // Post any model corrections as a note.
+        // The message the final plan + planner usage attach to.
+        let answerMsgId = "";
+
+        if (!plan || plan.strategy === "direct") {
+          // Direct (or unparseable) — the planner's own prose IS the answer.
+          const displayContent = stripPlanJsonFence(plannerResult.content);
+          if (displayContent.length > 0) {
+            const directMsg = await addMessage({
+              thread_id: tid,
+              role: "assistant",
+              content: displayContent,
+              duration_ms: Math.round(Date.now() - started),
+              provider: plannerProvider,
+              model: plannerModel,
+            });
+            answerMsgId = directMsg.id;
+            await recordUsage(
+              directMsg.id,
+              plannerProvider,
+              plannerResult.model || plannerModel,
+              plannerResult.usage,
+            );
+          }
+          setProgress(
+            3,
+            plan && plan.steps.length === 1
+              ? `${plan.steps[0].provider}:${plan.steps[0].model}`
+              : undefined,
+          );
+        } else {
+          // route / multi_step — orchestrate under the surface. No planner
+          // message is persisted; the synthesis step's output is the answer.
+
+          // Post any model corrections from the initial parse.
           if (parseResult && parseResult.warnings.length > 0) {
             await get().postNote(
               `Model corrections in plan:\n${parseResult.warnings.map((w) => `- ${w}`).join("\n")}`,
             );
           }
 
-          if (plan && (plan.strategy === "route" || plan.strategy === "multi_step")) {
-            // Helper: stream a model response. When `persist` is true (the default)
-            // the result is saved to the DB and messages are reloaded so the UI
-            // shows the real row. When false, the call is invisible — no streaming
-            // bubble, no DB row, no message reload.
-            const writeReply = async (
-              provider: Provider,
-              model: string,
-              messages: ApiMessage[],
-              opts?: { persist?: boolean },
-            ): Promise<{
-              content: string;
-              model: string;
-              usage: { input_tokens: number; output_tokens: number; cache_creation_tokens: number; cache_read_tokens: number };
-              msgId: string;
-            }> => {
-              const persist = opts?.persist !== false;
-              if (persist) {
-                let acc = "";
-                let wLastFlush = 0;
-                const wFlush = () => {
-                  if (get().currentThreadId !== tid) return;
-                  set({
-                    streamingContent: acc,
-                    streamingProvider: provider,
-                    streamingModel: model,
-                  });
-                };
+          // Invisible model call — no streaming bubble, no DB row. Used by the
+          // critic + revision passes. Tokens still bump activity so a long
+          // critique isn't mistaken for a stall.
+          const callHidden = (
+            provider: Provider,
+            model: string,
+            messages: ApiMessage[],
+          ) =>
+            chatStream(
+              provider,
+              model,
+              messages,
+              (e) => {
+                if (e.text) bumpActivity(tid);
+              },
+              tid,
+              false,
+            );
+
+          // Critique loop — `criticRounds` passes (0 disables it). Skipped
+          // entirely for "route" (a single delegation isn't worth a review).
+          const MAX_ROUNDS = plan.strategy === "route" ? 0 : criticRounds;
+          const { criticProvider: cProvider, criticModel: cModel } = get();
+          const criticProvider = (cProvider ?? plannerProvider) as Provider;
+          const criticModel = cModel ?? plannerModel;
+
+          for (let round = 1; round <= MAX_ROUNDS; round++) {
+            if (get().cancelling) break;
+
+            setProgress(
+              1,
+              t("progress.detail.round", {
+                round: String(round),
+                max: String(MAX_ROUNDS),
+              }),
+            );
+
+            const criticMessages: ApiMessage[] = [
+              { role: "system", content: buildCriticSystemPrompt(), images: [] },
+              { role: "user", content: buildCriticRequest(content, plan, modelsText), images: [] },
+            ];
+            const criticResult = await callHidden(criticProvider, criticModel, criticMessages);
+            const criticVerdict = parseCriticResponse(criticResult.content);
+            if (criticVerdict?.approved) break;
+            if (round === MAX_ROUNDS) break;
+
+            // Re-planning. Trimmed context — planner prompt + the original
+            // request + previous plan + critique (no full-history re-send).
+            setProgress(
+              1,
+              t("progress.detail.round", {
+                round: String(round + 1),
+                max: String(MAX_ROUNDS),
+              }),
+            );
+
+            const issues = criticVerdict
+              ? criticVerdict.issues.join("\n")
+              : "The plan has issues that need to be addressed.";
+            const replanHistory: ApiMessage[] = [
+              { role: "system", content: plannerPrompt, images: [] },
+              { role: "user", content: `Original request:\n${content}`, images: [] },
+              { role: "assistant", content: `Previous plan:\n\`\`\`json\n${JSON.stringify(plan)}\n\`\`\``, images: [] },
+              { role: "user", content: `Critique:\n${issues}\n\n${modelsText ? modelsText + "\n\n" : ""}Please revise the plan to address these issues. Only use provider and model IDs exactly as listed in the available models above. Output only the JSON plan.`, images: [] },
+            ];
+            const revisedResult = await callHidden(plannerProvider, plannerModel, replanHistory);
+            const revisedParse = parsePlan(revisedResult.content, allModels, PROVIDERS, availableProviders);
+            if (!revisedParse) continue; // Couldn't parse the revision — try again.
+            plan = revisedParse.plan;
+            if (revisedParse.warnings.length > 0) {
+              await get().postNote(
+                `Model corrections in revised plan:\n${revisedParse.warnings.map((w) => `- ${w}`).join("\n")}`,
+              );
+            }
+          }
+
+          // Plan is final (approved or max rounds reached) — dispatch steps
+          // under the "work" phase, tracking how many have completed.
+          const totalSteps = plan.steps.length;
+          let doneSteps = 0;
+          const workDetail = () =>
+            t("progress.detail.steps", {
+              done: String(doneSteps),
+              n: String(totalSteps),
+            });
+          setProgress(2, workDetail());
+          // Refresh just the work step's count without resetting the phase or
+          // the stale window (and never regress from the answer phase).
+          const updateWorkDetail = () =>
+            set((s) => {
+              const p = s.threadProgress[tid];
+              if (!p || p.current !== 2) return {};
+              return {
+                threadProgress: {
+                  ...s.threadProgress,
+                  [tid]: {
+                    ...p,
+                    steps: p.steps.map((st, i) =>
+                      i === 2 ? { ...st, detail: workDetail() } : st,
+                    ),
+                  },
+                },
+              };
+            });
+
+          // Cloud models run in parallel within a wave; local/Ollama steps
+          // serialize through a gate to avoid overloading the host.
+          const gate = createGate();
+          const emptyUsage = { input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0 };
+          // The last step is the synthesis: its output is the final answer, and
+          // the only step that streams live + persists as a chat message.
+          const synthesisId = plan.steps[plan.steps.length - 1]?.id;
+          const failed: string[] = [];
+
+          const runStep = async (
+            step: PlanStep,
+            resolvedPrompt: string,
+          ): Promise<StepResult> => {
+            if (get().cancelling) {
+              return { stepId: step.id, description: step.description, provider: step.provider, model: step.model, content: "", usage: emptyUsage };
+            }
+            const isSynthesis = step.id === synthesisId;
+            // The synthesis step advances to the "answer" phase and streams
+            // live; workers stay under the "work" phase running silently.
+            if (isSynthesis) setProgress(3, `${step.provider}:${step.model}`);
+
+            try {
+              // Only the synthesis step streams live (it's the final answer);
+              // worker steps run silently — but every token still bumps activity
+              // so a long worker isn't flagged as stale.
+              let acc = "";
+              let sLastFlush = 0;
+              const stepOnDelta = isSynthesis
+                ? (event: StreamEvent) => {
+                    if (!event.text) return;
+                    bumpActivity(tid);
+                    acc += event.text;
+                    const now = performance.now();
+                    if (now - sLastFlush > 100 && get().currentThreadId === tid) {
+                      sLastFlush = now;
+                      set({ streamingContent: acc, streamingProvider: step.provider, streamingModel: step.model, awaitingModel: false });
+                    }
+                  }
+                : (event: StreamEvent) => {
+                    if (event.text) bumpActivity(tid);
+                  };
+              if (isSynthesis) {
                 set({
                   streamingContent: "",
                   streamingToolCalls: [],
@@ -1402,357 +1676,134 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                   streamingReasoning: "",
                   streamingApiTrace: [],
                   streamingBotId: null,
-                  streamingProvider: provider,
-                  streamingModel: model,
+                  streamingProvider: step.provider,
+                  streamingModel: step.model,
                 });
-                const onDelta = (event: StreamEvent) => {
-                  if (event.text) acc += event.text;
-                  const now = performance.now();
-                  if (now - wLastFlush > 100) {
-                    wLastFlush = now;
-                    wFlush();
-                  }
-                };
-                const result = await chatStream(provider, model, messages, onDelta, tid, false);
-                wFlush();
-                if (result.content.length > 0) {
-                  const msg = await addMessage({
-                    thread_id: tid, role: "assistant", content: result.content,
-                    provider, model,
-                  });
-                  set({
-                    streamingContent: null,
-                    streamingToolCalls: [],
-                    streamingSubagents: [],
-                    streamingImages: [],
-                    streamingReasoning: "",
-                    streamingApiTrace: [],
-                    streamingBotId: null,
-                    streamingProvider: null,
-                    streamingModel: null,
-                  });
-                  {
-                    const msgs = await loadThreadMessages(tid);
-                    if (get().currentThreadId === tid) set({ messages: msgs });
-                  }
-                  return { ...result, msgId: msg.id };
-                }
-                set({
-                  streamingContent: null,
-                  streamingToolCalls: [],
-                  streamingSubagents: [],
-                  streamingImages: [],
-                  streamingReasoning: "",
-                  streamingApiTrace: [],
-                  streamingBotId: null,
-                  streamingProvider: null,
-                  streamingModel: null,
-                });
-                {
-                  const msgs = await loadThreadMessages(tid);
-                  if (get().currentThreadId === tid) set({ messages: msgs });
-                }
-                return { ...result, msgId: "" };
               }
-              // Non-persisting path: no streaming bubble, no DB row.
-              const result = await chatStream(provider, model, messages, () => {}, tid, false);
-              return { ...result, msgId: "" };
-            };
-
-            // Save initial plan attachment.
-            await addAttachment({
-              message_id: plannerMsg.id,
-              kind: "plan",
-              media_type: "application/json",
-              data: JSON.stringify(plan),
-            });
-            set({
-              streamingContent: null,
-              streamingToolCalls: [],
-              streamingSubagents: [],
-              streamingImages: [],
-              streamingReasoning: "",
-              streamingApiTrace: [],
-              streamingBotId: null,
-              streamingProvider: null,
-              streamingModel: null,
-            });
-            {
-              const msgs = await loadThreadMessages(tid);
-              if (get().currentThreadId === tid) set({ messages: msgs });
-            }
-
-            // Critique loop — `criticRounds` passes (0 disables it). Skipped
-            // entirely for "route" (a single delegation isn't worth a review).
-            const MAX_ROUNDS = plan!.strategy === "route" ? 0 : criticRounds;
-            let round: number;
-            const { criticProvider: cProvider, criticModel: cModel } = get();
-            const criticProvider = (cProvider ?? plannerProvider) as Provider;
-            const criticModel = cModel ?? plannerModel;
-
-            for (round = 1; round <= MAX_ROUNDS; round++) {
-              if (get().cancelling) break;
-
-              // Critique phase.
-              set((s) => ({
-                threadPlannerProgress: {
-                  ...s.threadPlannerProgress,
-                  [tid]: { phase: "critiquing", steps: [], round, maxRounds: MAX_ROUNDS },
-                },
-              }));
-
-              const criticMessages: ApiMessage[] = [
-                { role: "system", content: buildCriticSystemPrompt(), images: [] },
-                { role: "user", content: buildCriticRequest(content, plan!, modelsText), images: [] },
-              ];
-              const criticResult = await writeReply(criticProvider, criticModel, criticMessages, { persist: false });
-              const criticVerdict = parseCriticResponse(criticResult.content);
-
-              if (criticVerdict?.approved) {
-                break;
-              }
-
-              if (round === MAX_ROUNDS) break;
-
-              // Re-planning phase.
-              set((s) => ({
-                threadPlannerProgress: {
-                  ...s.threadPlannerProgress,
-                  [tid]: { phase: "revising", steps: [], round: round + 1, maxRounds: MAX_ROUNDS },
-                },
-              }));
-
-              const issues = criticVerdict
-                ? criticVerdict.issues.join("\n")
-                : "The plan has issues that need to be addressed.";
-              const replanHistory: ApiMessage[] = [
-                { role: "system", content: plannerPrompt, images: [] },
-                ...sysBlocks.head,
-                ...sysBlocks.tail,
-                ...compactHistory(
-                  rows,
-                  { selfBotId: null, roster: {}, baseLabel: "Assistant" },
-                  hasRenderer(selectRegistry(usePlugins.getState()), "youtube"),
+              const stepResult = await gate(isKeylessProvider(step.provider), () =>
+                chatStream(
+                  step.provider,
+                  step.model,
+                  [{ role: "user", content: resolvedPrompt, images: [] }],
+                  stepOnDelta,
+                  tid,
+                  false,
                 ),
-                { role: "assistant", content: `Previous plan:\n\`\`\`json\n${JSON.stringify(plan)}\n\`\`\``, images: [] },
-                { role: "user", content: `Critique:\n${issues}\n\n${modelsText ? modelsText + "\n\n" : ""}Please revise the plan to address these issues. Only use provider and model IDs exactly as listed in the available models above.`, images: [] },
-              ];
-              const revisedResult = await writeReply(plannerProvider, plannerModel, replanHistory, { persist: false });
-              const revisedParse = parsePlan(revisedResult.content, allModels, PROVIDERS, keyedProviders);
-              if (!revisedParse) continue; // Couldn't parse the revision — try again.
-              plan = revisedParse.plan;
+              );
 
-              // The revision message isn't persisted (writeReply with persist: false),
-              // so there's no DB row to attach the plan to. The plan is kept in-memory
-              // and will be attached to the final (approved) plan message below.
-
-              if (revisedParse.warnings.length > 0) {
-                await get().postNote(
-                  `Model corrections in revised plan:\n${revisedParse.warnings.map((w) => `- ${w}`).join("\n")}`,
-                );
-              }
-            }
-
-            {
-              // Plan is final (either approved by critic or we've reached max
-              // rounds — accept the current plan and dispatch steps).
-              const steps: StepProgress[] = plan!.steps.map((s) => ({
-                id: s.id,
-                description: s.description,
-                provider: s.provider,
-                model: s.model,
-                status: "pending" as const,
-              }));
-              set((s) => ({
-                threadPlannerProgress: {
-                  ...s.threadPlannerProgress,
-                  [tid]: {
-                    phase: "dispatching",
-                    steps,
-                  },
-                },
-              }));
-
-              // Cloud models run in parallel within a wave; local/Ollama steps
-              // serialize through a gate to avoid overloading the host.
-              const gate = createGate();
-              const emptyUsage = { input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0 };
-              // The last plan step is the synthesis: its output is the final
-              // answer and the only step persisted as a chat message.
-              const synthesisId = plan!.steps[plan!.steps.length - 1]?.id;
-              const failed: string[] = [];
-              let synthesisPersisted = false;
-
-              const setStepStatus = (
-                stepId: string,
-                status: StepProgress["status"],
-                phase?: PlannerProgress["phase"],
-              ) =>
-                set((s) => {
-                  const pp = s.threadPlannerProgress[tid];
-                  if (!pp) return {};
-                  return {
-                    threadPlannerProgress: {
-                      ...s.threadPlannerProgress,
-                      [tid]: {
-                        ...pp,
-                        ...(phase ? { phase } : {}),
-                        steps: pp.steps.map((sp) =>
-                          sp.id === stepId ? { ...sp, status } : sp,
-                        ),
-                      },
-                    },
-                  };
-                });
-
-              const runStep = async (
-                step: PlanStep,
-                resolvedPrompt: string,
-              ): Promise<StepResult> => {
-                if (get().cancelling) {
-                  return { stepId: step.id, description: step.description, provider: step.provider, model: step.model, content: "", usage: emptyUsage };
-                }
-                // The synthesis step shows the "Finalising answer" phase; the
-                // workers show "Running steps".
-                setStepStatus(step.id, "running", step.id === synthesisId ? "completing" : "executing");
-
-                const stepStarted = Date.now();
-                try {
-                  // No streaming bubble for steps — the progress strip shows
-                  // live status; the synthesis answer surfaces after DB reload.
-                  const stepResult = await gate(isKeylessProvider(step.provider), () =>
-                    chatStream(
-                      step.provider,
-                      step.model,
-                      [{ role: "user", content: resolvedPrompt, images: [] }],
-                      () => {},
-                      tid,
-                      false,
-                    ),
-                  );
-
-                  // Only the synthesis step (the final answer) is persisted; the
-                  // worker outputs are intentionally ephemeral.
-                  if (step.id === synthesisId && stepResult.content.length > 0) {
-                    const stepMsg = await addMessage({
-                      thread_id: tid,
-                      role: "assistant",
-                      content: stepResult.content,
-                      duration_ms: Math.round(Date.now() - stepStarted),
-                      provider: step.provider,
-                      model: step.model,
-                    });
-                    synthesisPersisted = true;
-                    const su = stepResult.usage;
-                    if (
-                      su &&
-                      (su.input_tokens > 0 ||
-                        su.output_tokens > 0 ||
-                        su.cache_creation_tokens > 0 ||
-                        su.cache_read_tokens > 0)
-                    ) {
-                      await addUsage({
-                        message_id: stepMsg.id,
-                        thread_id: tid,
-                        provider: step.provider,
-                        model: stepResult.model || step.model,
-                        input_tokens: su.input_tokens,
-                        output_tokens: su.output_tokens,
-                        cache_creation_tokens: su.cache_creation_tokens,
-                        cache_read_tokens: su.cache_read_tokens,
-                      });
-                    }
-                  }
-
-                  setStepStatus(step.id, "done");
-                  return {
-                    stepId: step.id,
-                    description: step.description,
-                    provider: step.provider,
-                    model: step.model,
-                    content: stepResult.content,
-                    usage: stepResult.usage ?? emptyUsage,
-                  };
-                } catch {
-                  // Failure isolation: one step failing must not sink the plan.
-                  failed.push(step.id);
-                  setStepStatus(step.id, "error");
-                  return { stepId: step.id, description: step.description, provider: step.provider, model: step.model, content: "", usage: emptyUsage };
-                }
-              };
-
-              // Execute the plan: dependency waves run in parallel, each step's
-              // failure is isolated, and steps the sort couldn't place (dangling
-              // or cyclic depends_on) run last and are reported as `dropped`.
-              const { dropped } = await executePlan(plan!, runStep);
-
-              if (failed.length > 0) {
-                await get().postNote(t("planner.note.stepsFailed", { ids: failed.join(", ") }));
-              }
-              if (dropped.length > 0) {
-                await get().postNote(t("planner.note.stepsDropped", { ids: dropped.join(", ") }));
-              }
-              // Guarantee a final answer: if the synthesis produced nothing,
-              // persist a clear message so the turn is never left blank.
-              if (!synthesisPersisted && !get().cancelling) {
-                await addMessage({
+              // Only the synthesis step (the final answer) is persisted; the
+              // worker outputs are intentionally ephemeral.
+              if (isSynthesis && stepResult.content.length > 0) {
+                const stepMsg = await addMessage({
                   thread_id: tid,
                   role: "assistant",
-                  content: t("planner.note.noAnswer"),
-                  provider: plannerProvider,
-                  model: plannerModel,
+                  content: stepResult.content,
+                  // Whole-run elapsed (from orchestration start), not just the
+                  // synthesis step — this is the "how long we waited" the
+                  // answer keeps.
+                  duration_ms: Math.round(Date.now() - started),
+                  provider: step.provider,
+                  model: step.model,
                 });
+                answerMsgId = stepMsg.id;
+                await recordUsage(stepMsg.id, step.provider, stepResult.model || step.model, stepResult.usage);
+                // The persisted row now carries the answer — drop the bubble.
+                set({ streamingContent: null, streamingProvider: null, streamingModel: null });
               }
-            }
-          } else if (plan?.strategy === "direct") {
-            // Direct strategy: show which model was chosen (or "answered directly").
-            const directModel =
-              plan.steps.length === 1
-                ? `${plan.steps[0].provider}:${plan.steps[0].model}`
-                : undefined;
-            set((s) => ({
-              threadPlannerProgress: {
-                ...s.threadPlannerProgress,
-                [tid]: {
-                  phase: "completing",
-                  steps: [],
-                  directModel,
-                },
-              },
-            }));
-          }
 
-          // Reload messages to replace all placeholders and show final state.
-          // Clear planner progress — orchestration is complete.
-          set({
-            streamingContent: null,
-            streamingToolCalls: [],
-            streamingSubagents: [],
-            streamingImages: [],
-            streamingReasoning: "",
-            streamingApiTrace: [],
-            streamingBotId: null,
-            streamingProvider: null,
-            streamingModel: null,
-          });
-          {
-            const msgs = await loadThreadMessages(tid);
-            if (get().currentThreadId === tid) {
-              set((s) => {
-                const updated = { ...s.threadPlannerProgress };
-                delete updated[tid];
-                return { messages: msgs, threadPlannerProgress: updated };
-              });
-            } else {
-              set((s) => {
-                const updated = { ...s.threadPlannerProgress };
-                delete updated[tid];
-                return { savedMessages: { ...s.savedMessages, [tid]: msgs }, threadPlannerProgress: updated };
-              });
+              doneSteps += 1;
+              if (!isSynthesis) updateWorkDetail();
+              return {
+                stepId: step.id,
+                description: step.description,
+                provider: step.provider,
+                model: step.model,
+                content: stepResult.content,
+                usage: stepResult.usage ?? emptyUsage,
+              };
+            } catch {
+              // Failure isolation: one step failing must not sink the plan.
+              failed.push(step.id);
+              doneSteps += 1;
+              if (!isSynthesis) updateWorkDetail();
+              return { stepId: step.id, description: step.description, provider: step.provider, model: step.model, content: "", usage: emptyUsage };
             }
+          };
+
+          // Execute the plan: dependency waves run in parallel, each step's
+          // failure is isolated, and steps the sort couldn't place (dangling
+          // or cyclic depends_on) run last and are reported as `dropped`.
+          const { dropped } = await executePlan(plan, runStep);
+
+          if (failed.length > 0) {
+            await get().postNote(t("planner.note.stepsFailed", { ids: failed.join(", ") }));
           }
-          await get().refreshThreads();
+          if (dropped.length > 0) {
+            await get().postNote(t("planner.note.stepsDropped", { ids: dropped.join(", ") }));
+          }
+          // Guarantee a final answer: if the synthesis produced nothing,
+          // persist a clear message so the turn is never left blank.
+          if (!answerMsgId && !get().cancelling) {
+            const noAnswer = await addMessage({
+              thread_id: tid,
+              role: "assistant",
+              content: t("planner.note.noAnswer"),
+              provider: plannerProvider,
+              model: plannerModel,
+            });
+            answerMsgId = noAnswer.id;
+          }
         }
+
+        // Attach the final plan (collapsed PlanPanel record) + the planner's
+        // own token usage to the answer message — delegated plans only (a direct
+        // answer has no plan panel).
+        if (answerMsgId && plan && plan.strategy !== "direct") {
+          await addAttachment({
+            message_id: answerMsgId,
+            kind: "plan",
+            media_type: "application/json",
+            data: JSON.stringify(plan),
+          });
+          await recordUsage(
+            answerMsgId,
+            plannerProvider,
+            plannerResult.model || plannerModel,
+            plannerResult.usage,
+          );
+        }
+
+        // Reload messages to replace placeholders and show the final state;
+        // clear planner progress — orchestration is complete.
+        set({
+          streamingContent: null,
+          streamingToolCalls: [],
+          streamingSubagents: [],
+          streamingImages: [],
+          streamingReasoning: "",
+          streamingApiTrace: [],
+          streamingBotId: null,
+          streamingProvider: null,
+          streamingModel: null,
+        });
+        lastActivity.delete(tid);
+        {
+          const msgs = await loadThreadMessages(tid);
+          if (get().currentThreadId === tid) {
+            set((s) => {
+              const updated = { ...s.threadProgress };
+              delete updated[tid];
+              return { messages: msgs, threadProgress: updated };
+            });
+          } else {
+            set((s) => {
+              const updated = { ...s.threadProgress };
+              delete updated[tid];
+              return { savedMessages: { ...s.savedMessages, [tid]: msgs }, threadProgress: updated };
+            });
+          }
+        }
+        await get().refreshThreads();
       };
 
       if (usePlanner && !deepResearch) {
@@ -1817,7 +1868,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         ];
 
         // Seed streaming state so the render layer shows the bubble immediately
-        // (empty string — the "Thinking…" spinner hides on the first token).
+        // (empty string — the progress pill carries the spinner/counter).
         set({
           streamingContent: "",
           streamingToolCalls: [],
@@ -1829,6 +1880,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           streamingProvider: replyProvider,
           streamingModel: replyModel,
         });
+        startChatProgress(threadId);
 
         // Stream the reply, appending a placeholder assistant bubble on the
         // first event and growing it as chunks arrive. Text arrives as content
@@ -1860,6 +1912,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           });
         };
         const onDelta = (event: StreamEvent) => {
+          bumpActivity(threadId);
           if (event.approvalRequest) {
             const req = event.approvalRequest;
             if (get().autoApproveSysTools) {
@@ -2047,16 +2100,17 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     } finally {
       if (runningId) {
         const wasViewing = get().currentThreadId === runningId;
+        lastActivity.delete(runningId);
         set((s) => {
           const next = new Set(s.runningStreams);
           next.delete(runningId!);
-          const updated = { ...s.threadPlannerProgress };
+          const updated = { ...s.threadProgress };
           delete updated[runningId!];
           const unread = new Set(s.unreadThreads);
           if (!wasViewing) unread.add(runningId!);
           return {
             runningStreams: next,
-            threadPlannerProgress: updated,
+            threadProgress: updated,
             unreadThreads: unread,
             cancelling: false,
             pendingApproval: null,
@@ -2222,6 +2276,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         streamingProvider: replyProvider,
         streamingModel: replyModel,
       });
+      startChatProgress(id);
       let acc = "";
       const toolCalls: MessageToolCall[] = [];
       const subagents: MessageSubagent[] = [];
@@ -2248,6 +2303,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         });
       };
       const onDelta = (event: StreamEvent) => {
+        bumpActivity(id);
         if (event.approvalRequest) {
           const req = event.approvalRequest;
           if (get().autoApproveSysTools) {
@@ -2377,13 +2433,17 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       }
     } finally {
       const wasViewing = get().currentThreadId === id;
+      lastActivity.delete(id);
       set((s) => {
         const next = new Set(s.runningStreams);
         next.delete(id);
+        const updated = { ...s.threadProgress };
+        delete updated[id];
         const unread = new Set(s.unreadThreads);
         if (!wasViewing) unread.add(id);
         return {
           runningStreams: next,
+          threadProgress: updated,
           unreadThreads: unread,
           cancelling: false,
           pendingApproval: null,
@@ -2517,6 +2577,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         streamingProvider: replyProvider,
         streamingModel: replyModel,
       });
+      startChatProgress(id);
       let acc = "";
       const toolCalls: MessageToolCall[] = [];
       const subagents: MessageSubagent[] = [];
@@ -2543,6 +2604,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         });
       };
       const onDelta = (event: StreamEvent) => {
+        bumpActivity(id);
         if (event.approvalRequest) {
           const req = event.approvalRequest;
           if (get().autoApproveSysTools) {
@@ -2671,13 +2733,17 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       }
     } finally {
       const wasViewing = get().currentThreadId === id;
+      lastActivity.delete(id);
       set((s) => {
         const next = new Set(s.runningStreams);
         next.delete(id);
+        const updated = { ...s.threadProgress };
+        delete updated[id];
         const unread = new Set(s.unreadThreads);
         if (!wasViewing) unread.add(id);
         return {
           runningStreams: next,
+          threadProgress: updated,
           unreadThreads: unread,
           cancelling: false,
           pendingApproval: null,
@@ -2757,16 +2823,17 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       set({ error: friendlyError(e) });
     } finally {
       const wasViewing = get().currentThreadId === id;
+      lastActivity.delete(id);
       set((s) => {
         const next = new Set(s.runningStreams);
         next.delete(id);
-        const updated = { ...s.threadPlannerProgress };
+        const updated = { ...s.threadProgress };
         delete updated[id];
         const unread = new Set(s.unreadThreads);
         if (!wasViewing) unread.add(id);
         return {
           runningStreams: next,
-          threadPlannerProgress: updated,
+          threadProgress: updated,
           unreadThreads: unread,
           compacting: false,
           cancelling: false,
@@ -2781,9 +2848,9 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     // Clear any pending approval card — `cancel_stream` drains pending
     // approvals on the backend (declining them), unblocking a gated stream.
     set((s) => {
-      const updated = { ...s.threadPlannerProgress };
+      const updated = { ...s.threadProgress };
       delete updated[tid];
-      return { cancelling: true, pendingApproval: null, threadPlannerProgress: updated };
+      return { cancelling: true, pendingApproval: null, threadProgress: updated };
     });
     try {
       await cancelStream();

@@ -548,19 +548,17 @@ export const en = {
   "planner.capabilityHint":
     "Tag capabilities so the planner can match models to tasks.",
 
-  // Planner progress pills
-  "planner.pill.planning": "Planning\u2026",
-  "planner.pill.critiquing": "Critiquing plan\u2026",
-  "planner.pill.revising": "Revising plan ({round}/{max})\u2026",
-  "planner.pill.dispatching": "Spawning {n} sub-agents",
-  "planner.pill.executing": "Running {n} steps",
-  "planner.pill.completing": "Finalising answer",
-  "planner.pill.direct": "Delegating to {model}",
-  "planner.pill.directSelf": "Answered directly",
-  "planner.pill.stepPending": "Waiting",
-  "planner.pill.stepRunning": "Running",
-  "planner.pill.stepDone": "Done",
-  "planner.pill.stepError": "Failed",
+  // Unified progress indicator (chat + planner)
+  "progress.step.generating": "Generating response",
+  "progress.step.breakdown": "Breaking down the request",
+  "progress.step.review": "Reviewing the plan",
+  "progress.step.work": "Working through steps",
+  "progress.step.answer": "Writing the answer",
+  "progress.detail.round": "round {round}/{max}",
+  "progress.detail.steps": "{done} of {n} done",
+  "progress.stale.label": "Stalled",
+  "progress.stale.checking": "checking\u2026 next check in {n}s",
+  "progress.stale.stopped": "Stopped \u2014 no response for {n}s.",
 
   // Planner orchestration notes (posted into the thread)
   "planner.note.stepsFailed": "Some plan steps failed and were skipped: {ids}.",
@@ -568,6 +566,8 @@ export const en = {
     "Some plan steps had unresolvable dependencies (a possible typo or cycle) and may not have run as intended: {ids}.",
   "planner.note.noAnswer":
     "⚠️ The plan ran but the final step produced no answer. Some steps may have failed — see the notes above.",
+  "planner.note.fallback":
+    "Planner model unavailable — falling back to {model}.",
 
   // --- Settings: context windows (T53) -------------------------------------------
   "contextWindows.title": "Context windows",
@@ -675,6 +675,7 @@ export const en = {
   "colors.dark": "dark",
   "colors.accent": "Accent",
   "colors.background": "Background",
+  "colors.canvas": "Canvas",
   "colors.colorAria": "{label} color",
   "colors.mixColor": "Mix color",
   "colors.highlight": "Highlight",

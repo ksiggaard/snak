@@ -8,7 +8,7 @@ mod skills;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use tauri::menu::{Menu, MenuItem};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, State, WindowEvent};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
@@ -30,6 +30,78 @@ impl Default for CloseToTray {
 #[tauri::command]
 fn set_close_to_tray(state: State<'_, CloseToTray>, enabled: bool) {
     state.0.store(enabled, Ordering::Relaxed);
+}
+
+/// The tray "Quick Chat" menu item, held in managed state so
+/// `set_global_shortcut` can keep its shown accelerator in sync with the live
+/// global shortcut (the tray is built in Rust before the frontend applies the
+/// user's saved shortcut, and Rust doesn't read the settings DB).
+pub(crate) struct QuickChatItem(pub(crate) MenuItem<tauri::Wry>);
+
+/// Which tray icon to show; picked from the tray menu, persisted in app-data.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TrayVariant {
+    Light,
+    Dark,
+}
+
+impl TrayVariant {
+    fn as_str(self) -> &'static str {
+        match self {
+            TrayVariant::Light => "light",
+            TrayVariant::Dark => "dark",
+        }
+    }
+
+    /// Anything unrecognized falls back to Dark (the default).
+    fn parse(s: &str) -> TrayVariant {
+        match s.trim() {
+            "light" => TrayVariant::Light,
+            _ => TrayVariant::Dark,
+        }
+    }
+
+    /// The embedded glyph for this variant (compiled in; nothing to ship).
+    fn image(self) -> tauri::image::Image<'static> {
+        match self {
+            TrayVariant::Light => tauri::include_image!("../graphics/sys_tray_light.png"),
+            TrayVariant::Dark => tauri::include_image!("../graphics/sys_tray_dark.png"),
+        }
+    }
+}
+
+/// The tray's two check items, held so the menu handler can flip their marks.
+struct TrayIconChecks {
+    light: CheckMenuItem<tauri::Wry>,
+    dark: CheckMenuItem<tauri::Wry>,
+}
+
+fn tray_icon_file(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    app.path().app_data_dir().ok().map(|d| d.join("tray_icon"))
+}
+
+fn load_tray_variant(app: &tauri::AppHandle) -> TrayVariant {
+    tray_icon_file(app)
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .map(|s| TrayVariant::parse(&s))
+        .unwrap_or(TrayVariant::Dark)
+}
+
+/// Apply a tray-icon choice: swap the icon, update the check marks, persist it.
+fn set_tray_variant(app: &tauri::AppHandle, v: TrayVariant) {
+    if let Some(tray) = app.tray_by_id("main") {
+        let _ = tray.set_icon(Some(v.image()));
+    }
+    if let Some(checks) = app.try_state::<TrayIconChecks>() {
+        let _ = checks.light.set_checked(v == TrayVariant::Light);
+        let _ = checks.dark.set_checked(v == TrayVariant::Dark);
+    }
+    if let Some(path) = tray_icon_file(app) {
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        let _ = std::fs::write(path, v.as_str());
+    }
 }
 
 /// Restart the app. Used after a runtime plugin is installed/uninstalled so the
@@ -359,23 +431,63 @@ pub fn run() {
                 });
             }
 
-            // System tray: icon + menu (Show/Hide, Quit) and click-to-toggle.
+            // System tray: icon + menu (Quick Chat, Show/Hide, Quit) and
+            // click-to-toggle. "Quick Chat" opens the overlay (same path as the
+            // global shortcut) and shows the current shortcut next to its label.
+            let quick_chat = MenuItem::with_id(
+                app,
+                "quick_chat",
+                format!("Quick Chat ({DEFAULT_SHORTCUT})"),
+                true,
+                None::<&str>,
+            )?;
             let show_hide = MenuItem::with_id(app, "show_hide", "Show / Hide", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show_hide, &quit])?;
 
-            // Embed the icon at compile time so it's always available on Linux
-            // (default_window_icon() can return None in dev mode on Linux).
-            // 128px source: KDE panels render trays above 32px (panel size ×
-            // display scale), and upscaling a 32px pixmap looks blurry.
-            TrayIconBuilder::new()
-                .icon(tauri::include_image!("icons/128x128.png"))
+            // "Tray Icon" submenu: pick the light or dark glyph (persisted).
+            let tray_variant = load_tray_variant(app.handle());
+            let icon_light = CheckMenuItem::with_id(
+                app,
+                "tray_light",
+                "Light",
+                true,
+                tray_variant == TrayVariant::Light,
+                None::<&str>,
+            )?;
+            let icon_dark = CheckMenuItem::with_id(
+                app,
+                "tray_dark",
+                "Dark",
+                true,
+                tray_variant == TrayVariant::Dark,
+                None::<&str>,
+            )?;
+            let icon_menu = Submenu::with_items(app, "Tray Icon", true, &[&icon_light, &icon_dark])?;
+
+            let menu = Menu::with_items(app, &[&quick_chat, &show_hide, &icon_menu, &quit])?;
+            // Held so `set_global_shortcut` can update the shown shortcut.
+            app.manage(QuickChatItem(quick_chat));
+            // Held so the menu handler can flip the icon check marks.
+            app.manage(TrayIconChecks {
+                light: icon_light,
+                dark: icon_dark,
+            });
+
+            // The tray icon is embedded at compile time (`include_image!`) so it's
+            // always available on Linux (default_window_icon() can return None in
+            // dev mode there). `with_id("main")` lets the menu handler fetch the
+            // tray via `tray_by_id` to swap its icon.
+            TrayIconBuilder::with_id("main")
+                .icon(tray_variant.image())
                 .icon_as_template(false)
                 .tooltip("snak")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id().as_ref() {
+                    "quick_chat" => commands::quick::show_quick(app),
                     "show_hide" => toggle_main(app),
+                    "tray_light" => set_tray_variant(app, TrayVariant::Light),
+                    "tray_dark" => set_tray_variant(app, TrayVariant::Dark),
                     "quit" => app.exit(0),
                     _ => {}
                 })
@@ -473,4 +585,18 @@ pub fn run() {
                 tauri::async_runtime::block_on(sessions.close_all());
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TrayVariant;
+
+    #[test]
+    fn tray_variant_parse_defaults_to_dark() {
+        assert_eq!(TrayVariant::parse("light").as_str(), "light");
+        assert_eq!(TrayVariant::parse("dark").as_str(), "dark");
+        assert_eq!(TrayVariant::parse(" light ").as_str(), "light"); // trimmed
+        assert_eq!(TrayVariant::parse("").as_str(), "dark"); // empty → default
+        assert_eq!(TrayVariant::parse("nonsense").as_str(), "dark"); // unknown → default
+    }
 }

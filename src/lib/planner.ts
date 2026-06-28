@@ -4,7 +4,7 @@
 // active on the current chat.
 
 import type { Provider, Model } from "@/types/db";
-import type { ProviderMeta } from "@/lib/providers";
+import { isKeylessProvider, type ProviderMeta } from "@/lib/providers";
 import type { ChatUsage } from "@/lib/chat";
 
 // ---------------------------------------------------------------------------
@@ -85,6 +85,77 @@ export function buildPlannerModels(
 }
 
 // ---------------------------------------------------------------------------
+// Planner model fallback
+// ---------------------------------------------------------------------------
+
+/** A concrete provider+model the planner can run on. */
+export interface PlannerTarget {
+  provider: Provider;
+  model: string;
+}
+
+/**
+ * Resolve which model the planner should actually run on, falling back between
+ * the local (Ollama) and cloud tiers when the configured one can't run now:
+ *
+ * - configured local but Ollama isn't ready (or the model isn't installed) →
+ *   switch to a cloud model (the app default if it's usable, else the first
+ *   usable cloud model).
+ * - configured cloud but offline / no key → switch to a local model (the app
+ *   default if it's an installed Ollama model, else the first installed one).
+ * - nothing better is available → keep the configured target (`fellBack:false`).
+ *
+ * Pure; the React layer supplies the live availability signals. Unit-tested.
+ */
+export function resolvePlannerTarget(
+  configured: PlannerTarget,
+  ctx: {
+    models: Model[];
+    keyed: Set<Provider>;
+    offline: boolean;
+    ollamaReady: boolean;
+    appDefault: PlannerTarget;
+  },
+): PlannerTarget & { fellBack: boolean } {
+  const { models, keyed, offline, ollamaReady, appDefault } = ctx;
+
+  const ollamaModels = models
+    .filter((m) => isKeylessProvider(m.provider))
+    .map((m) => m.model_id);
+  const cloudOk = (t: PlannerTarget) =>
+    !isKeylessProvider(t.provider) && !offline && keyed.has(t.provider);
+  const localOk = (t: PlannerTarget) =>
+    isKeylessProvider(t.provider) &&
+    ollamaReady &&
+    ollamaModels.includes(t.model);
+
+  const configuredLocal = isKeylessProvider(configured.provider);
+  if (configuredLocal ? localOk(configured) : cloudOk(configured)) {
+    return { ...configured, fellBack: false };
+  }
+
+  // Prefer the app default when it's usable on the working tier; else the first
+  // usable model found.
+  const pickCloud = (): PlannerTarget | null => {
+    if (cloudOk(appDefault)) return appDefault;
+    const m = models.find((x) =>
+      cloudOk({ provider: x.provider, model: x.model_id }),
+    );
+    return m ? { provider: m.provider, model: m.model_id } : null;
+  };
+  const pickLocal = (): PlannerTarget | null => {
+    if (!ollamaReady || ollamaModels.length === 0) return null;
+    if (localOk(appDefault)) return appDefault;
+    return { provider: "ollama" as Provider, model: ollamaModels[0] };
+  };
+
+  const fallback = configuredLocal ? pickCloud() : pickLocal();
+  return fallback
+    ? { ...fallback, fellBack: true }
+    : { ...configured, fellBack: false };
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -152,7 +223,7 @@ Each model returned by the tool has capabilities (e.g. \`image_in\`, \`reasoning
 
 ## Response Format
 For "direct" strategy: write the full answer to the user first (as you normally would), then append the plan JSON. The text before the JSON is the final answer the user sees.
-For "route" and "multi_step": write a brief explanation of your approach, then append the plan JSON. The worker steps will produce the actual answer you outline.
+For "route" and "multi_step": output **ONLY** the JSON plan block — no prose before or after it. The worker steps produce the answer the user sees; any explanation you write here is discarded and only wastes tokens.
 
 Examples:
 
@@ -167,8 +238,7 @@ The Z2 Extreme handheld market currently has three major contenders...
 }
 \`\`\`
 
-Route / multi_step (the conversational text is a brief explanation):
-I'll research this from multiple angles and synthesize a comprehensive comparison.
+Route / multi_step (JSON only — no surrounding text):
 
 \`\`\`json
 {
@@ -190,6 +260,7 @@ For delegation or multi-step plans, fill in the steps array. Each step has:
 - The last step of a multi_step plan must be a synthesis step that writes the final response based on all worker results.
 - "route" uses exactly one step.
 - Keep step prompts self-contained — include all necessary context.
+- Keep "reasoning" to a single short sentence.
 - Never include a step that calls yourself (the planner).
 - Only output ONE JSON code block.${
   instructions
@@ -628,7 +699,7 @@ export function buildCriticSystemPrompt(): string {
 5. **Provider validity**: Is each provider one of the listed providers?
 
 ## Response Format
-Respond conversationally first, then output your verdict as a JSON code block:
+Output **ONLY** the JSON verdict — no preamble, no explanation:
 
 \`\`\`json
 {
@@ -662,7 +733,7 @@ ${originalRequest}
 ${modelsText ? `\n${modelsText}\n` : ""}
 ## Proposed Plan
 \`\`\`json
-${JSON.stringify(plan, null, 2)}
+${JSON.stringify(plan)}
 \`\`\`
 
 Please review this plan for issues.`;

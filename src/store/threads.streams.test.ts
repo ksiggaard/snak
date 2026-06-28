@@ -123,7 +123,7 @@ beforeEach(() => {
     runningStreams: new Set(),
     unreadThreads: new Set(),
     savedMessages: {},
-    threadPlannerProgress: {},
+    threadProgress: {},
     cancelling: false,
   });
   vi.clearAllMocks();
@@ -435,37 +435,42 @@ describe("concurrent streams", () => {
   });
 });
 
-describe("per-thread planner progress", () => {
-  it("stores planner progress keyed by thread id", () => {
+describe("per-thread run progress", () => {
+  const mk = (current: number) => ({
+    startedAt: 0,
+    stepStartedAt: 0,
+    status: "running" as const,
+    current,
+    steps: [
+      { label: "a", status: "active" as const },
+      { label: "b", status: "pending" as const },
+    ],
+  });
+
+  it("stores progress keyed by thread id", () => {
     useThreads.setState({
-      threadPlannerProgress: {
-        t1: { phase: "planning", steps: [] },
-        t2: { phase: "executing", steps: [] },
-      },
+      threadProgress: { t1: mk(0), t2: mk(1) },
     });
 
     const state = useThreads.getState();
-    expect(state.threadPlannerProgress["t1"]?.phase).toBe("planning");
-    expect(state.threadPlannerProgress["t2"]?.phase).toBe("executing");
+    expect(state.threadProgress["t1"]?.current).toBe(0);
+    expect(state.threadProgress["t2"]?.current).toBe(1);
   });
 
   it("clears only the specific thread's progress on completion", () => {
     useThreads.setState({
-      threadPlannerProgress: {
-        t1: { phase: "executing", steps: [] },
-        t2: { phase: "planning", steps: [] },
-      },
+      threadProgress: { t1: mk(1), t2: mk(0) },
     });
 
     // Simulate clearing t1's progress (as done in finally blocks).
     useThreads.setState((s) => {
-      const updated = { ...s.threadPlannerProgress };
+      const updated = { ...s.threadProgress };
       delete updated["t1"];
-      return { threadPlannerProgress: updated };
+      return { threadProgress: updated };
     });
 
     const state = useThreads.getState();
-    expect(state.threadPlannerProgress["t1"]).toBeUndefined();
-    expect(state.threadPlannerProgress["t2"]?.phase).toBe("planning");
+    expect(state.threadProgress["t1"]).toBeUndefined();
+    expect(state.threadProgress["t2"]?.current).toBe(0);
   });
 });

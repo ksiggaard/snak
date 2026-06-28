@@ -17,13 +17,21 @@
 // so light and dark can be customized independently.
 
 export type ColorMode = "light" | "dark";
-export type ColorKey = "primary" | "background" | "surface" | "accent" | "tint";
+export type ColorKey =
+  | "primary"
+  | "background"
+  | "canvas"
+  | "surface"
+  | "accent"
+  | "tint";
 
 export interface ModeColors {
   /** Accent (`--primary`) hex pick, e.g. "#3b82f6". */
   primary?: string;
   /** Background (`--background`) hex pick. */
   background?: string;
+  /** Canvas (`--canvas`) hex pick — the shade behind the floating cards. */
+  canvas?: string;
   /** Secondary mix color the derived surfaces blend toward (defaults to the
    * background's tonal pole — black on a light pick, white on a dark one). */
   surface?: string;
@@ -388,6 +396,7 @@ export const DEFAULT_PICKER_COLORS: Record<
   light: {
     primary: "#3858d6",
     background: "#fafbfc",
+    canvas: "#eef0f3",
     surface: "#b8c8e0",
     accent: "#88bbee",
     tint: "#c9daf0",
@@ -395,6 +404,7 @@ export const DEFAULT_PICKER_COLORS: Record<
   dark: {
     primary: "#f472b6",
     background: "#0b1a2e",
+    canvas: "#060e18",
     surface: "#1a3d5c",
     accent: "#3b5998",
     tint: "#1a2e4a",
@@ -420,6 +430,7 @@ function sanitizeModeColors(v: unknown): ModeColors {
   const out: ModeColors = {};
   if (isHexColor(m.primary)) out.primary = m.primary.toLowerCase();
   if (isHexColor(m.background)) out.background = m.background.toLowerCase();
+  if (isHexColor(m.canvas)) out.canvas = m.canvas.toLowerCase();
   if (isHexColor(m.surface)) out.surface = m.surface.toLowerCase();
   if (isHexColor(m.accent)) out.accent = m.accent.toLowerCase();
   if (isHexColor(m.tint)) out.tint = m.tint.toLowerCase();
@@ -674,6 +685,9 @@ function colorDecls(mc: ModeColors): string[] {
   }
   if (mc.tint) {
     d.push(`--tint: ${mc.tint};`);
+  }
+  if (mc.canvas) {
+    d.push(`--canvas: ${mc.canvas};`);
   }
   if (mc.background) {
     const bg = tintedBackground(mc.background, mc.surface, mc.contrast);
