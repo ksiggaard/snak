@@ -61,6 +61,7 @@ import { applyRegenSteer, applySourcesSteer } from "@/lib/variations";
 import { estimateTokens } from "@/lib/contextSize";
 import { buildBotSystemText, buildGroupChatSystemText } from "@/lib/bots";
 import { extractMentions } from "@/lib/mentions";
+import { notifyChatDone } from "@/lib/notify";
 import { runPersonaMemoryUpdate } from "@/lib/personaMemory";
 import { buildWorkspaceSystemText, filterWorkspaceFiles } from "@/lib/workspaces";
 import { buildSkillsIndexText } from "@/lib/skills";
@@ -1139,6 +1140,9 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     // runningId is captured before try so the finally block can remove this
     // thread from runningStreams regardless of which thread is currently viewed.
     let runningId: string | null = null;
+    // Track whether this run failed, so the finally block only fires a
+    // "reply done" notification on a clean completion (not on error/cancel).
+    let errored = false;
     try {
       let id = get().currentThreadId;
       let provider: Provider;
@@ -2129,6 +2133,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         if (bot) reviewExchange(bot, result.content);
       }
     } catch (e) {
+      errored = true;
       set({ error: friendlyError(e) });
       const id = get().currentThreadId;
       if (id) {
@@ -2138,6 +2143,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     } finally {
       if (runningId) {
         const wasViewing = get().currentThreadId === runningId;
+        // Read before the set() below resets `cancelling` to false.
+        const wasCancelled = get().cancelling;
         lastActivity.delete(runningId);
         set((s) => {
           const next = new Set(s.runningStreams);
@@ -2165,6 +2172,14 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             streamingModel: null,
           };
         });
+        // Notify on a clean completion. Rust no-ops when the window is focused,
+        // so we don't gate on `wasViewing` here — the requirement is "app not
+        // in focus", regardless of which thread is on screen.
+        if (!errored && !wasCancelled) {
+          const title =
+            get().threads.find((x) => x.id === runningId)?.title ?? "snak";
+          void notifyChatDone(runningId, title, t("notify.replyReady"));
+        }
       }
       void get().refreshSystemTokens();
     }

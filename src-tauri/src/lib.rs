@@ -542,6 +542,7 @@ pub fn run() {
             commands::languages::list_languages,
             commands::languages::languages_directory,
             commands::media::media_playback_available,
+            commands::notify::notify_chat_done,
             commands::audio::audio_status,
             commands::audio::tts_synthesize,
             commands::audio::stt_transcribe,
