@@ -700,6 +700,14 @@ export const en = {
   "bgGradient.description":
     "A subtle radial gradient tinted by the accent color, radiating from the top of the window. Adds visual depth without distraction.",
   "bgGradient.label": "Background gradient",
+  "playful.title": "Playful effects",
+  "playful.description":
+    "Make a working chat bombastic in the sidebar — the active thread breathes with a glowing accent aura while it streams. Turn off for a calm, static list.",
+  "playful.label": "Playful chat effects",
+  "stickyPrompts.title": "Sticky prompts",
+  "stickyPrompts.description":
+    "Pin your message to the top of the chat while you read its reply; scrolling into the next exchange swaps in the next prompt.",
+  "stickyPrompts.label": "Sticky prompt headers",
 
   // --- Settings: appearance — typography card ------------------------------------------------------------------------------
   "typography.title": "Typography",

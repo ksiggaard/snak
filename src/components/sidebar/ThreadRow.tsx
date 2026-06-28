@@ -88,6 +88,7 @@ export const ThreadRow = memo(function ThreadRow({
     ? (bots.find((b) => b.id === thread.bot_id) ?? null)
     : null;
   const listStyle = useAppearance((s) => s.chatListStyle);
+  const playful = useAppearance((s) => s.playful);
   const providers = useProviders();
   const models = useModels((s) => s.models);
 
@@ -180,6 +181,9 @@ export const ThreadRow = memo(function ThreadRow({
             !!thread.ephemeral &&
               "border-muted-foreground/40 rounded-l-none border-l-2 border-dashed",
             !!thread.ephemeral && !active && "bg-muted/40",
+            // Bombastic "this chat is working" aura (gated by the Playful
+            // effects setting); the glow itself is the ::after in index.css.
+            isRunning && playful && "snak-running-row",
           )}
         >
           {/* Active-row indicator: a primary-coloured left bar. Reads at a
@@ -262,15 +266,27 @@ export const ThreadRow = memo(function ThreadRow({
                 {/* Background stream / unread indicators. */}
                 {isRunning && (
                   <Loader2
-                    className="text-muted-foreground ml-auto size-3 shrink-0 animate-spin"
+                    className={cn(
+                      "ml-auto shrink-0 animate-spin",
+                      // Louder when playful: accent-coloured and a touch bigger.
+                      playful
+                        ? "text-primary size-3.5"
+                        : "text-muted-foreground size-3",
+                    )}
                     aria-label={t("sidebar.threadRunning")}
                   />
                 )}
                 {!isRunning && isUnread && (
+                  // Attention-demanding unread badge: a solid accent dot with a
+                  // pulsing ping ring (collapses to a static dot when animations
+                  // are off / reduce-motion).
                   <span
-                    className="bg-primary ml-auto size-2 shrink-0 rounded-full"
+                    className="relative ml-auto flex size-2.5 shrink-0 items-center justify-center"
                     aria-label={t("sidebar.threadUnread")}
-                  />
+                  >
+                    <span className="bg-primary absolute inline-flex size-full animate-ping rounded-full opacity-60" />
+                    <span className="bg-primary relative size-2 rounded-full" />
+                  </span>
                 )}
                 {/* Right-aligned date for the "inline" / "full" row styles. */}
                 {trailingDate !== null && (
@@ -294,8 +310,12 @@ export const ThreadRow = memo(function ThreadRow({
             className={cn(
               "absolute inset-y-0 right-0 flex items-center gap-0.5 rounded-r-md pr-1 pl-6",
               "from-sidebar-accent via-sidebar-accent bg-gradient-to-l to-transparent",
-              "opacity-0 transition-opacity group-hover:opacity-100",
-              menuOpen && "opacity-100",
+              // pointer-events-none is the fix for the dead click zone: the
+              // overlay sits over the row's right edge, and an opacity-0 element
+              // still eats clicks — so it swallowed selects landing there.
+              // Click-through until it's actually visible (hover / menu open).
+              "pointer-events-none opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100",
+              menuOpen && "pointer-events-auto opacity-100",
               editing && "hidden",
             )}
           >

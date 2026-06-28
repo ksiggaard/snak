@@ -1383,6 +1383,7 @@ export function MessageList({
   // How messages render (T34): default / bubbles / compact / document.
   const chatStyle = useAppearance((s) => s.chatStyle);
   const chatMaxWidth = useAppearance((s) => s.chatMaxWidth);
+  const stickyPrompts = useAppearance((s) => s.stickyPrompts);
   // Session-only set of reply ids expanded to full width. Not persisted —
   // resets on restart, mirroring other per-session chat UI state.
   const [wideIds, setWideIds] = useState<Set<string>>(() => new Set());
@@ -1441,6 +1442,23 @@ export function MessageList({
     streamingProvider,
     streamingModel,
   ]);
+
+  // Group items into "turns" for sticky prompt headers: a turn = one user
+  // message + the assistant/summary items that follow it (until the next user
+  // message). Each turn is wrapped in a `.chat-turn` block so a sticky user row
+  // releases when its turn scrolls past (the next turn's prompt takes over the
+  // top). Leading non-user items form an initial headerless turn. The original
+  // flat index rides along so `lastAssistantIndex` / media-label offsets still
+  // line up. The wrapper is `display: contents` unless the feature is on, so the
+  // grouping is layout-invisible when sticky prompts are disabled (see index.css).
+  const turns = useMemo(() => {
+    const out: { m: MessageView; idx: number }[][] = [];
+    displayItems.forEach((m, idx) => {
+      if (m.role === "user" || out.length === 0) out.push([]);
+      out[out.length - 1].push({ m, idx });
+    });
+    return out;
+  }, [displayItems]);
 
   // When a search-result / chat-panel jump targets a message, scroll to + flash
   // it. The target row registers itself in `messageRefs` (ChatMessage's effect);

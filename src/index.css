@@ -464,6 +464,32 @@ html.overlay #root {
   animation: snak-thinking-dot 1.2s infinite ease-in-out both;
 }
 
+/* Playful "working" row (Appearance → Playful effects): the sidebar thread
+   whose stream is running gets a breathing accent aura. Only the pseudo-
+   element's opacity animates (GPU-compositable) — the glow (box-shadow) is
+   painted once — so it stays cheap even though it loops the whole time a chat
+   works (ponytail: opacity-only, not animated box-shadow, per the composer note
+   above). Honors .no-animations / prefers-reduced-motion (collapses to a static
+   glow). The row is already position:relative, so ::after anchors to it. */
+@keyframes snak-running-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.snak-running-row::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px var(--primary), 0 0 10px 0 var(--primary);
+  animation: snak-running-pulse 1.3s ease-in-out infinite;
+}
+
 /* Incognito ghost: a gentle vertical float, playing on the ghost identity. */
 @keyframes snak-ghost-float {
   0%,

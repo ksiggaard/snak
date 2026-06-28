@@ -178,6 +178,42 @@ export function applyBgGradient(enabled: boolean): void {
   injectStyle(GRADIENT_STYLE_ID, css);
 }
 
+// ── Playful chat effects ─────────────────────────────────────────────────────
+// The bombastic "this thread is working" treatment in the sidebar: the running
+// row breathes with a glowing accent aura (CSS in index.css). A pure render-mode
+// pref (no CSS injection) read by ThreadRow, so it lives beside the chat-style
+// prefs below rather than the apply-based toggles above. On by default.
+
+const PLAYFUL_KEY = "playful-effects";
+
+/** Whether playful "working" effects are enabled. Default on; only "0" disables. */
+export function getStoredPlayful(): boolean {
+  return localStorage.getItem(PLAYFUL_KEY) !== "0";
+}
+
+export function storePlayful(enabled: boolean): void {
+  if (enabled) localStorage.removeItem(PLAYFUL_KEY);
+  else localStorage.setItem(PLAYFUL_KEY, "0");
+}
+
+// ── Sticky prompt headers ────────────────────────────────────────────────────
+// Pins each user message to the top of the chat scroll area while reading its
+// reply (the next exchange takes over the top). A render-mode pref read by
+// MessageList (the sticky-ness is pure CSS keyed off a container class). On by
+// default.
+
+const STICKY_PROMPTS_KEY = "sticky-prompts";
+
+/** Whether sticky prompt headers are enabled. Default on; only "0" disables. */
+export function getStoredStickyPrompts(): boolean {
+  return localStorage.getItem(STICKY_PROMPTS_KEY) !== "0";
+}
+
+export function storeStickyPrompts(enabled: boolean): void {
+  if (enabled) localStorage.removeItem(STICKY_PROMPTS_KEY);
+  else localStorage.setItem(STICKY_PROMPTS_KEY, "0");
+}
+
 // ── Chat layout style (T34) & chat-list row style (T35) ─────────────────────
 //
 // Pure render-mode preferences (no CSS injection): components read them from

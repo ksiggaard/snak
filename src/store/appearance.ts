@@ -16,7 +16,9 @@ import {
   getStoredChatStyle,
   getStoredCustomColors,
   getStoredDensity,
+  getStoredPlayful,
   getStoredRadius,
+  getStoredStickyPrompts,
   getStoredTypography,
   isHexColor,
   CHAT_WIDTH,
@@ -28,7 +30,9 @@ import {
   storeChatStyle,
   storeCustomColors,
   storeDensity,
+  storePlayful,
   storeRadius,
+  storeStickyPrompts,
   storeTypography,
   type ChatListStyle,
   type ChatStyle,
@@ -58,6 +62,10 @@ interface AppearanceState {
   density: Density;
   /** Subtle radial background gradient (off by default). */
   bgGradient: boolean;
+  /** Bombastic "thread is working" sidebar aura (T35); default on. */
+  playful: boolean;
+  /** Pin each user message to the top while reading its reply; default on. */
+  stickyPrompts: boolean;
 
   /** Set one color pick for one mode, persist, and re-apply the overrides. */
   setColor: (mode: ColorMode, key: ColorKey, hex: string) => void;
@@ -83,6 +91,10 @@ interface AppearanceState {
   setDensity: (d: Density) => void;
   /** Toggle the subtle background gradient. */
   setBgGradient: (enabled: boolean) => void;
+  /** Toggle the bombastic "thread is working" sidebar aura. */
+  setPlayful: (enabled: boolean) => void;
+  /** Toggle sticky prompt headers in the chat thread. */
+  setStickyPrompts: (enabled: boolean) => void;
 }
 
 export const useAppearance = create<AppearanceState>((set, get) => ({
@@ -95,6 +107,8 @@ export const useAppearance = create<AppearanceState>((set, get) => ({
   chatMaxWidth: getStoredChatMaxWidth(),
   density: getStoredDensity(),
   bgGradient: getStoredBgGradient(),
+  playful: getStoredPlayful(),
+  stickyPrompts: getStoredStickyPrompts(),
 
   setColor: (mode, key, hex) => {
     if (!isHexColor(hex)) return;
@@ -177,6 +191,14 @@ export const useAppearance = create<AppearanceState>((set, get) => ({
     storeBgGradient(enabled);
     applyBgGradient(enabled);
     set({ bgGradient: enabled });
+  },
+  setPlayful: (enabled) => {
+    storePlayful(enabled);
+    set({ playful: enabled });
+  },
+  setStickyPrompts: (enabled) => {
+    storeStickyPrompts(enabled);
+    set({ stickyPrompts: enabled });
   },
 }));
 

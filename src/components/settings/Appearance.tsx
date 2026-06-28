@@ -58,6 +58,8 @@ export function Appearance() {
       <DensityCard />
       <BgGradientCard />
       <AnimationsCard />
+      <PlayfulCard />
+      <StickyPromptsCard />
       <TypographyCard />
       <ChatStyleCard />
       <ChatWidthCard />
@@ -608,6 +610,70 @@ function AnimationsCard() {
             spacing={0}
             value={animations ? "on" : "off"}
             onValueChange={(v) => v && setAnimations(v === "on")}
+          >
+            <ToggleGroupItem value="on">{t("common.on")}</ToggleGroupItem>
+            <ToggleGroupItem value="off">{t("common.off")}</ToggleGroupItem>
+          </ToggleGroup>
+        </OptionRow>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Bombastic "thread is working" sidebar aura: on by default, toggles the
+ *  glowing pulse on running rows (plus a louder running spinner). */
+function PlayfulCard() {
+  const t = useT();
+  const playful = useAppearance((s) => s.playful);
+  const setPlayful = useAppearance((s) => s.setPlayful);
+
+  return (
+    <Card className="card-hover-lift w-full max-w-lg xl:max-w-2xl">
+      <CardHeader>
+        <CardTitle>{t("playful.title")}</CardTitle>
+        <CardDescription>{t("playful.description")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <OptionRow label={t("playful.label")}>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            spacing={0}
+            value={playful ? "on" : "off"}
+            onValueChange={(v) => v && setPlayful(v === "on")}
+          >
+            <ToggleGroupItem value="on">{t("common.on")}</ToggleGroupItem>
+            <ToggleGroupItem value="off">{t("common.off")}</ToggleGroupItem>
+          </ToggleGroup>
+        </OptionRow>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Sticky prompt headers: on by default, pins each user message to the top of
+ *  the chat while reading its reply (the next exchange takes over the top). */
+function StickyPromptsCard() {
+  const t = useT();
+  const stickyPrompts = useAppearance((s) => s.stickyPrompts);
+  const setStickyPrompts = useAppearance((s) => s.setStickyPrompts);
+
+  return (
+    <Card className="card-hover-lift w-full max-w-lg xl:max-w-2xl">
+      <CardHeader>
+        <CardTitle>{t("stickyPrompts.title")}</CardTitle>
+        <CardDescription>{t("stickyPrompts.description")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <OptionRow label={t("stickyPrompts.label")}>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            spacing={0}
+            value={stickyPrompts ? "on" : "off"}
+            onValueChange={(v) => v && setStickyPrompts(v === "on")}
           >
             <ToggleGroupItem value="on">{t("common.on")}</ToggleGroupItem>
             <ToggleGroupItem value="off">{t("common.off")}</ToggleGroupItem>
