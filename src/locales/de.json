@@ -821,6 +821,16 @@
     "help.commands": "Slash-Befehlspalette öffnen",
     "help.mentions": "Eine Persona erwähnen",
     "help.history": "Frühere Nachrichten abrufen (bei leerem Eingabefeld)",
-    "help.dismiss": "Palette / Overlay / Dialog schließen"
+    "help.dismiss": "Palette / Overlay / Dialog schließen",
+    "composer.hashtagPaletteAria": "Hashtag einfügen",
+    "composer.removeHashtag": "Hashtag entfernen",
+    "composer.hashtagToolBadge": "Tool",
+    "composer.hashtagRendererBadge": "Render",
+    "playful.title": "Verspielte Effekte",
+    "playful.description": "Mache einen aktiven Chat in der Seitenleiste bombastisch — der aktive Thread atmet mit einer leuchtenden Akzent-Aura, während er streamt. Schalte es aus für eine ruhige, statische Liste.",
+    "playful.label": "Verspielte Chat-Effekte",
+    "stickyPrompts.title": "Angeheftete Prompts",
+    "stickyPrompts.description": "Heftet deine Nachricht oben im Chat an, während du die Antwort liest; beim Weiterscrollen zum nächsten Austausch wird der nächste Prompt eingeblendet.",
+    "stickyPrompts.label": "Angeheftete Prompt-Überschriften"
   }
 }

@@ -821,6 +821,16 @@
     "help.commands": "Abrir la paleta de comandos de barra",
     "help.mentions": "Mencionar una persona",
     "help.history": "Recuperar mensajes anteriores (con el cuadro vacío)",
-    "help.dismiss": "Cerrar paleta / superposición / diálogo"
+    "help.dismiss": "Cerrar paleta / superposición / diálogo",
+    "composer.hashtagPaletteAria": "Insertar un hashtag",
+    "composer.removeHashtag": "Eliminar hashtag",
+    "composer.hashtagToolBadge": "herramienta",
+    "composer.hashtagRendererBadge": "render",
+    "playful.title": "Efectos lúdicos",
+    "playful.description": "Haz que un chat activo sea espectacular en la barra lateral: el hilo activo respira con un aura de acento brillante mientras transmite. Desactívalo para una lista tranquila y estática.",
+    "playful.label": "Efectos de chat lúdicos",
+    "stickyPrompts.title": "Mensajes fijados",
+    "stickyPrompts.description": "Fija tu mensaje en la parte superior del chat mientras lees su respuesta; al desplazarte al siguiente intercambio se cambia por el siguiente mensaje.",
+    "stickyPrompts.label": "Encabezados de mensajes fijados"
   }
 }

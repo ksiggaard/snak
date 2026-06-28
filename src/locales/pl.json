@@ -833,6 +833,16 @@
     "help.commands": "Otwórz paletę poleceń slash",
     "help.mentions": "Wspomnij personę",
     "help.history": "Przywołaj poprzednie wiadomości (w pustym polu)",
-    "help.dismiss": "Zamknij paletę / nakładkę / okno dialogowe"
+    "help.dismiss": "Zamknij paletę / nakładkę / okno dialogowe",
+    "composer.hashtagPaletteAria": "Wstaw hashtag",
+    "composer.removeHashtag": "Usuń hashtag",
+    "composer.hashtagToolBadge": "narzędzie",
+    "composer.hashtagRendererBadge": "renderowanie",
+    "playful.title": "Zabawne efekty",
+    "playful.description": "Spraw, by aktywny czat był efektowny na pasku bocznym — aktywny wątek pulsuje świetlistą aurą akcentu podczas strumieniowania. Wyłącz, aby uzyskać spokojną, statyczną listę.",
+    "playful.label": "Zabawne efekty czatu",
+    "stickyPrompts.title": "Przypięte wiadomości",
+    "stickyPrompts.description": "Przypina Twoją wiadomość na górze czatu, gdy czytasz odpowiedź; przewinięcie do następnej wymiany podmienia ją na kolejną wiadomość.",
+    "stickyPrompts.label": "Nagłówki przypiętych wiadomości"
   }
 }

@@ -821,6 +821,16 @@
     "help.commands": "Åbn slash-kommandopaletten",
     "help.mentions": "Nævn en persona",
     "help.history": "Hent tidligere beskeder frem (i et tomt skrivefelt)",
-    "help.dismiss": "Luk palet / overlay / dialog"
+    "help.dismiss": "Luk palet / overlay / dialog",
+    "composer.hashtagPaletteAria": "Indsæt et hashtag",
+    "composer.removeHashtag": "Fjern hashtag",
+    "composer.hashtagToolBadge": "værktøj",
+    "composer.hashtagRendererBadge": "render",
+    "playful.title": "Legende effekter",
+    "playful.description": "Gør en aktiv chat overdådig i sidepanelet — den aktive tråd ånder med en lysende accent-aura, mens den streamer. Slå fra for en rolig, statisk liste.",
+    "playful.label": "Legende chateffekter",
+    "stickyPrompts.title": "Fastgjorte beskeder",
+    "stickyPrompts.description": "Fastgør din besked øverst i chatten, mens du læser svaret; når du ruller videre til næste udveksling, skiftes den ud med den næste besked.",
+    "stickyPrompts.label": "Overskrifter for fastgjorte beskeder"
   }
 }

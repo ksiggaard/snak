@@ -821,6 +821,16 @@
     "help.commands": "Ouvrir la palette de commandes slash",
     "help.mentions": "Mentionner une persona",
     "help.history": "Rappeler les messages précédents (dans un champ vide)",
-    "help.dismiss": "Fermer la palette / l'overlay / la boîte de dialogue"
+    "help.dismiss": "Fermer la palette / l'overlay / la boîte de dialogue",
+    "composer.hashtagPaletteAria": "Insérer un hashtag",
+    "composer.removeHashtag": "Supprimer le hashtag",
+    "composer.hashtagToolBadge": "outil",
+    "composer.hashtagRendererBadge": "rendu",
+    "playful.title": "Effets ludiques",
+    "playful.description": "Rendez une conversation active spectaculaire dans la barre latérale — le fil actif respire avec une aura d'accent lumineuse pendant le streaming. Désactivez pour une liste calme et statique.",
+    "playful.label": "Effets de chat ludiques",
+    "stickyPrompts.title": "Messages épinglés",
+    "stickyPrompts.description": "Épingle votre message en haut de la conversation pendant que vous lisez sa réponse ; en faisant défiler vers l'échange suivant, le message suivant prend sa place.",
+    "stickyPrompts.label": "En-têtes de messages épinglés"
   }
 }
