@@ -216,9 +216,12 @@ The updater requires a **minisign signing key** (separate from OS code-signing).
 npm run tauri signer generate -- -w ~/.tauri/snak.key
 
 # Put the PUBLIC key in src-tauri/tauri.conf.json under plugins.updater.pubkey
-# Then store the PRIVATE key + its password as repo secrets so CI can sign releases:
+# Then store the PRIVATE key as a repo secret so CI can sign releases:
 gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/snak.key
-gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD   # paste the password (empty if none)
+# This key has no password, so there is NO password secret — GitHub rejects empty
+# secrets, and release.yml hardcodes TAURI_SIGNING_PRIVATE_KEY_PASSWORD: "".
+# If you generate the key WITH a password, add it back:
+#   gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD   # and restore the secrets.* ref in release.yml
 ```
 
 > **Heads up:** because `bundle.createUpdaterArtifacts` is enabled, a local `npm run tauri build`

@@ -1,0 +1,6 @@
+# $1 prev HEAD, $2 new HEAD, $3 flag (1 = branch checkout, 0 = file checkout)
+[ "$3" = "1" ] || exit 0
+if git diff --name-only "$1" "$2" | grep -q 'package-lock\.json'; then
+  echo "📦 package-lock.json changed — running npm install"
+  npm install
+fi

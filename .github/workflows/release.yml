@@ -92,9 +92,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Updater signing — required because tauri.conf.json sets
           # bundle.createUpdaterArtifacts. Signs latest.json + the bundles so the
-          # in-app updater can verify them. Add these as repo secrets.
+          # in-app updater can verify them. Private key is the repo secret; the
+          # key has no password, so the password is a literal "" (GitHub rejects
+          # empty secrets, and an empty passphrase isn't sensitive anyway).
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
           NO_STRIP: true
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
