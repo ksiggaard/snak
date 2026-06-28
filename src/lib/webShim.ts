@@ -86,7 +86,9 @@ if (WEB_ONLY) {
       // probeConnectivity() destructures `{ online }` — must be an object.
       if (cmd === "connectivity_probe") return { online: true };
       if (cmd === "list_plugins") return BUILTIN_PLUGINS;
-      if (cmd === "mcp_list_tools") return [];
+      // McpToolsReport shape: `{ tools, errors }` (the hashtag palette and the
+      // settings card both read `.tools`). No tools in web-only mode.
+      if (cmd === "mcp_list_tools") return { tools: [], errors: [] };
       if (cmd.startsWith("list_")) return [];
       // Everything else (writes, window/tray, screenshots, audio, ollama, …) is
       // a no-op in the browser. Log once per command so it's visible in devtools.

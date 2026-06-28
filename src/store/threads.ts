@@ -433,6 +433,10 @@ interface ThreadsState {
     content: string,
     images: PreparedImage[],
     documents?: PendingDocument[],
+    /** An invisible per-turn instruction appended to the user message before it
+     *  is sent (T-hashtags: the directive a `#hashtag` resolves to). Not stored
+     *  or displayed — it rides only in the outgoing API payload for this turn. */
+    turnDirective?: string,
   ) => Promise<void>;
   /**
    * Persist a synthetic assistant-role note into the current thread (creating a
@@ -1084,7 +1088,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     }
   },
 
-  send: async (content, images, documents = []) => {
+  send: async (content, images, documents = [], turnDirective) => {
     // Ignore empty/whitespace-only sends with no attachments.
     if (!content.trim() && images.length === 0 && documents.length === 0)
       return;
@@ -1866,6 +1870,20 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             hasRenderer(selectRegistry(usePlugins.getState()), "youtube"),
           ),
         ];
+        // T-hashtags: append this turn's invisible directive to the last user
+        // message (scan backward — a multi-mention round can end on an assistant
+        // turn). Ephemeral: only in the outgoing payload, never persisted.
+        if (turnDirective?.trim()) {
+          for (let k = history.length - 1; k >= 0; k--) {
+            if (history[k].role === "user") {
+              history[k] = {
+                ...history[k],
+                content: `${history[k].content}\n\n${turnDirective}`,
+              };
+              break;
+            }
+          }
+        }
 
         // Seed streaming state so the render layer shows the bubble immediately
         // (empty string — the progress pill carries the spinner/counter).
