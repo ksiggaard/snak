@@ -259,6 +259,9 @@ export const ThreadRow = memo(function ThreadRow({
                     compact ? "text-xs" : "text-sm",
                     active && "text-foreground font-medium",
                     !!thread.ephemeral && "text-muted-foreground italic",
+                    // Bombastic running title (Playful): the text itself goes
+                    // bold with a sweeping accent shimmer while the chat works.
+                    isRunning && playful && "snak-running-title font-semibold",
                   )}
                 >
                   {thread.title}

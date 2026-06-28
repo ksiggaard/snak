@@ -484,6 +484,28 @@ html.overlay #root {
   animation: snak-shimmer 2.4s linear infinite;
 }
 
+/* Bombastic running-chat title (Playful effects): an accent-tinted bright band
+   sweeps across the working thread's title in the sidebar — louder cousin of
+   .snak-shimmer, using the primary colour so it screams "this one's live".
+   Honors the .no-animations / prefers-reduced-motion kill switches above (the
+   sweep collapses; the title just shows the gradient's resting colour). */
+.snak-running-title {
+  background: linear-gradient(
+    100deg,
+    var(--primary) 0%,
+    var(--primary) 35%,
+    var(--foreground) 50%,
+    var(--primary) 65%,
+    var(--primary) 100%
+  );
+  background-size: 200% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: snak-shimmer 2.6s linear infinite;
+}
+
 /* Thinking indicator: three dots pulsing in sequence (delays set per dot). */
 @keyframes snak-thinking-dot {
   0%,
@@ -500,20 +522,34 @@ html.overlay #root {
 }
 
 /* Playful "working" row (Appearance → Playful effects): the sidebar thread
-   whose stream is running gets a breathing accent aura. Only the pseudo-
-   element's opacity animates (GPU-compositable) — the glow (box-shadow) is
-   painted once — so it stays cheap even though it loops the whole time a chat
-   works (ponytail: opacity-only, not animated box-shadow, per the composer note
-   above). Honors .no-animations / prefers-reduced-motion (collapses to a static
-   glow). The row is already position:relative, so ::after anchors to it. */
+   whose stream is running goes full theatrics — a throbbing inset accent glow
+   plus a rotating conic "aurora" spinning behind the title. Everything is
+   CLIPPED to the row (overflow:hidden) so no glow, blur, or sweep ever paints
+   outside the list item. The glow animates opacity only and the aurora animates
+   transform only (both GPU-compositable, inset box-shadow painted once), so even
+   at full bombast it stays cheap while it loops the whole time a chat works.
+   Honors .no-animations / prefers-reduced-motion (collapses to a static glow).
+   The row is already position:relative, so the pseudo-elements anchor to it. */
 @keyframes snak-running-pulse {
   0%,
   100% {
-    opacity: 0.4;
+    opacity: 0.32;
   }
   50% {
-    opacity: 1;
+    opacity: 0.64;
   }
+}
+@keyframes snak-running-aurora {
+  to {
+    transform: rotate(1turn);
+  }
+}
+/* overflow:hidden keeps every effect inside the row; isolation makes a stacking
+   context so the aurora's negative z-index stays above the row's own background
+   but below the title, instead of slipping behind sibling rows. */
+.snak-running-row {
+  overflow: hidden;
+  isolation: isolate;
 }
 .snak-running-row::after {
   content: "";
@@ -521,8 +557,37 @@ html.overlay #root {
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  box-shadow: inset 0 0 0 1px var(--primary), 0 0 10px 0 var(--primary);
-  animation: snak-running-pulse 1.3s ease-in-out infinite;
+  z-index: 1;
+  /* Inset-only — the ring sits on the row's inner edge and the glow falls
+     inward, so nothing extends past the button bounds. */
+  box-shadow:
+    inset 0 0 0 1px var(--primary),
+    inset 0 0 10px -3px var(--primary);
+  animation: snak-running-pulse 1.4s ease-in-out infinite;
+}
+/* The aurora: a spinning multi-stop conic gradient blurred into a soft glow,
+   clipped by the row's overflow:hidden. Sits behind the row content (negative
+   z-index) so the title stays legible on top. */
+.snak-running-row::before {
+  content: "";
+  position: absolute;
+  /* Oversized so the blurred gradient fills the corners; overflow:hidden on the
+     row trims the excess back to the list item's bounds. */
+  inset: -40%;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: -1;
+  background: conic-gradient(
+    from 0deg,
+    var(--primary),
+    color-mix(in oklab, var(--primary) 40%, transparent),
+    var(--primary),
+    color-mix(in oklab, var(--primary) 40%, transparent),
+    var(--primary)
+  );
+  filter: blur(7px);
+  opacity: 0.35;
+  animation: snak-running-aurora 3.5s linear infinite;
 }
 
 /* Incognito ghost: a gentle vertical float, playing on the ghost identity. */
