@@ -116,8 +116,12 @@ export function ChatView() {
   const cancel = useThreads((s) => s.cancel);
   const rename = useThreads((s) => s.rename);
   const onSend = useCallback(
-    (text: string, images: PreparedImage[], documents: PendingDocument[]) =>
-      void send(text, images, documents),
+    (
+      text: string,
+      images: PreparedImage[],
+      documents: PendingDocument[],
+      turnDirective?: string,
+    ) => void send(text, images, documents, turnDirective),
     [send],
   );
   // Stable identity so it can't bust a memoized Composer on each render.

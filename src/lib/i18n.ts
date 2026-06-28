@@ -297,6 +297,10 @@ export const en = {
   "composer.stageInTerminal": "Stage in terminal",
   "composer.pluginBadge": "plugin",
   "composer.mentionPaletteAria": "Mention a persona",
+  "composer.hashtagPaletteAria": "Insert a hashtag",
+  "composer.removeHashtag": "Remove hashtag",
+  "composer.hashtagToolBadge": "tool",
+  "composer.hashtagRendererBadge": "render",
   "composer.terminalOpenError": "Couldn't open a terminal: {error}",
   "composer.pluginCommandNote":
     "The `{command}` command is provided by a plugin but has no built-in action in this host, so it can't run here.",

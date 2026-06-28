@@ -3,6 +3,7 @@ import {
   Camera,
   FileText,
   FoldVertical,
+  Hash,
   Loader2,
   Maximize2,
   Mic,
@@ -37,6 +38,19 @@ import {
   insertMention,
   matchMentionBots,
 } from "@/lib/mentions";
+import {
+  activeHashtagQuery,
+  buildHashtagDirective,
+  buildHashtags,
+  extractHashtags,
+  matchHashtags,
+  type Hashtag,
+} from "@/lib/hashtags";
+import {
+  enabledServersForChat,
+  listTools,
+  type McpListedTool,
+} from "@/lib/mcp";
 import { isKeylessProvider, useProviders } from "@/lib/providers";
 import { takeScreenshot } from "@/lib/quick";
 import { openInTerminal } from "@/lib/terminal";
@@ -55,6 +69,7 @@ import { useAudio } from "@/store/audio";
 import { BotAvatar } from "@/components/bots/BotAvatar";
 import { useBots } from "@/store/bots";
 import { selectRegistry, usePlugins } from "@/store/plugins";
+import { useContributions } from "@/store/contributions";
 import { useThreads } from "@/store/threads";
 import { useKeys } from "@/store/keys";
 import { useModels } from "@/store/models";
@@ -68,6 +83,9 @@ interface ComposerProps {
     text: string,
     images: PreparedImage[],
     documents: PendingDocument[],
+    /** Hashtag directive for this turn (T-hashtags): an invisible instruction
+     *  appended to the user message that nudges the model toward a tool/format. */
+    turnDirective?: string,
   ) => void;
   /** Cancel the in-flight stream (shown as a Stop button while busy). */
   onCancel: () => void;
@@ -170,6 +188,29 @@ export function Composer({
   const showMentionPalette =
     mentionOpen && !showPalette && mentionMatches.length > 0;
 
+  // --- Hashtags (T-hashtags) --------------------------------------------------
+  // Typing `#` opens a palette of the capabilities available right now — every
+  // enabled MCP tool plus every enabled renderer language. Picking one turns it
+  // into a pill (the `#tag` text is removed); on send the picked/typed hashtags
+  // become an invisible directive nudging the model. Mirrors the `@`-mention
+  // palette (mid-text trigger, caret-anchored).
+  const rendererContribs = usePlugins((s) => selectRegistry(s).renderers);
+  const runtimeRenderers = useContributions((s) => s.renderers);
+  const [hashtags, setHashtags] = useState<Hashtag[]>([]);
+  // The pills picked for the next send (cleared by resetDraft).
+  const [activeHashtags, setActiveHashtags] = useState<Hashtag[]>([]);
+  const [hashtagOpen, setHashtagOpen] = useState(false);
+  const [hashtagIndex, setHashtagIndex] = useState(0);
+  const hashtagQuery = activeHashtagQuery(text, caret);
+  const hashtagMatches = hashtagQuery
+    ? matchHashtags(hashtagQuery.query, hashtags)
+    : [];
+  const showHashtagPalette =
+    hashtagOpen &&
+    !showPalette &&
+    !showMentionPalette &&
+    hashtagMatches.length > 0;
+
   // --- Voice dictation (audio plugin STT) ------------------------------------
   const audioOn = usePlugins((s) => audioEnabled(selectRegistry(s)));
   const sttModel = useAudio((s) => s.sttModel);
@@ -187,7 +228,8 @@ export function Composer({
     if (!clean) return;
     setHistoryIndex(null);
     setText((prev) => {
-      const next = prev && !/\s$/.test(prev) ? `${prev} ${clean}` : prev + clean;
+      const next =
+        prev && !/\s$/.test(prev) ? `${prev} ${clean}` : prev + clean;
       requestAnimationFrame(() => {
         const el = textareaRef.current;
         if (el) {
@@ -221,11 +263,7 @@ export function Composer({
     setRecAnalyser(null);
     try {
       const wav = await recorder.stop();
-      const transcript = await sttTranscribe(
-        Array.from(wav),
-        sttModel,
-        "auto",
-      );
+      const transcript = await sttTranscribe(Array.from(wav), sttModel, "auto");
       insertTranscript(transcript);
     } catch (e) {
       setRecError(e instanceof Error ? e.message : String(e));
@@ -264,6 +302,31 @@ export function Composer({
     requestAnimationFrame(() => {
       textareaRef.current?.setSelectionRange(r.caret, r.caret);
     });
+  }
+
+  /** Pick a hashtag: remove the typed `#token` from the text (it becomes a pill
+   * instead) and stage the hashtag for the next send. Mirrors `pickMention`'s
+   * caret restore, minus the inserted text. */
+  function pickHashtag(h: Hashtag) {
+    if (!hashtagQuery) return;
+    const head = text.slice(0, hashtagQuery.start);
+    const tail = text.slice(hashtagQuery.end);
+    // Swallow one space after the removed token so no double space is left.
+    const next = head + (tail.startsWith(" ") ? tail.slice(1) : tail);
+    const pos = head.length;
+    setText(next);
+    setCaret(pos);
+    setActiveHashtags((prev) =>
+      prev.some((p) => p.tag === h.tag) ? prev : [...prev, h],
+    );
+    setHashtagOpen(false);
+    requestAnimationFrame(() => {
+      textareaRef.current?.setSelectionRange(pos, pos);
+    });
+  }
+
+  function removeHashtag(index: number) {
+    setActiveHashtags((prev) => prev.filter((_, i) => i !== index));
   }
 
   // Quick-action prefill: when the store posts a new insert (nonce changed),
@@ -322,6 +385,33 @@ export function Composer({
   // switch to the keyless local provider (Ollama). The user's selection is
   // never changed automatically — only on pressing "Use local model".
   const offline = useIsOffline();
+
+  // Build the hashtag universe: renderer languages (static manifest
+  // contributions ∪ runtime-registered) + the enabled MCP tools (one live
+  // `mcp_list_tools` round-trip, gated exactly like a real send). Re-runs when
+  // the provider/offline state or the renderer registries change; MCP-server
+  // edits in settings are picked up on the next provider/offline change.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const rendererLangs = [
+        ...rendererContribs.map((r) => r.language),
+        ...Object.keys(runtimeRenderers),
+      ];
+      let tools: McpListedTool[] = [];
+      try {
+        const servers = await enabledServersForChat(provider, offline);
+        if (servers) tools = (await listTools(servers))?.tools ?? [];
+      } catch {
+        // Tool listing unavailable (web-only mode, server down) — renderers only.
+      }
+      if (!cancelled) setHashtags(buildHashtags(tools, rendererLangs));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [provider, offline, rendererContribs, runtimeRenderers]);
+
   const refreshConnectivity = useConnectivity((s) => s.refresh);
   const setProviderModel = useThreads((s) => s.setProviderModel);
   const allModels = useModels((s) => s.models);
@@ -394,9 +484,10 @@ export function Composer({
     setHistoryIndex(idx);
     setText(value);
     setCaret(value.length);
-    // A programmatic fill must not arm the slash/mention palettes.
+    // A programmatic fill must not arm the slash/mention/hashtag palettes.
     setPaletteOpen(false);
     setMentionOpen(false);
+    setHashtagOpen(false);
     caretToEnd();
   }
 
@@ -420,7 +511,10 @@ export function Composer({
     for (const item of dt.items) {
       if (item.kind === "file") {
         const blob = item.getAsFile();
-        if (blob) result.push(new File([blob], blob.name || "file", { type: blob.type }));
+        if (blob)
+          result.push(
+            new File([blob], blob.name || "file", { type: blob.type }),
+          );
       }
     }
     return result;
@@ -542,10 +636,12 @@ export function Composer({
     setText("");
     setImages([]);
     setDocuments([]);
+    setActiveHashtags([]);
     setAttachError(null);
     setCanvasOpen(false);
     setPaletteOpen(false);
     setMentionOpen(false);
+    setHashtagOpen(false);
     setHistoryIndex(null);
     setCaret(0);
   }
@@ -584,7 +680,6 @@ export function Composer({
   }
 
   function send() {
-    const trimmed = text.trim();
     if (busy || !providerEnabled || keyReady === false) return;
 
     // Slash-command routing: if the input parses as a *known* command, run it
@@ -599,8 +694,19 @@ export function Composer({
       }
     }
 
-    if (!trimmed && images.length === 0 && documents.length === 0) return;
-    onSend(trimmed, images, documents);
+    // Hashtags (T-hashtags): picked pills + any recognized hashtags typed inline
+    // become an invisible per-turn directive; their `#tag` text is stripped from
+    // the message. Unrecognized `#text` stays as plain content.
+    const { found, cleaned } = extractHashtags(text, hashtags);
+    const active = [...activeHashtags];
+    for (const h of found) {
+      if (!active.some((p) => p.tag === h.tag)) active.push(h);
+    }
+    const directive = buildHashtagDirective(active);
+    const body = cleaned.trim();
+
+    if (!body && images.length === 0 && documents.length === 0) return;
+    onSend(body, images, documents, directive || undefined);
     resetDraft();
   }
 
@@ -786,6 +892,42 @@ export function Composer({
         </div>
       )}
 
+      {/* Hashtag palette (T-hashtags): autocomplete while typing `#…`. */}
+      {showHashtagPalette && (
+        <div
+          aria-label={t("composer.hashtagPaletteAria")}
+          className="bg-popover text-popover-foreground overflow-hidden rounded-md border text-sm shadow-md"
+        >
+          {hashtagMatches.map((h, i) => (
+            <button
+              key={h.tag}
+              type="button"
+              // onMouseDown so the click lands before the textarea blurs.
+              onMouseDown={(e) => {
+                e.preventDefault();
+                pickHashtag(h);
+              }}
+              onMouseEnter={() => setHashtagIndex(i)}
+              className={`flex w-full items-center gap-2 px-3 py-2 text-left ${
+                i === Math.min(hashtagIndex, hashtagMatches.length - 1)
+                  ? "bg-accent text-accent-foreground"
+                  : ""
+              }`}
+            >
+              <span className="font-mono font-medium">#{h.label}</span>
+              <span className="text-muted-foreground truncate">
+                {h.description}
+              </span>
+              <span className="text-muted-foreground ml-auto shrink-0 text-[10px] uppercase">
+                {h.kind === "tool"
+                  ? t("composer.hashtagToolBadge")
+                  : t("composer.hashtagRendererBadge")}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Confirmation gate for backend actions (T14 safety model). */}
       {pendingCommand && (
         <div className="border-primary/40 bg-muted/40 flex flex-col gap-2 rounded-md border p-3 text-sm">
@@ -814,8 +956,34 @@ export function Composer({
         </div>
       )}
 
-      {(images.length > 0 || documents.length > 0 || extracting) && (
+      {(images.length > 0 ||
+        documents.length > 0 ||
+        activeHashtags.length > 0 ||
+        extracting) && (
         <div className="flex flex-wrap items-center gap-2">
+          {activeHashtags.map((h, i) => (
+            <div
+              key={`tag-${h.tag}`}
+              title={h.description}
+              className="bg-primary/10 text-primary border-primary/30 relative flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs"
+            >
+              <Hash className="size-3.5 shrink-0" aria-hidden />
+              <span className="max-w-40 truncate font-medium">{h.label}</span>
+              <span className="text-[10px] uppercase opacity-70">
+                {h.kind === "tool"
+                  ? t("composer.hashtagToolBadge")
+                  : t("composer.hashtagRendererBadge")}
+              </span>
+              <button
+                type="button"
+                aria-label={t("composer.removeHashtag")}
+                onClick={() => removeHashtag(i)}
+                className="bg-background/80 absolute -top-1.5 -right-1.5 rounded-full border p-0.5"
+              >
+                <X className="size-3" />
+              </button>
+            </div>
+          ))}
           {images.map((img, i) => (
             <ImageChip
               key={i}
@@ -887,7 +1055,11 @@ export function Composer({
               >
                 {t("common.cancel")}
               </Button>
-              <Button type="button" size="sm" onClick={() => void stopRecording()}>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void stopRecording()}
+              >
                 <Square className="size-4" />
                 {t("composer.recordStop")}
               </Button>
@@ -918,6 +1090,9 @@ export function Composer({
           // next keystroke), and reset its highlight as the filter changes.
           setMentionOpen(true);
           setMentionIndex(0);
+          // Same for the hashtag palette.
+          setHashtagOpen(true);
+          setHashtagIndex(0);
         }}
         // Caret moves without edits (click, arrow keys) retarget the mention
         // palette to the token now under the caret.
@@ -984,9 +1159,38 @@ export function Composer({
               return;
             }
           }
-          // Prompt history recall (shell-style). Only when neither palette is
+          // Hashtag palette (T-hashtags): same keys as the palettes above.
+          if (showHashtagPalette) {
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setHashtagIndex((i) => (i + 1) % hashtagMatches.length);
+              return;
+            }
+            if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setHashtagIndex(
+                (i) => (i - 1 + hashtagMatches.length) % hashtagMatches.length,
+              );
+              return;
+            }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              setHashtagOpen(false);
+              return;
+            }
+            if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+              e.preventDefault();
+              pickHashtag(
+                hashtagMatches[
+                  Math.min(hashtagIndex, hashtagMatches.length - 1)
+                ],
+              );
+              return;
+            }
+          }
+          // Prompt history recall (shell-style). Only when no palette is
           // open; arrow mode starts from an empty field on ArrowUp.
-          if (!showPalette && !showMentionPalette) {
+          if (!showPalette && !showMentionPalette && !showHashtagPalette) {
             const idx = historyIndex;
             if (e.key === "ArrowUp" && (idx !== null || text.length === 0)) {
               if (userHistory.length === 0) return;

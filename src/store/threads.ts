@@ -62,7 +62,10 @@ import { estimateTokens } from "@/lib/contextSize";
 import { buildBotSystemText, buildGroupChatSystemText } from "@/lib/bots";
 import { extractMentions } from "@/lib/mentions";
 import { runPersonaMemoryUpdate } from "@/lib/personaMemory";
-import { buildWorkspaceSystemText, filterWorkspaceFiles } from "@/lib/workspaces";
+import {
+  buildWorkspaceSystemText,
+  filterWorkspaceFiles,
+} from "@/lib/workspaces";
 import { buildSkillsIndexText } from "@/lib/skills";
 import { useSkills } from "@/store/skills";
 import { buildArtifactsSystemText } from "@/lib/artifacts";
@@ -121,7 +124,13 @@ export interface StepProgress {
 }
 
 export interface PlannerProgress {
-  phase: "planning" | "critiquing" | "revising" | "dispatching" | "executing" | "completing";
+  phase:
+    | "planning"
+    | "critiquing"
+    | "revising"
+    | "dispatching"
+    | "executing"
+    | "completing";
   steps: StepProgress[];
   directModel?: string;
   /** Current critique round (1-based), set during critiquing/revising phases. */
@@ -348,6 +357,10 @@ interface ThreadsState {
     content: string,
     images: PreparedImage[],
     documents?: PendingDocument[],
+    /** An invisible per-turn instruction appended to the user message before it
+     *  is sent (T-hashtags: the directive a `#hashtag` resolves to). Not stored
+     *  or displayed — it rides only in the outgoing API payload for this turn. */
+    turnDirective?: string,
   ) => Promise<void>;
   /**
    * Persist a synthetic assistant-role note into the current thread (creating a
@@ -763,7 +776,12 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     set((s) => {
       const unread = new Set(s.unreadThreads);
       unread.delete(id);
-      return { currentThreadId: id, messages, unreadThreads: unread, error: null };
+      return {
+        currentThreadId: id,
+        messages,
+        unreadThreads: unread,
+        error: null,
+      };
     });
     const thread = get().threads.find((t) => t.id === id);
     // Tabs metaphor: opening an archived chat promotes it back to open.
@@ -866,7 +884,11 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     const id = get().currentThreadId;
     if (!id) {
       // Selecting a direct model turns planner off for the draft.
-      set({ draftProvider: provider, draftModel: model, draftUsePlanner: false });
+      set({
+        draftProvider: provider,
+        draftModel: model,
+        draftUsePlanner: false,
+      });
       return;
     }
     const thread = get().threads.find((t) => t.id === id);
@@ -999,7 +1021,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     }
   },
 
-  send: async (content, images, documents = []) => {
+  send: async (content, images, documents = [], turnDirective) => {
     // Ignore empty/whitespace-only sends with no attachments.
     if (!content.trim() && images.length === 0 && documents.length === 0)
       return;
@@ -1203,7 +1225,10 @@ export const useThreads = create<ThreadsState>((set, get) => ({
 
         // Show the planning phase pill immediately.
         set((s) => ({
-          threadPlannerProgress: { ...s.threadPlannerProgress, [tid]: { phase: "planning", steps: [] } },
+          threadPlannerProgress: {
+            ...s.threadPlannerProgress,
+            [tid]: { phase: "planning", steps: [] },
+          },
         }));
 
         // Use the global streaming state fields — they hold the planner's live
@@ -1224,7 +1249,9 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             streamingApiTrace: [...plannerApiTrace],
             streamingProvider: plannerProvider,
             streamingModel: plannerModel,
-            ...(isModelOutput({ text: plannerAcc } as StreamEvent) ? { awaitingModel: false } : {}),
+            ...(isModelOutput({ text: plannerAcc } as StreamEvent)
+              ? { awaitingModel: false }
+              : {}),
           });
         };
         set({
@@ -1258,7 +1285,9 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           : null;
         // Only show models from providers that have API keys (or are keyless
         // like Ollama) — the planner can't delegate to unkeyed providers.
-        const keyedModels = allModels.filter((m) => keyedProviders.has(m.provider));
+        const keyedModels = allModels.filter((m) =>
+          keyedProviders.has(m.provider),
+        );
         const plannerModelsList = buildPlannerModels(keyedModels, config);
         // Compact text snapshot of the available models, embedded into the
         // critic + revision prompts so those calls (which don't expose the
@@ -1303,7 +1332,12 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         ) {
           // Parse plan with model validation. Do this before persistence so we
           // can strip the raw JSON fence from the displayed message content.
-          const parseResult = parsePlan(plannerResult.content, allModels, PROVIDERS, keyedProviders);
+          const parseResult = parsePlan(
+            plannerResult.content,
+            allModels,
+            PROVIDERS,
+            keyedProviders,
+          );
           let plan = parseResult?.plan ?? null;
 
           // Strip the JSON fence from the planner output so the raw JSON isn't
@@ -1336,7 +1370,11 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                 data: JSON.stringify(persistableSubagent(s)),
               }),
             ),
-            persistTransparency(plannerMsg.id, plannerReasoning, plannerApiTrace),
+            persistTransparency(
+              plannerMsg.id,
+              plannerReasoning,
+              plannerApiTrace,
+            ),
           ]);
           // Record usage.
           const u = plannerResult.usage;
@@ -1366,7 +1404,10 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             );
           }
 
-          if (plan && (plan.strategy === "route" || plan.strategy === "multi_step")) {
+          if (
+            plan &&
+            (plan.strategy === "route" || plan.strategy === "multi_step")
+          ) {
             // Helper: stream a model response. When `persist` is true (the default)
             // the result is saved to the DB and messages are reloaded so the UI
             // shows the real row. When false, the call is invisible — no streaming
@@ -1379,7 +1420,12 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             ): Promise<{
               content: string;
               model: string;
-              usage: { input_tokens: number; output_tokens: number; cache_creation_tokens: number; cache_read_tokens: number };
+              usage: {
+                input_tokens: number;
+                output_tokens: number;
+                cache_creation_tokens: number;
+                cache_read_tokens: number;
+              };
               msgId: string;
             }> => {
               const persist = opts?.persist !== false;
@@ -1413,12 +1459,22 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                     wFlush();
                   }
                 };
-                const result = await chatStream(provider, model, messages, onDelta, tid, false);
+                const result = await chatStream(
+                  provider,
+                  model,
+                  messages,
+                  onDelta,
+                  tid,
+                  false,
+                );
                 wFlush();
                 if (result.content.length > 0) {
                   const msg = await addMessage({
-                    thread_id: tid, role: "assistant", content: result.content,
-                    provider, model,
+                    thread_id: tid,
+                    role: "assistant",
+                    content: result.content,
+                    provider,
+                    model,
                   });
                   set({
                     streamingContent: null,
@@ -1455,7 +1511,14 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                 return { ...result, msgId: "" };
               }
               // Non-persisting path: no streaming bubble, no DB row.
-              const result = await chatStream(provider, model, messages, () => {}, tid, false);
+              const result = await chatStream(
+                provider,
+                model,
+                messages,
+                () => {},
+                tid,
+                false,
+              );
               return { ...result, msgId: "" };
             };
 
@@ -1497,15 +1560,33 @@ export const useThreads = create<ThreadsState>((set, get) => ({
               set((s) => ({
                 threadPlannerProgress: {
                   ...s.threadPlannerProgress,
-                  [tid]: { phase: "critiquing", steps: [], round, maxRounds: MAX_ROUNDS },
+                  [tid]: {
+                    phase: "critiquing",
+                    steps: [],
+                    round,
+                    maxRounds: MAX_ROUNDS,
+                  },
                 },
               }));
 
               const criticMessages: ApiMessage[] = [
-                { role: "system", content: buildCriticSystemPrompt(), images: [] },
-                { role: "user", content: buildCriticRequest(content, plan!, modelsText), images: [] },
+                {
+                  role: "system",
+                  content: buildCriticSystemPrompt(),
+                  images: [],
+                },
+                {
+                  role: "user",
+                  content: buildCriticRequest(content, plan!, modelsText),
+                  images: [],
+                },
               ];
-              const criticResult = await writeReply(criticProvider, criticModel, criticMessages, { persist: false });
+              const criticResult = await writeReply(
+                criticProvider,
+                criticModel,
+                criticMessages,
+                { persist: false },
+              );
               const criticVerdict = parseCriticResponse(criticResult.content);
 
               if (criticVerdict?.approved) {
@@ -1518,7 +1599,12 @@ export const useThreads = create<ThreadsState>((set, get) => ({
               set((s) => ({
                 threadPlannerProgress: {
                   ...s.threadPlannerProgress,
-                  [tid]: { phase: "revising", steps: [], round: round + 1, maxRounds: MAX_ROUNDS },
+                  [tid]: {
+                    phase: "revising",
+                    steps: [],
+                    round: round + 1,
+                    maxRounds: MAX_ROUNDS,
+                  },
                 },
               }));
 
@@ -1534,11 +1620,29 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                   { selfBotId: null, roster: {}, baseLabel: "Assistant" },
                   hasRenderer(selectRegistry(usePlugins.getState()), "youtube"),
                 ),
-                { role: "assistant", content: `Previous plan:\n\`\`\`json\n${JSON.stringify(plan)}\n\`\`\``, images: [] },
-                { role: "user", content: `Critique:\n${issues}\n\n${modelsText ? modelsText + "\n\n" : ""}Please revise the plan to address these issues. Only use provider and model IDs exactly as listed in the available models above.`, images: [] },
+                {
+                  role: "assistant",
+                  content: `Previous plan:\n\`\`\`json\n${JSON.stringify(plan)}\n\`\`\``,
+                  images: [],
+                },
+                {
+                  role: "user",
+                  content: `Critique:\n${issues}\n\n${modelsText ? modelsText + "\n\n" : ""}Please revise the plan to address these issues. Only use provider and model IDs exactly as listed in the available models above.`,
+                  images: [],
+                },
               ];
-              const revisedResult = await writeReply(plannerProvider, plannerModel, replanHistory, { persist: false });
-              const revisedParse = parsePlan(revisedResult.content, allModels, PROVIDERS, keyedProviders);
+              const revisedResult = await writeReply(
+                plannerProvider,
+                plannerModel,
+                replanHistory,
+                { persist: false },
+              );
+              const revisedParse = parsePlan(
+                revisedResult.content,
+                allModels,
+                PROVIDERS,
+                keyedProviders,
+              );
               if (!revisedParse) continue; // Couldn't parse the revision — try again.
               plan = revisedParse.plan;
 
@@ -1576,7 +1680,12 @@ export const useThreads = create<ThreadsState>((set, get) => ({
               // Cloud models run in parallel within a wave; local/Ollama steps
               // serialize through a gate to avoid overloading the host.
               const gate = createGate();
-              const emptyUsage = { input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0 };
+              const emptyUsage = {
+                input_tokens: 0,
+                output_tokens: 0,
+                cache_creation_tokens: 0,
+                cache_read_tokens: 0,
+              };
               // The last plan step is the synthesis: its output is the final
               // answer and the only step persisted as a chat message.
               const synthesisId = plan!.steps[plan!.steps.length - 1]?.id;
@@ -1610,30 +1719,46 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                 resolvedPrompt: string,
               ): Promise<StepResult> => {
                 if (get().cancelling) {
-                  return { stepId: step.id, description: step.description, provider: step.provider, model: step.model, content: "", usage: emptyUsage };
+                  return {
+                    stepId: step.id,
+                    description: step.description,
+                    provider: step.provider,
+                    model: step.model,
+                    content: "",
+                    usage: emptyUsage,
+                  };
                 }
                 // The synthesis step shows the "Finalising answer" phase; the
                 // workers show "Running steps".
-                setStepStatus(step.id, "running", step.id === synthesisId ? "completing" : "executing");
+                setStepStatus(
+                  step.id,
+                  "running",
+                  step.id === synthesisId ? "completing" : "executing",
+                );
 
                 const stepStarted = Date.now();
                 try {
                   // No streaming bubble for steps — the progress strip shows
                   // live status; the synthesis answer surfaces after DB reload.
-                  const stepResult = await gate(isKeylessProvider(step.provider), () =>
-                    chatStream(
-                      step.provider,
-                      step.model,
-                      [{ role: "user", content: resolvedPrompt, images: [] }],
-                      () => {},
-                      tid,
-                      false,
-                    ),
+                  const stepResult = await gate(
+                    isKeylessProvider(step.provider),
+                    () =>
+                      chatStream(
+                        step.provider,
+                        step.model,
+                        [{ role: "user", content: resolvedPrompt, images: [] }],
+                        () => {},
+                        tid,
+                        false,
+                      ),
                   );
 
                   // Only the synthesis step (the final answer) is persisted; the
                   // worker outputs are intentionally ephemeral.
-                  if (step.id === synthesisId && stepResult.content.length > 0) {
+                  if (
+                    step.id === synthesisId &&
+                    stepResult.content.length > 0
+                  ) {
                     const stepMsg = await addMessage({
                       thread_id: tid,
                       role: "assistant",
@@ -1677,7 +1802,14 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                   // Failure isolation: one step failing must not sink the plan.
                   failed.push(step.id);
                   setStepStatus(step.id, "error");
-                  return { stepId: step.id, description: step.description, provider: step.provider, model: step.model, content: "", usage: emptyUsage };
+                  return {
+                    stepId: step.id,
+                    description: step.description,
+                    provider: step.provider,
+                    model: step.model,
+                    content: "",
+                    usage: emptyUsage,
+                  };
                 }
               };
 
@@ -1687,10 +1819,14 @@ export const useThreads = create<ThreadsState>((set, get) => ({
               const { dropped } = await executePlan(plan!, runStep);
 
               if (failed.length > 0) {
-                await get().postNote(t("planner.note.stepsFailed", { ids: failed.join(", ") }));
+                await get().postNote(
+                  t("planner.note.stepsFailed", { ids: failed.join(", ") }),
+                );
               }
               if (dropped.length > 0) {
-                await get().postNote(t("planner.note.stepsDropped", { ids: dropped.join(", ") }));
+                await get().postNote(
+                  t("planner.note.stepsDropped", { ids: dropped.join(", ") }),
+                );
               }
               // Guarantee a final answer: if the synthesis produced nothing,
               // persist a clear message so the turn is never left blank.
@@ -1747,7 +1883,10 @@ export const useThreads = create<ThreadsState>((set, get) => ({
               set((s) => {
                 const updated = { ...s.threadPlannerProgress };
                 delete updated[tid];
-                return { savedMessages: { ...s.savedMessages, [tid]: msgs }, threadPlannerProgress: updated };
+                return {
+                  savedMessages: { ...s.savedMessages, [tid]: msgs },
+                  threadPlannerProgress: updated,
+                };
               });
             }
           }
@@ -1815,6 +1954,20 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             hasRenderer(selectRegistry(usePlugins.getState()), "youtube"),
           ),
         ];
+        // T-hashtags: append this turn's invisible directive to the last user
+        // message (scan backward — a multi-mention round can end on an assistant
+        // turn). Ephemeral: only in the outgoing payload, never persisted.
+        if (turnDirective?.trim()) {
+          for (let k = history.length - 1; k >= 0; k--) {
+            if (history[k].role === "user") {
+              history[k] = {
+                ...history[k],
+                content: `${history[k].content}\n\n${turnDirective}`,
+              };
+              break;
+            }
+          }
+        }
 
         // Seed streaming state so the render layer shows the bubble immediately
         // (empty string — the "Thinking…" spinner hides on the first token).
@@ -2703,7 +2856,12 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     if (!id || get().runningStreams.has(id) || get().compacting) return;
     const thread = get().threads.find((t) => t.id === id);
     if (!thread) return;
-    set((s) => ({ runningStreams: new Set([...s.runningStreams, id]), compacting: true, cancelling: false, error: null }));
+    set((s) => ({
+      runningStreams: new Set([...s.runningStreams, id]),
+      compacting: true,
+      cancelling: false,
+      error: null,
+    }));
     try {
       const request = buildCompactionRequest(get().messages);
       // No streaming placeholder: the summary isn't a chat bubble; it lands as
@@ -2783,7 +2941,11 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     set((s) => {
       const updated = { ...s.threadPlannerProgress };
       delete updated[tid];
-      return { cancelling: true, pendingApproval: null, threadPlannerProgress: updated };
+      return {
+        cancelling: true,
+        pendingApproval: null,
+        threadPlannerProgress: updated,
+      };
     });
     try {
       await cancelStream();
