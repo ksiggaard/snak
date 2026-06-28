@@ -109,6 +109,12 @@ export interface ApprovalRequestEvent {
   summary: string;
   /** The exact target — a path or the resolved command line. */
   detail: string;
+  /** Plain-English description of what the call does (the model's explanation
+   * for `run_command`; empty for the self-describing read-only tools). */
+  explanation: string;
+  /** A risk warning when the call is not read-only (e.g. a `run_command` that
+   * writes or deletes); null/absent for the read-only tools. */
+  warning?: string | null;
 }
 
 /**

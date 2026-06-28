@@ -1,4 +1,4 @@
-//! Built-in, in-process **read-only system-diagnostics** MCP-style server.
+//! Built-in, in-process system-diagnostics MCP-style server.
 //!
 //! Exposes tools that let the model inspect the local Linux machine while
 //! helping debug: read directory/file contents, check owners & permissions, and
@@ -7,16 +7,27 @@
 //! `BUILTIN_SYSDEBUG_SERVER` is `enabled: false`) and every call is gated behind
 //! an explicit per-call approval in the UI (see `mcp::requires_approval`).
 //!
-//! ## Safety: read-only by construction
+//! ## Safety: inspection tools are read-only by construction
 //!
-//! This module calls only **read** APIs — `std::fs::read_dir`, `std::fs::read`,
-//! `symlink_metadata`, `MetadataExt`. For system probes it spawns a **fixed,
-//! curated set of read-only commands** via `Command::new(prog).args([...])` —
-//! **never through a shell** — so there is no command-injection surface even when
-//! a path argument is passed (it is one inert `argv` element). There is simply no
-//! write/delete/chmod code path here to invoke. The OS still enforces file
-//! permissions (the app runs as the user), so this can never read or change
-//! anything the user couldn't already.
+//! `list_directory`, `read_file`, `stat_path`, `search_files`, and
+//! `run_diagnostic` call only **read** APIs — `std::fs::read_dir`,
+//! `std::fs::read`, `symlink_metadata`, `MetadataExt`. For system probes they
+//! spawn a **fixed, curated set of read-only commands** via
+//! `Command::new(prog).args([...])` — **never through a shell** — so there is no
+//! command-injection surface even when a path argument is passed (it is one inert
+//! `argv` element). There is no write/delete/chmod code path in any of them. The
+//! OS still enforces file permissions (the app runs as the user), so they can
+//! never read anything the user couldn't already.
+//!
+//! ## The one exception: `run_command`
+//!
+//! `run_command` is the **gated, user-confirmed escape hatch**: it runs an
+//! arbitrary command through `sh -c`, so it is *not* read-only by construction.
+//! Its safety boundary is the human, not static analysis — every call surfaces
+//! the model's plain-English `explanation` plus a `assess_command_risk` warning
+//! in the approval card, and (unlike the read-only tools) it is **never**
+//! auto-approved. This matches the product decision: read-only inspection can run
+//! under a persistent auto mode; anything arbitrary always needs an explicit OK.
 
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
@@ -294,6 +305,24 @@ pub fn tools() -> Vec<ToolDef> {
                 "required": ["probe"]
             }),
         },
+        ToolDef {
+            name: "run_command".to_string(),
+            description: "Run an arbitrary shell command (via `sh -c`) and stream its output \
+                to the chat. Use this only when the read-only tools above don't fit — prefer \
+                `list_directory` for `ls`, `read_file`, `search_files`, and `run_diagnostic`. \
+                This is NOT read-only and ALWAYS requires the user's explicit approval, so you \
+                MUST set `explanation` to an honest, plain-English description of exactly what \
+                the command does and any side effects (files written, data sent, etc.)."
+                .to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "command": { "type": "string", "description": "The shell command to run, e.g. `ls -la /home/kasper/documents`." },
+                    "explanation": { "type": "string", "description": "Plain-English description of what this command does and any side effects, shown to the user before they approve it." }
+                },
+                "required": ["command", "explanation"]
+            }),
+        },
     ]
 }
 
@@ -301,21 +330,26 @@ pub fn tools() -> Vec<ToolDef> {
 // Approval-card text
 // ---------------------------------------------------------------------------
 
-/// A `(summary, detail)` pair describing what a call would do, shown in the UI's
-/// per-call approval gate before anything runs.
-pub fn describe(tool: &str, args: &Value) -> (String, String) {
+/// Describe what a call would do, shown in the UI's per-call approval gate before
+/// anything runs. Read-only tools are self-describing (no extra explanation, no
+/// warning); `run_command` carries the model's plain-English explanation and a
+/// computed risk warning.
+pub fn describe(tool: &str, args: &Value) -> super::CallInfo {
     let path = args.get("path").and_then(|p| p.as_str());
+    let plain = |summary: &str, detail: String| super::CallInfo {
+        summary: summary.into(),
+        detail,
+        explanation: String::new(),
+        warning: None,
+    };
     match tool {
-        "list_directory" => ("List directory".into(), path.unwrap_or("?").into()),
-        "read_file" => ("Read file".into(), path.unwrap_or("?").into()),
-        "stat_path" => (
-            "Inspect owner & permissions".into(),
-            path.unwrap_or("?").into(),
-        ),
+        "list_directory" => plain("List directory", path.unwrap_or("?").into()),
+        "read_file" => plain("Read file", path.unwrap_or("?").into()),
+        "stat_path" => plain("Inspect owner & permissions", path.unwrap_or("?").into()),
         "search_files" => {
             let root = args.get("root").and_then(|r| r.as_str()).unwrap_or("?");
             let pat = args.get("pattern").and_then(|p| p.as_str()).unwrap_or("");
-            ("Search files".into(), format!("\"{pat}\" under {root}"))
+            plain("Search files", format!("\"{pat}\" under {root}"))
         }
         "run_diagnostic" => {
             let probe = args.get("probe").and_then(|p| p.as_str()).unwrap_or("?");
@@ -328,12 +362,92 @@ pub fn describe(tool: &str, args: &Value) -> (String, String) {
                             detail.push_str(path);
                         }
                     }
-                    ("Run diagnostic".into(), detail.trim().to_string())
+                    plain("Run diagnostic", detail.trim().to_string())
                 }
-                None => ("Run diagnostic".into(), probe.into()),
+                None => plain("Run diagnostic", probe.into()),
             }
         }
-        other => ("Tool call".into(), other.into()),
+        "run_command" => {
+            let command = args
+                .get("command")
+                .and_then(|c| c.as_str())
+                .unwrap_or("")
+                .to_string();
+            let explanation = args
+                .get("explanation")
+                .and_then(|e| e.as_str())
+                .unwrap_or("")
+                .to_string();
+            super::CallInfo {
+                summary: "Run command".into(),
+                warning: assess_command_risk(&command),
+                detail: command,
+                explanation,
+            }
+        }
+        other => plain("Tool call", other.into()),
+    }
+}
+
+/// Best-effort risk scan for an arbitrary `run_command` string, returning a
+/// human-readable warning when the command looks like it writes, deletes, sends
+/// data over the network, or otherwise changes system state. Computed in Rust
+/// (independent of the model's `explanation`) so a model can't hide a `rm` from
+/// the approval card.
+///
+// ponytail: keyword heuristic with a known ceiling — it can over-warn (e.g.
+// `systemctl status` is read-only) or under-warn on exotic commands. Upgrade path
+// is a real shell parser if it ever proves too coarse; the human approval gate is
+// the actual safety boundary either way.
+pub fn assess_command_risk(cmd: &str) -> Option<String> {
+    let lower = cmd.to_lowercase();
+    let words: Vec<&str> = lower
+        .split(|c: char| c.is_whitespace() || "|;&()<>`".contains(c))
+        .filter(|w| !w.is_empty())
+        .collect();
+    let has = |name: &str| words.contains(&name);
+    let any = |names: &[&str]| names.iter().any(|n| has(n));
+
+    let mut reasons: Vec<&str> = Vec::new();
+    if lower.contains('>') {
+        reasons.push("redirects output into a file");
+    }
+    if any(&["rm", "rmdir", "unlink", "shred"]) {
+        reasons.push("deletes files");
+    }
+    if any(&["dd", "mkfs", "fdisk", "parted", "truncate"]) {
+        reasons.push("can overwrite disks or files");
+    }
+    if any(&["mv", "cp", "tee", "install", "ln"]) {
+        reasons.push("creates or moves files");
+    }
+    if any(&["chmod", "chown", "chgrp"]) {
+        reasons.push("changes file permissions or ownership");
+    }
+    if any(&[
+        "kill", "pkill", "killall", "shutdown", "reboot", "halt", "poweroff",
+    ]) {
+        reasons.push("stops processes or powers off the machine");
+    }
+    if any(&[
+        "curl", "wget", "nc", "ncat", "ssh", "scp", "sftp", "rsync", "ftp",
+    ]) {
+        reasons.push("sends or fetches data over the network");
+    }
+    if any(&["sudo", "su", "doas"]) {
+        reasons.push("runs with elevated privileges");
+    }
+    if any(&[
+        "apt", "apt-get", "dnf", "yum", "pacman", "snap", "pip", "pip3", "npm", "cargo", "brew",
+        "gem",
+    ]) {
+        reasons.push("installs or changes software packages");
+    }
+
+    if reasons.is_empty() {
+        None
+    } else {
+        Some(reasons.join("; "))
     }
 }
 
@@ -362,9 +476,10 @@ pub async fn call_tool(
                 .unwrap_or(false);
             search_files(root, pattern, content)
         }
-        // Only the command runner streams live output (one stdout line per
-        // chunk); the filesystem tools return their result in one shot.
+        // The command runners stream live output (one stdout line per chunk);
+        // the filesystem tools return their result in one shot.
         "run_diagnostic" => run_diagnostic(args, emit).await,
+        "run_command" => run_command(require_str(args, "command")?, emit).await,
         other => Err(anyhow!("unknown system tool: {other}")),
     }
 }
@@ -666,6 +781,67 @@ async fn run_diagnostic(args: &Value, emit: super::LineSink<'_>) -> anyhow::Resu
     Ok(trim_for_model(out))
 }
 
+/// Run an arbitrary command through `sh -c`, streaming stdout live to the UI and
+/// capturing stderr. NOT read-only — gated behind explicit user approval by the
+/// chat loop (`mcp::requires_approval` is true for every `sys__*` tool, and the
+/// frontend never auto-approves `run_command`). Bounded by `DIAGNOSTIC_TIMEOUT`.
+async fn run_command(command: &str, emit: super::LineSink<'_>) -> anyhow::Result<String> {
+    let mut child = tokio::process::Command::new("sh")
+        .arg("-c")
+        .arg(command)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .with_context(|| format!("running `{command}`"))?;
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| anyhow!("no child stdout"))?;
+
+    let collect = async {
+        let mut acc = String::new();
+        let mut lines = BufReader::new(stdout).lines();
+        while let Some(line) = lines.next_line().await? {
+            emit(&line);
+            acc.push_str(&line);
+            acc.push('\n');
+        }
+        let status = child.wait().await?;
+        let mut stderr = String::new();
+        if let Some(mut e) = child.stderr.take() {
+            use tokio::io::AsyncReadExt;
+            let _ = e.read_to_string(&mut stderr).await;
+        }
+        Ok::<_, anyhow::Error>((acc, status, stderr))
+    };
+
+    let (mut out, status, stderr) = match tokio::time::timeout(DIAGNOSTIC_TIMEOUT, collect).await {
+        Err(_) => bail!("`{command}` timed out after {DIAGNOSTIC_TIMEOUT:?}"),
+        Ok(r) => r.with_context(|| format!("running `{command}`"))?,
+    };
+
+    // Surface stderr to the UI + model whenever it's non-empty (warnings on a
+    // success, errors on a failure), and tag a non-zero exit.
+    let stderr = stderr.trim();
+    if !stderr.is_empty() {
+        let note = format!("[stderr] {stderr}");
+        emit(&note);
+        out.push('\n');
+        out.push_str(&note);
+    }
+    if !status.success() {
+        let note = format!("[exit {status}]");
+        emit(&note);
+        out.push('\n');
+        out.push_str(&note);
+    }
+    if out.trim().is_empty() {
+        out = "(command produced no output)".to_string();
+    }
+    Ok(trim_for_model(out))
+}
+
 /// Trim a command's output to the model-facing budget (lines, then chars),
 /// leaving the human-facing UI copy untouched. Appends a clear marker so the
 /// model knows the listing was abbreviated. Pure / unit-tested.
@@ -761,6 +937,38 @@ mod tests {
         assert!(names.contains(&"stat_path".to_string()));
         assert!(names.contains(&"search_files".to_string()));
         assert!(names.contains(&"run_diagnostic".to_string()));
+        assert!(names.contains(&"run_command".to_string()));
+    }
+
+    #[test]
+    fn risk_warns_only_on_state_changing_commands() {
+        assert!(assess_command_risk("ls /home/kasper/documents").is_none());
+        assert!(assess_command_risk("cat /etc/fstab").is_none());
+        assert!(assess_command_risk("grep -r MB /home/kasper").is_none());
+        assert!(assess_command_risk("rm -rf /tmp/x").is_some());
+        assert!(assess_command_risk("grep MB f.txt > out.txt").is_some());
+        assert!(assess_command_risk("curl https://example.com").is_some());
+        assert!(assess_command_risk("sudo systemctl restart nginx").is_some());
+        // Substring-only matches must not trip the word-boundary check.
+        assert!(assess_command_risk("ls /home/charm").is_none());
+    }
+
+    #[test]
+    fn describe_run_command_surfaces_command_and_explanation() {
+        let info = describe(
+            "run_command",
+            &json!({ "command": "ls /tmp", "explanation": "lists /tmp" }),
+        );
+        assert_eq!(info.summary, "Run command");
+        assert_eq!(info.detail, "ls /tmp");
+        assert_eq!(info.explanation, "lists /tmp");
+        assert!(info.warning.is_none());
+
+        let risky = describe(
+            "run_command",
+            &json!({ "command": "rm -rf /tmp/x", "explanation": "deletes x" }),
+        );
+        assert!(risky.warning.is_some());
     }
 
     #[test]
@@ -780,17 +988,17 @@ mod tests {
 
     #[test]
     fn describe_is_human_readable() {
-        let (s, d) = describe("read_file", &json!({ "path": "/etc/fstab" }));
-        assert_eq!(s, "Read file");
-        assert_eq!(d, "/etc/fstab");
-        let (s, d) = describe("run_diagnostic", &json!({ "probe": "processes" }));
-        assert_eq!(s, "Run diagnostic");
-        assert_eq!(d, "ps aux");
-        let (_, d) = describe(
+        let info = describe("read_file", &json!({ "path": "/etc/fstab" }));
+        assert_eq!(info.summary, "Read file");
+        assert_eq!(info.detail, "/etc/fstab");
+        let info = describe("run_diagnostic", &json!({ "probe": "processes" }));
+        assert_eq!(info.summary, "Run diagnostic");
+        assert_eq!(info.detail, "ps aux");
+        let info = describe(
             "run_diagnostic",
             &json!({ "probe": "disk_usage", "path": "/tmp" }),
         );
-        assert_eq!(d, "du -h -d1 /tmp");
+        assert_eq!(info.detail, "du -h -d1 /tmp");
     }
 
     #[test]

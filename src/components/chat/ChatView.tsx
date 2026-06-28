@@ -12,6 +12,7 @@ import { useBots } from "@/store/bots";
 import { useAppearance } from "@/store/appearance";
 import { useT } from "@/store/i18n";
 import { isKeylessProvider, useProviders } from "@/lib/providers";
+import { isAutoApprovableTool } from "@/lib/mcp";
 import { CHAT_X_PADDING } from "@/lib/appearance";
 import { cn } from "@/lib/utils";
 import type { PreparedImage } from "@/lib/image";
@@ -58,6 +59,9 @@ function ApprovalGate({
   const pending = useThreads((s) => s.pendingApproval);
   const resolve = useThreads((s) => s.resolveApproval);
   if (!pending) return null;
+  // "Always allow" persists auto mode — only meaningful for the read-only tools,
+  // never for the arbitrary `run_command` runner (which always asks).
+  const canAlways = isAutoApprovableTool(pending.toolName);
   return (
     <div className="border-primary/40 bg-muted/40 flex flex-col gap-2 rounded-md border p-3 text-sm">
       <div className="flex items-center gap-2 font-medium">
@@ -80,20 +84,31 @@ function ApprovalGate({
           ? t("chat.approvalDestLocal", { provider: providerLabel })
           : t("chat.approvalDestCloud", { provider: providerLabel })}
       </div>
+      {pending.explanation ? (
+        <p className="text-foreground/90 text-xs">{pending.explanation}</p>
+      ) : null}
       <pre className="bg-background overflow-x-auto rounded border p-2 font-mono text-xs whitespace-pre-wrap">
         {pending.detail}
       </pre>
+      {pending.warning ? (
+        <div className="border-destructive/50 bg-destructive/10 text-destructive flex items-start gap-2 rounded border p-2 text-xs font-medium">
+          <ShieldAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          <span>{t("chat.approvalRisk", { risk: pending.warning })}</span>
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         <Button size="sm" onClick={() => resolve(true)}>
           {t("chat.approve")}
         </Button>
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={() => resolve(true, true)}
-        >
-          {t("chat.approveAll")}
-        </Button>
+        {canAlways ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => resolve(true, true)}
+          >
+            {t("chat.approveAlways")}
+          </Button>
+        ) : null}
         <Button size="sm" variant="outline" onClick={() => resolve(false)}>
           {t("chat.deny")}
         </Button>

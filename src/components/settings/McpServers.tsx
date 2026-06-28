@@ -17,11 +17,13 @@ import {
   KEYED_SEARCH_PROVIDERS,
   listTools,
   loadAllowCloudSysTools,
+  loadAutoApproveSysTools,
   loadServers,
   mcpCloseServerSessions,
   parseEnvText,
   saveServers,
   setAllowCloudSysTools,
+  setAutoApproveSysTools,
   setSearchApiKey,
   type McpListedTool,
   type McpServer,
@@ -61,6 +63,9 @@ export function McpServers() {
   const [error, setError] = useState<string | null>(null);
   // Cloud opt-in for the read-only system-diagnostics server (default off).
   const [allowCloudSys, setAllowCloudSys] = useState(false);
+  // Persisted "auto mode": run the read-only system tools without a per-call
+  // prompt (default off). Never covers the arbitrary `run_command` runner.
+  const [autoApprove, setAutoApprove] = useState(false);
 
   // Draft for the "add custom server" row.
   const [draftLabel, setDraftLabel] = useState("");
@@ -105,7 +110,13 @@ export function McpServers() {
   useEffect(() => {
     void loadServers().then(setServers);
     void loadAllowCloudSysTools().then(setAllowCloudSys);
+    void loadAutoApproveSysTools().then(setAutoApprove);
   }, []);
+
+  async function setAutoApproveSys(auto: boolean) {
+    await setAutoApproveSysTools(auto);
+    setAutoApprove(auto);
+  }
 
   // Enabling cloud access for system diagnostics requires confirming a full
   // risk dialog; disabling (tightening) is immediate.
@@ -396,6 +407,19 @@ export function McpServers() {
                     {allowCloudSys
                       ? t("mcp.sysRestrictLocal")
                       : t("mcp.sysAllowCloud")}
+                  </Button>
+                  <div className="text-muted-foreground border-t pt-2">
+                    {t("mcp.sysAutoApproveExplain")}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={autoApprove ? "outline" : "secondary"}
+                    className="self-start"
+                    onClick={() => void setAutoApproveSys(!autoApprove)}
+                  >
+                    {autoApprove
+                      ? t("mcp.sysAutoApproveOff")
+                      : t("mcp.sysAutoApproveOn")}
                   </Button>
                 </div>
               )}

@@ -337,9 +337,22 @@ pub fn requires_approval(tool_name: &str) -> bool {
     split_namespaced(tool_name).0 == sysdebug::SERVER_ID
 }
 
-/// A `(summary, detail)` describing what a gated tool call would do, for the
-/// UI's per-call approval card.
-pub fn describe_call(call: &ToolCall) -> (String, String) {
+/// What a gated tool call would do, for the UI's per-call approval card.
+pub struct CallInfo {
+    /// Short action label, e.g. "Read file".
+    pub summary: String,
+    /// The exact target — a path or the resolved command line.
+    pub detail: String,
+    /// Optional plain-English description (the model's `explanation` for
+    /// `run_command`; empty for the self-describing read-only tools).
+    pub explanation: String,
+    /// A risk warning when the call is not read-only (e.g. `run_command` that
+    /// writes or deletes); `None` for the read-only tools.
+    pub warning: Option<String>,
+}
+
+/// Describe what a gated tool call would do, for the UI's per-call approval card.
+pub fn describe_call(call: &ToolCall) -> CallInfo {
     let (_server, tool) = split_namespaced(&call.name);
     sysdebug::describe(tool, &call.arguments)
 }
