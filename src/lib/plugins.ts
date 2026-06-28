@@ -8,6 +8,7 @@
 // providers.ts) is T18/T11/T15/T14.
 
 import { invoke } from "@tauri-apps/api/core";
+import { currentOS, OS_VALUES, type OS } from "@/lib/os";
 import {
   PLUGIN_API_VERSION,
   type PluginContribution,
@@ -72,6 +73,23 @@ function parseDependencies(raw: unknown): PluginDependency[] | undefined {
   return out.length > 0 ? out : undefined;
 }
 
+/** Parse + validate a manifest's `supportedOS`. Absent → undefined (all OSes);
+ * a present value must be a non-empty array of known OS names (mirrors Rust). */
+function parseSupportedOS(raw: unknown): string[] | undefined {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw) || raw.length === 0) {
+    throw new Error("manifest `supportedOS` must be a non-empty array");
+  }
+  for (const v of raw) {
+    if (typeof v !== "string" || !OS_VALUES.includes(v as OS)) {
+      throw new Error(
+        `manifest \`supportedOS\` has invalid OS \`${String(v)}\` (expected ${OS_VALUES.join("/")})`,
+      );
+    }
+  }
+  return raw as string[];
+}
+
 /**
  * Validate an untrusted manifest object. Pure, no IO — mirrors the Rust
  * `validate_manifest`. Returns the typed manifest or throws with a reason.
@@ -116,6 +134,7 @@ export function parseManifest(raw: unknown): PluginManifest {
       typeof m.entry === "string" && m.entry.trim() !== "" ? m.entry : undefined,
     permissions: permissions && permissions.length > 0 ? permissions : undefined,
     dependencies: parseDependencies(m.dependencies),
+    supportedOS: parseSupportedOS(m.supportedOS),
     contributes:
       typeof m.contributes === "object" && m.contributes !== null
         ? (m.contributes as PluginContribution)
@@ -139,8 +158,21 @@ export interface HostRegistry {
   audio: AudioContribution[];
 }
 
-/** Build the registry from a plugin list (only `enabled` plugins contribute). */
-export function buildRegistry(plugins: PluginInfo[]): HostRegistry {
+/** Whether a plugin runs on the given OS: true unless its manifest lists a
+ * `supportedOS` that excludes `os`. Absent/empty `supportedOS` = all OSes. */
+export function isAvailableOnOS(
+  m: PluginManifest,
+  os: OS = currentOS(),
+): boolean {
+  return !m.supportedOS || m.supportedOS.length === 0 || m.supportedOS.includes(os);
+}
+
+/** Build the registry from a plugin list. Only `enabled` plugins available on
+ * the current OS (`os`, default: this machine) contribute. */
+export function buildRegistry(
+  plugins: PluginInfo[],
+  os: OS = currentOS(),
+): HostRegistry {
   const reg: HostRegistry = {
     providers: [],
     themes: [],
@@ -150,6 +182,7 @@ export function buildRegistry(plugins: PluginInfo[]): HostRegistry {
   };
   for (const p of plugins) {
     if (!p.enabled || !p.manifest.contributes) continue;
+    if (!isAvailableOnOS(p.manifest, os)) continue;
     const c = p.manifest.contributes;
     switch (p.manifest.category) {
       case "provider":

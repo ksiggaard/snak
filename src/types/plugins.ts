@@ -117,6 +117,10 @@ export interface PluginManifest {
   permissions?: string[];
   /** Other plugins (by id) that must be installed + enabled first. */
   dependencies?: PluginDependency[];
+  /** OSes this plugin works on — any of "linux"/"macos"/"windows" (see
+   * `OS_VALUES`). Absent/empty means all OSes. The host filters a plugin out of
+   * the registry on OSes it doesn't list (`isAvailableOnOS`). */
+  supportedOS?: string[];
   /** Legacy declarative descriptor (built-ins only; runtime plugins register
    * their contributions via code in `activate(ctx)`). */
   contributes?: PluginContribution;

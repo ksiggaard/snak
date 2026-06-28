@@ -71,6 +71,16 @@ describe("parseManifest", () => {
     void enabledByDefault;
     expect(parseManifest(rest).enabledByDefault).toBe(false);
   });
+
+  it("parses supportedOS and rejects invalid/empty values", () => {
+    expect(parseManifest({ ...valid, supportedOS: ["linux", "macos"] }).supportedOS).toEqual([
+      "linux",
+      "macos",
+    ]);
+    expect(parseManifest(valid).supportedOS).toBeUndefined(); // absent = all OSes
+    expect(() => parseManifest({ ...valid, supportedOS: [] })).toThrow(/supportedOS/);
+    expect(() => parseManifest({ ...valid, supportedOS: ["plan9"] })).toThrow(/supportedOS/);
+  });
 });
 
 describe("buildRegistry", () => {
@@ -119,6 +129,16 @@ describe("buildRegistry", () => {
     const p = mk("provider", true, {});
     p.manifest.contributes = undefined;
     expect(buildRegistry([p]).providers).toHaveLength(0);
+  });
+
+  it("filters out plugins not supported on the current OS", () => {
+    const p = mk("renderer", true, { language: "mermaid" });
+    p.manifest.supportedOS = ["linux", "macos"];
+    expect(buildRegistry([p], "windows").renderers).toHaveLength(0);
+    expect(buildRegistry([p], "linux").renderers).toHaveLength(1);
+    // No supportedOS → available everywhere.
+    const q = mk("renderer", true, { language: "dot" });
+    expect(buildRegistry([q], "windows").renderers).toHaveLength(1);
   });
 });
 

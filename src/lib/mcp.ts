@@ -12,6 +12,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { getSetting, setSetting } from "@/lib/db";
+import { currentOS } from "@/lib/os";
 import { isKeylessProvider } from "@/lib/providers";
 import { useSkills } from "@/store/skills";
 import type { Provider } from "@/types/db";
@@ -181,13 +182,15 @@ export const BUILTIN_DEVICE_SERVER: McpServer = {
   builtin: true,
 };
 
-/** All built-in servers, in display order (always present, never removable). */
+/** All built-in servers, in display order (always present, never removable).
+ * sysdebug is Unix-only (the backend module is `#[cfg(unix)]`), so it's omitted
+ * on Windows — listing it there would offer a toggle the backend can't honor. */
 export const BUILTIN_SERVERS: McpServer[] = [
   BUILTIN_WEB_SERVER,
   BUILTIN_YOUTUBE_SERVER,
   BUILTIN_SYSDEBUG_SERVER,
   BUILTIN_DEVICE_SERVER,
-];
+].filter((s) => s.id !== BUILTIN_SYSDEBUG_SERVER.id || currentOS() !== "windows");
 
 /**
  * Ensure every built-in server is present exactly once and first, in declared

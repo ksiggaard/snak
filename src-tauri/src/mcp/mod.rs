@@ -25,6 +25,9 @@ pub mod device;
 pub mod image_search;
 pub mod session;
 pub mod skill_tool;
+// sysdebug reads Unix-only file metadata (uid/gid/mode/nlink/…) and spawns Linux
+// diagnostic commands, so it's a Linux/macOS-only feature — excluded on Windows.
+#[cfg(unix)]
 pub mod sysdebug;
 pub mod web_browse;
 pub mod web_search;
@@ -290,6 +293,7 @@ async fn call_tool_inner(
 /// web-browse server, matching `split_namespaced`'s unnamespaced fallback.
 fn builtin_tools(server_id: &str) -> Vec<ToolDef> {
     match server_id {
+        #[cfg(unix)]
         sysdebug::SERVER_ID => sysdebug::tools(),
         youtube::SERVER_ID => youtube::tools(),
         device::SERVER_ID => device::tools(),
@@ -312,6 +316,7 @@ async fn builtin_call(
     thread_id: &str,
 ) -> anyhow::Result<String> {
     match server_id {
+        #[cfg(unix)]
         sysdebug::SERVER_ID => sysdebug::call_tool(tool, args, emit).await,
         youtube::SERVER_ID => youtube::call_tool(client, tool, args, emit_images).await,
         device::SERVER_ID => device::call_tool(client, tool, args).await,
@@ -334,7 +339,16 @@ async fn builtin_call(
 /// runs. Only the read-only system-diagnostics server (`sys`) is gated; the
 /// web-browse tool and external MCP servers run as before.
 pub fn requires_approval(tool_name: &str) -> bool {
-    split_namespaced(tool_name).0 == sysdebug::SERVER_ID
+    #[cfg(unix)]
+    {
+        split_namespaced(tool_name).0 == sysdebug::SERVER_ID
+    }
+    // No gated servers on Windows (sysdebug is Unix-only).
+    #[cfg(not(unix))]
+    {
+        let _ = tool_name;
+        false
+    }
 }
 
 /// What a gated tool call would do, for the UI's per-call approval card.
@@ -354,7 +368,22 @@ pub struct CallInfo {
 /// Describe what a gated tool call would do, for the UI's per-call approval card.
 pub fn describe_call(call: &ToolCall) -> CallInfo {
     let (_server, tool) = split_namespaced(&call.name);
-    sysdebug::describe(tool, &call.arguments)
+    #[cfg(unix)]
+    {
+        sysdebug::describe(tool, &call.arguments)
+    }
+    // Unreachable on Windows: nothing requires approval there, so this is never
+    // called — but it must still compile without the Unix-only sysdebug module.
+    #[cfg(not(unix))]
+    {
+        let _ = tool;
+        CallInfo {
+            summary: String::new(),
+            detail: call.name.clone(),
+            explanation: String::new(),
+            warning: None,
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -645,6 +674,7 @@ mod tests {
         assert_eq!(split_namespaced("fetch_url"), ("web", "fetch_url"));
     }
 
+    #[cfg(unix)]
     #[test]
     fn only_sys_tools_require_approval() {
         assert!(requires_approval("sys__read_file"));
@@ -653,6 +683,7 @@ mod tests {
         assert!(!requires_approval("somemcp__do_thing"));
     }
 
+    #[cfg(unix)]
     #[test]
     fn builtin_tools_route_by_id() {
         assert!(builtin_tools(sysdebug::SERVER_ID)

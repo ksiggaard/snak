@@ -85,6 +85,10 @@ pub struct PluginManifest {
     /// Other plugins (by id) that must be installed + enabled first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dependencies: Vec<PluginDependency>,
+    /// OSes this plugin supports ("linux"/"macos"/"windows"). Empty = all OSes.
+    /// The frontend filters a plugin out of the registry on unsupported OSes.
+    #[serde(default, rename = "supportedOS", skip_serializing_if = "Vec::is_empty")]
+    pub supported_os: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub contributes: Option<serde_json::Value>,
 }
@@ -127,6 +131,13 @@ pub fn validate_manifest(m: &PluginManifest) -> Result<(), String> {
             "plugin targets apiVersion {} but host implements {API_VERSION}",
             m.api_version
         ));
+    }
+    for os in &m.supported_os {
+        if !matches!(os.as_str(), "linux" | "macos" | "windows") {
+            return Err(format!(
+                "manifest `supportedOS` has invalid OS `{os}` (expected linux/macos/windows)"
+            ));
+        }
     }
     Ok(())
 }
@@ -299,8 +310,30 @@ mod tests {
             entry: None,
             permissions: Vec::new(),
             dependencies: Vec::new(),
+            supported_os: Vec::new(),
             contributes: None,
         }
+    }
+
+    #[test]
+    fn parses_and_round_trips_supported_os() {
+        let json = r#"{
+            "id": "com.example.x", "name": "X", "version": "1.0.0",
+            "category": "theme", "apiVersion": 1,
+            "supportedOS": ["linux", "macos"]
+        }"#;
+        let m = parse_manifest(json).unwrap();
+        assert_eq!(m.supported_os, vec!["linux", "macos"]);
+        // serializes back under the camelCase key
+        let out = serde_json::to_string(&m).unwrap();
+        assert!(out.contains("\"supportedOS\":[\"linux\",\"macos\"]"));
+    }
+
+    #[test]
+    fn rejects_invalid_supported_os() {
+        let mut m = base();
+        m.supported_os = vec!["linux".into(), "plan9".into()];
+        assert!(validate_manifest(&m).is_err());
     }
 
     #[test]
