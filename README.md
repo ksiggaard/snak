@@ -227,6 +227,34 @@ gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD   # paste the password (empty i
 > `npm run tauri dev` is unaffected. Keep `~/.tauri/snak.key` backed up — losing it means existing
 > installs won't accept future updates.
 
+#### Signing from more than one machine
+
+There is **one keypair**, not one per machine — the public key baked into shipped apps only
+verifies signatures made with that single private key. So "sign from multiple places" means
+**distributing the same private key** to each builder (your other machines, teammates, extra CI),
+never committing it. The key file lives outside the repo and is injected at build time via two
+env vars; the repo only ever holds the *public* key (in `tauri.conf.json`).
+
+Tauri reads `TAURI_SIGNING_PRIVATE_KEY` as **either a path to the key file or its base64 content**.
+On each machine, drop the key at `~/.tauri/snak.key` (copied securely from your password
+manager / vault — never over plain email/chat) and add to your shell profile:
+
+```bash
+export TAURI_SIGNING_PRIVATE_KEY="$HOME/.tauri/snak.key"   # path form
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""               # this key has no password
+```
+
+Then `npm run tauri build` signs on any of those machines. For a team, keep the key in a shared
+secret store and pull it per-shell instead of storing a file, e.g. with the 1Password CLI:
+
+```bash
+export TAURI_SIGNING_PRIVATE_KEY="$(op read 'op://Engineering/snak signing key/private')"
+```
+
+Extra CI runners use the same key as a secret (the GitHub Actions setup above is just this for
+one runner). The **source of truth is the vault/secret store**; GitHub secrets, `~/.tauri/snak.key`,
+and any other copy are distributions of it. `.gitignore` blocks `*.key` and `.env*` as a backstop.
+
 ### Local models with Ollama
 
 snak speaks to a local [Ollama](https://ollama.com/) server, so you can run models entirely

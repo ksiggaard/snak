@@ -34,3 +34,10 @@ dist-ssr
 
 # Generated bundled plugins (built from plugins/ by scripts/build-plugins.mjs)
 src-tauri/resources/plugins/
+
+# Updater signing — the PRIVATE key and any secret env must never be committed.
+# Distribute the one key out-of-band (see README "Signing from more than one
+# machine"); only the public key belongs in the repo (in tauri.conf.json).
+*.key
+.env
+.env.*
