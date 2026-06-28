@@ -175,6 +175,31 @@ This produces native installers/bundles for your platform under
 > **Linux build note:** on some distros the AppImage step needs `NO_STRIP=true npm run tauri build`
 > — linuxdeploy's bundled `strip` can't read modern `.relr.dyn` ELF sections.
 
+### Releasing (CI builds for all platforms)
+
+Pushing a version tag builds installers for **Linux, macOS and Windows** on GitHub Actions
+(`.github/workflows/release.yml`) and attaches them to a published GitHub Release.
+
+1. Bump the version to the same `X.Y.Z` in **all three** files: `package.json`,
+   `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`. (CI fails fast if the tag and
+   `tauri.conf.json` disagree.)
+2. Commit, then tag and push:
+
+   ```bash
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
+   ```
+
+3. CI builds the three platforms in parallel and **auto-publishes** the release once all
+   succeed — a universal `.dmg` (macOS), `.exe` + `.msi` (Windows), and `.deb`/`.rpm`/`.AppImage`
+   (Linux). No secrets are required.
+
+> **Unsigned builds:** the installers are not yet code-signed, so the OS shows a one-time
+> warning. On **macOS**, right-click the app → **Open** (or
+> `xattr -dr com.apple.quarantine /Applications/snak.app`). On **Windows**, click
+> **More info → Run anyway** on the SmartScreen prompt. Real signing/notarization can be
+> added later alongside the in-app updater.
+
 ### Local models with Ollama
 
 snak speaks to a local [Ollama](https://ollama.com/) server, so you can run models entirely
