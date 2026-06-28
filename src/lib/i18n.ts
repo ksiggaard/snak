@@ -1058,6 +1058,9 @@ export const en = {
   "thread.newChat": "New chat",
   "thread.image": "Image",
   "thread.untitled": "Untitled",
+
+  // --- OS notifications -------------------------------------------------------------------------------------------------------------------------------
+  "notify.replyReady": "Reply ready",
 } as const;
 
 /** All valid message keys — derived from the English catalog. */

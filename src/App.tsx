@@ -269,6 +269,19 @@ function App() {
     };
   }, []);
 
+  // Click on a "reply done" OS notification (emitted by the Rust notify command
+  // after it raises the window): switch to chat and open the thread that finished.
+  useEffect(() => {
+    const unlisten = listen<string>("notify-activate", (e) => {
+      useView.getState().showChat();
+      const { threads, selectThread } = useThreads.getState();
+      if (threads.some((t) => t.id === e.payload)) void selectThread(e.payload);
+    });
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
+  }, []);
+
   // Native application menu (macOS menu bar / Linux global menu): the Rust
   // side emits an action string per selection; `runMenuAction` maps it onto
   // the stores (shared with the in-app MenuBar).

@@ -54,6 +54,11 @@ zip = { version = "8.6", default-features = false, features = ["deflate"] }
 # the offset, `iana-time-zone` gives the IANA timezone name.
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 iana-time-zone = "0.1"
+# OS desktop notifications (chat-done alert). Used directly rather than
+# tauri-plugin-notification because the official plugin can't detect desktop
+# notification clicks (mobile-only); notify-rust's wait_for_action can, which is
+# what powers click-to-open-thread on the KDE target.
+notify-rust = "4"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2"
