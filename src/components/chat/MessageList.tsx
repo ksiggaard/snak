@@ -1085,7 +1085,9 @@ const ChatMessage = memo(function ChatMessage({
       <ModelBadge
         provider={m.provider}
         model={m.model ?? ""}
-        role={m.plan ? undefined : undefined}
+        outputType={m.output_type}
+        toolCalls={m.toolCalls}
+        plan={m.plan}
       />
     ) : null;
   // Variation controls (T54) — only on the latest reply, only when grouped.
@@ -1426,6 +1428,7 @@ export function MessageList({
         created_at: "",
         provider: streamingProvider,
         model: streamingModel,
+        output_type: null,
         images: streamingImages,
         documents: [],
         toolCalls: streamingToolCalls,

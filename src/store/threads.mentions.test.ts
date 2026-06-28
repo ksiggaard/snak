@@ -154,6 +154,7 @@ beforeEach(() => {
         variant_selected: 1,
         provider: input.provider ?? null,
         model: input.model ?? null,
+        output_type: input.output_type ?? null,
         created_at: "2026-06-13 00:00:00",
       };
       rows.push({
