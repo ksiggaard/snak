@@ -267,6 +267,41 @@ html.overlay #root {
   padding-right: var(--chat-x-pad, 1.5rem);
 }
 
+/* Sticky prompt headers (Appearance → Sticky prompts): each user message pins
+   to the top of the chat scroll area while you read its reply; the next exchange
+   scrolls up and takes over the top. Each turn (user + its replies) is wrapped in
+   a `.chat-turn` so the sticky header's containing block ends at the turn — it
+   releases cleanly when the turn scrolls past (no height-mismatch overlap that
+   flat sticky siblings would cause). The wrapper is `display: contents` (zero
+   layout impact) unless the feature is on, then a real block (the containing
+   block). The pinned prompt tracks the auto-hiding topbar: `--chat-sticky-top`
+   (published by ChatTopBar on the scroller from the same scroll signal) is the
+   bar height when the bar is shown (prompt parks just below it) and 0 when the
+   bar is hidden (prompt rises flush to the top, no reply above it). The `top`
+   transition matches the bar's 200ms so they glide together. MessageList drops
+   the scroller's top fade-mask while sticky prompts are on so the pinned edge
+   stays crisp. Opaque bg + z-index so the same turn's reply scrolls under the
+   header. */
+.chat-turn {
+  display: contents;
+}
+.chat-sticky-prompts .chat-turn {
+  display: block;
+}
+.chat-sticky-prompts .chat-row-user {
+  position: sticky;
+  /* `top` is measured from the scroller's content box (inside its padding), so a
+     plain `top: 44px` parks the prompt at paddingTop+44 — a gap below the bar
+     where the reply leaks through. Subtract the scroller's top padding (== the
+     `p-*` from the chat style, exposed as --chat-x-pad) so it pins exactly at the
+     intended viewport offset (flush at 0 when the bar is hidden, at the bar's
+     bottom when shown). */
+  top: calc(var(--chat-sticky-top, 0px) - var(--chat-x-pad, 1.5rem));
+  z-index: 1;
+  background: var(--background);
+  transition: top 0.2s ease;
+}
+
 /* NOTE: `content-visibility: auto` was tried on `.chat-row` to replace
    react-virtuoso's virtualization, but its size re-estimation of off-screen rows
    shifts the scroll position mid-stream — which fires a scroll event, trips the

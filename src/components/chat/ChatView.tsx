@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Ghost, ShieldAlert } from "lucide-react";
 import { MessageList } from "@/components/chat/MessageList";
@@ -107,6 +107,44 @@ export function ChatView() {
   // Right-side chat panel (media / scroll spy / in-chat search / token
   // spend). Hidden by default, per-session only — not persisted.
   const [panelOpen, setPanelOpen] = useState(false);
+  // The overlaid topbar auto-hides on scroll-down, shows on scroll-up / near the
+  // top. Owned HERE (not inside ChatTopBar) so the bar's transform AND the sticky
+  // prompt's top offset derive from one state in one render — they can't desync.
+  // (An earlier split — React state for the bar, an imperative CSS var for the
+  // offset — drifted, parking the prompt below a hidden bar with the reply
+  // showing in the gap above it.) Direction-aware show/hide isn't expressible in
+  // CSS, so a small capturing scroll listener is the minimal correct approach; it
+  // matches whatever node currently has [data-chat-scroll] (robust to remount).
+  const [barHidden, setBarHidden] = useState(false);
+  useEffect(() => {
+    let lastY: number | null = null;
+    let ticking = false;
+    const onScroll = (e: Event) => {
+      const el = e.target as HTMLElement | null;
+      if (!el?.matches?.("[data-chat-scroll]")) return;
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const y = el.scrollTop;
+        if (lastY === null) {
+          lastY = y; // first sighting (incl. the load-time scroll-to-bottom)
+          setBarHidden(false);
+        } else {
+          const dy = y - lastY;
+          if (y < 24 || dy < -4) setBarHidden(false); // near top OR scrolling up
+          else if (dy > 4) setBarHidden(true); // scrolling down
+          lastY = y;
+        }
+        ticking = false;
+      });
+    };
+    document.addEventListener("scroll", onScroll, {
+      capture: true,
+      passive: true,
+    });
+    return () =>
+      document.removeEventListener("scroll", onScroll, { capture: true });
+  }, []);
   const messages = useThreads((s) => s.messages);
   const currentThreadId = useThreads((s) => s.currentThreadId);
   const runningStreams = useThreads((s) => s.runningStreams);
@@ -179,6 +217,15 @@ export function ChatView() {
   return (
     <div className="relative flex flex-1 flex-row gap-4 overflow-hidden">
       <motion.div
+        // Sticky prompts (MessageList) read `--chat-sticky-top`: parked below the
+        // topbar when it's shown, flush to the top when it's hidden (the opaque
+        // bar then covers the strip). Incognito has no bar → always 0. Set here so
+        // it shares the single `barHidden` source with the bar's own transform.
+        style={
+          {
+            "--chat-sticky-top": `${incognito || barHidden ? 0 : CHAT_TOPBAR_H}px`,
+          } as CSSProperties
+        }
         className={cn(
           "relative flex min-w-0 flex-1 flex-col gap-4 overflow-hidden",
           // Incognito identity (T36): the whole chat surface reads as a
@@ -193,6 +240,7 @@ export function ChatView() {
         {!incognito && (
           <ChatTopBar
             title={current?.title ?? t("thread.newChat")}
+            hidden={barHidden}
             panelOpen={panelOpen}
             onOpenPanel={() => setPanelOpen(true)}
             canRename={!!currentThreadId}

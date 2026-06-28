@@ -1604,8 +1604,11 @@ export function MessageList({
       data-chat-scroll
       style={
         {
-          maskImage: TOP_FADE,
-          WebkitMaskImage: TOP_FADE,
+          // Sticky prompts pin at the very top (top:0); the top fade would
+          // ghost the pinned prompt's edge and let the reply behind it show
+          // through, so drop the fade while sticky prompts are on.
+          maskImage: stickyPrompts ? undefined : TOP_FADE,
+          WebkitMaskImage: stickyPrompts ? undefined : TOP_FADE,
           // Horizontal inset lives on the item-list (index.css, via
           // `--chat-x-pad`); keep the container's vertical padding, zero sides.
           paddingLeft: 0,
@@ -1625,13 +1628,16 @@ export function MessageList({
         "flex min-w-0 flex-1 flex-col",
         `chat-style-${chatStyle}`,
         CHAT_CONTAINER_CLASSES[chatStyle],
+        stickyPrompts && "chat-sticky-prompts",
       )}
     >
       {topInset ? <div aria-hidden style={{ height: topInset }} /> : null}
       <div className="chat-item-list">
-        {displayItems.map((m, idx) =>
-          m.kind === "summary" ? (
-            <div key={m.id} className="chat-row">
+        {turns.map((turn) => (
+          <div key={turn[0].m.id} className="chat-turn">
+            {turn.map(({ m, idx }) =>
+              m.kind === "summary" ? (
+                <div key={m.id} className="chat-row">
               <div
                 ref={(el: HTMLDivElement | null) => {
                   if (el) messageRefs.current.set(m.id, el);
@@ -1660,7 +1666,10 @@ export function MessageList({
               </div>
             </div>
           ) : (
-            <div key={m.id} className="chat-row">
+            <div
+              key={m.id}
+              className={cn("chat-row", m.role === "user" && "chat-row-user")}
+            >
               <ChatMessage
                 m={m}
                 chatStyle={chatStyle}
@@ -1678,8 +1687,10 @@ export function MessageList({
                 onToggleWide={getToggleWide(m.id)}
               />
             </div>
-          ),
-        )}
+              ),
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );

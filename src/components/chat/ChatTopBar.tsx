@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { PanelRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useT } from "@/store/i18n";
+import { useAppearance } from "@/store/appearance";
 import { cn } from "@/lib/utils";
 
 /** Height of the chat topbar in px. MessageList reserves this much top inset (a
@@ -12,6 +13,9 @@ export const CHAT_TOPBAR_H = 44;
 
 interface ChatTopBarProps {
   title: string;
+  /** Hidden (slid up) when scrolling down; shown on scroll-up / near top. Owned
+   *  by ChatView so the sticky-prompt offset shares this single source. */
+  hidden: boolean;
   panelOpen: boolean;
   onOpenPanel: () => void;
   /** Only saved threads can be renamed (a draft has no DB row yet). */
@@ -21,57 +25,22 @@ interface ChatTopBarProps {
 
 /** Web-style chat header: the thread name (double-click to rename) on the left,
  *  the chat-panel toggle on the right. Overlays the top of the message column;
- *  shows on scroll-up / near the top, slides away on scroll-down — its blurred
- *  background also masks the messages' top cutoff. */
+ *  shows on scroll-up / near the top, slides away on scroll-down (`hidden`,
+ *  driven by ChatView's scroll listener). */
 export function ChatTopBar({
   title,
+  hidden,
   panelOpen,
   onOpenPanel,
   canRename,
   onRename,
 }: ChatTopBarProps) {
   const t = useT();
-  const [hidden, setHidden] = useState(false);
+  // Sticky prompts pin just below this bar; an opaque bar then blocks the reply
+  // from showing in the strip above the pinned prompt (translucent would bleed).
+  const stickyPrompts = useAppearance((s) => s.stickyPrompts);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
-
-  // Hide on scroll down, reveal on scroll up or near the top. Direction-aware
-  // show/hide isn't expressible in CSS (scroll-driven animations track
-  // position, not direction), so a small JS listener is the minimal correct
-  // approach. Scroll events don't bubble but ARE dispatched through the capture
-  // phase, so one capturing listener on `document` catches scroll from whatever
-  // node currently has [data-chat-scroll] — robust to the scroll container
-  // mounting/unmounting (e.g. thread switch), which a direct addEventListener is
-  // not (it would be left on a detached node).
-  useEffect(() => {
-    let lastY: number | null = null;
-    let ticking = false;
-    const onScroll = (e: Event) => {
-      const el = e.target as HTMLElement | null;
-      if (!el?.matches?.("[data-chat-scroll]")) return;
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => {
-        const y = el.scrollTop;
-        if (lastY === null) {
-          lastY = y; // first sighting (incl. the load-time scroll-to-bottom)
-        } else {
-          const dy = y - lastY;
-          if (y < 24 || dy < -4)
-            setHidden(false); // near top OR scrolling up
-          else if (dy > 4) setHidden(true); // scrolling down
-          lastY = y;
-        }
-        ticking = false;
-      });
-    };
-    document.addEventListener("scroll", onScroll, {
-      capture: true,
-      passive: true,
-    });
-    return () =>
-      document.removeEventListener("scroll", onScroll, { capture: true });
-  }, []);
 
   function beginEdit() {
     if (!canRename) return;
@@ -87,7 +56,10 @@ export function ChatTopBar({
   return (
     <div
       className={cn(
-        "bg-background/80 border-border/60 absolute inset-x-0 top-0 z-20 flex h-11 items-center gap-2 border-b px-3 backdrop-blur-sm transition-transform duration-200",
+        "border-border/60 absolute inset-x-0 top-0 z-20 flex h-11 items-center gap-2 border-b px-3 transition-transform duration-200",
+        // Opaque when sticky prompts are on (it backs the pinned prompt);
+        // translucent blur otherwise (content dissolves under it as before).
+        stickyPrompts ? "bg-background" : "bg-background/80 backdrop-blur-sm",
         hidden && "-translate-y-full",
       )}
     >
