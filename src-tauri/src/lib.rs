@@ -359,6 +359,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/032_output_type.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 33,
+            description: "per-message output_type: response-style active when each reply was generated",
+            sql: include_str!("../migrations/033_message_output_type.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

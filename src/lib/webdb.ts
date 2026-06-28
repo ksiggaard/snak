@@ -83,6 +83,7 @@ function seed(): DbState {
       variant_selected: 1,
       provider: role === "assistant" ? "anthropic" : null,
       model: role === "assistant" ? "claude-opus-4-8" : null,
+      output_type: role === "assistant" ? "default" : null,
       reasoning: null,
       created_at: sqlNow(-3600 + i * 10),
     });
@@ -151,12 +152,12 @@ function execute(query: string, values: unknown[] = []): void {
 
   if (q.startsWith("insert into messages")) {
     // Column order mirrors lib/db.ts addMessage().
-    const [id, thread_id, role, content, kind, duration_ms, bot_id, variant_group, provider, model] =
+    const [id, thread_id, role, content, kind, duration_ms, bot_id, variant_group, provider, model, output_type] =
       values;
     state.messages.push({
       id, thread_id, role, content, kind,
       duration_ms, bot_id, variant_group, variant_selected: 1,
-      provider, model, reasoning: null, created_at: sqlNow(),
+      provider, model, output_type, reasoning: null, created_at: sqlNow(),
     });
   } else if (q.startsWith("insert into threads")) {
     // Column order mirrors lib/db.ts createThread().

@@ -166,6 +166,7 @@ beforeEach(() => {
       updated_at: "2026-06-13 00:00:00",
       provider: "anthropic",
       model: "m1",
+      output_type: input.output_type ?? null,
     } as Message;
     (dbMessages[input.thread_id] ??= []).push(m);
     return m;

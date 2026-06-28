@@ -95,6 +95,7 @@ function msg(
     created_at: "2026-06-13 00:00:00",
     provider: "anthropic",
     model: "m",
+    output_type: null,
     images: [],
     documents: [],
     toolCalls: [],
@@ -158,6 +159,7 @@ beforeEach(() => {
       updated_at: "2026-06-13 00:00:00",
       provider: input.provider ?? "anthropic",
       model: input.model ?? "m",
+      output_type: input.output_type ?? null,
     } as Message;
     if (!dbMessages[input.thread_id]) dbMessages[input.thread_id] = [];
     dbMessages[input.thread_id].push(m);

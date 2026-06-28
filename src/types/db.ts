@@ -191,6 +191,9 @@ export interface Message {
   provider: Provider | null;
   /** Model that generated this message; NULL = inherited from thread. */
   model: string | null;
+  /** Output type (response-style) active when this reply was generated
+   * (migration 033). NULL = legacy/unknown row; treated as 'default' in the UI. */
+  output_type: string | null;
   created_at: string;
 }
 

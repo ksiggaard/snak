@@ -334,6 +334,9 @@ export async function addMessage(input: {
   provider?: Provider | null;
   /** Model that generated this message (planner/worker attribution). */
   model?: string | null;
+  /** Output type (response-style) active when this reply was generated; shown
+   * in the model pill's hover detail. Omit/null for non-assistant rows. */
+  output_type?: string | null;
 }): Promise<Message> {
   const db = await getDb();
   const id = newId();
@@ -346,8 +349,8 @@ export async function addMessage(input: {
         ? id
         : null;
   await db.execute(
-    `INSERT INTO messages (id, thread_id, role, content, kind, duration_ms, bot_id, variant_group, provider, model)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+    `INSERT INTO messages (id, thread_id, role, content, kind, duration_ms, bot_id, variant_group, provider, model, output_type)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
     [
       id,
       input.thread_id,
@@ -359,6 +362,7 @@ export async function addMessage(input: {
       variantGroup,
       input.provider ?? null,
       input.model ?? null,
+      input.output_type ?? null,
     ],
   );
   await touchThread(input.thread_id);

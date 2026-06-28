@@ -1569,6 +1569,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
               duration_ms: Math.round(Date.now() - started),
               provider: plannerProvider,
               model: plannerModel,
+              output_type: outputType,
             });
             answerMsgId = directMsg.id;
             await recordUsage(
@@ -1778,6 +1779,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                   duration_ms: Math.round(Date.now() - started),
                   provider: step.provider,
                   model: step.model,
+                  output_type: outputType,
                 });
                 answerMsgId = stepMsg.id;
                 await recordUsage(stepMsg.id, step.provider, stepResult.model || step.model, stepResult.usage);
@@ -2069,6 +2071,11 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             content: result.content,
             duration_ms: Math.round(Date.now() - started),
             bot_id: attributeBotId,
+            // Record which model + output type actually produced this reply so
+            // the model pill (and its hover detail) is accurate after reload.
+            provider: replyProvider,
+            model: result.model || replyModel,
+            output_type: outputType,
           });
           // Batch independent attachment writes.
           await Promise.all([
@@ -2472,6 +2479,9 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           duration_ms: Math.round(Date.now() - started),
           bot_id: attributeBotId,
           variant_group: groupId,
+          provider: replyProvider,
+          model: result.model || replyModel,
+          output_type: outputType,
         });
         await Promise.all([
           ...toolCalls.map((tc) =>
