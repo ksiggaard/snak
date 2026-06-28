@@ -21,6 +21,7 @@ import { ImageChip } from "@/components/chat/ImageChip";
 import { ContextMeter } from "@/components/chat/ContextMeter";
 import { ModelPicker } from "@/components/chat/ModelPicker";
 import { WorkspaceFileSelector } from "@/components/chat/WorkspaceFileSelector";
+import { OutputTypePicker } from "@/components/chat/OutputTypePicker";
 import { canCompact } from "@/lib/compaction";
 import {
   classifyFile,
@@ -1334,6 +1335,9 @@ export function Composer({
         >
           <Telescope className="size-4" />
         </Button>
+        {/* Output type (response-style picker): shapes how the model formats its
+            reply. Active (highlighted) while a non-default type is selected. */}
+        <OutputTypePicker disabled={busy} />
         {/* T61: workspace file selector — visible when the thread/draft belongs
             to a workspace that has files. Hidden otherwise. */}
         <WorkspaceFileSelector />

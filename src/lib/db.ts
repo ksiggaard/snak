@@ -180,6 +180,19 @@ export async function setThreadDeepResearch(
   ]);
 }
 
+/** Set a thread's response-style output type (an `OutputTypeId`). Does not bump
+ *  updated_at (mirrors setThreadDeepResearch). */
+export async function setThreadOutputType(
+  id: string,
+  outputType: string,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(`UPDATE threads SET output_type = $1 WHERE id = $2`, [
+    outputType,
+    id,
+  ]);
+}
+
 /** Turn planner mode on/off for a thread. When turning on, pass the current
  * provider+model so they can be restored when toggling off. */
 export async function setThreadPlannerActive(

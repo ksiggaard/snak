@@ -271,6 +271,21 @@ export const en = {
   "composer.deepResearch": "Deep research",
   "composer.deepResearchTitle":
     "Deep research — let the model dispatch parallel subagents to investigate, then synthesize their findings",
+  // --- Output type (response-style picker) ---------------------------------
+  "composer.outputType": "Output type",
+  "composer.outputTypeTitle":
+    "Output type — shape how the response is written (length, formatting, JSON, …)",
+  "outputType.default": "Default",
+  "outputType.flat": "Flat (no formatting)",
+  "outputType.artefact": "Artefact",
+  "outputType.veryDetailed": "Very detailed",
+  "outputType.detailed": "Detailed",
+  "outputType.json": "JSON",
+  "outputType.short": "Short",
+  "outputType.veryShort": "Very short",
+  "outputType.bullets": "Bullet points",
+  "outputType.table": "Table",
+  "outputType.eli5": "Simple (ELI5)",
   // --- Audio plugin: voice dictation (STT) ---------------------------------
   "composer.recordAudio": "Dictate (speech to text)",
   "composer.recordStop": "Stop",

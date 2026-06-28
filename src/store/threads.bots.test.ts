@@ -96,6 +96,7 @@ const thread = (over: Partial<Thread>): Thread => ({
   ephemeral: 0,
   archived: 0,
   deep_research: 0,
+  output_type: "default",
   bot_id: null,
   workspace_files_excluded: null,
   planner_active: 0,

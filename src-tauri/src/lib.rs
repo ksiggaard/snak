@@ -353,6 +353,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/031_plugin_storage.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 32,
+            description: "output_type: per-thread response-style selection",
+            sql: include_str!("../migrations/032_output_type.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
