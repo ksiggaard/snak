@@ -98,10 +98,17 @@ sources. Never summarize or describe a page from memory. \
 The `sys__*` tools inspect the local machine (read files and directories, check \
 permissions, and run read-only diagnostic commands such as listing processes, \
 disk, memory, and network). Use them when the user asks about the state of their \
-system. CRITICAL: after a tool returns a result, you MUST continue and write a \
-reply that answers the user's question using that result — do not stop after \
-calling a tool. If a tool call fails or returns no usable content, say so rather \
-than guessing.";
+system; prefer them over a shell command whenever they fit — e.g. use \
+`sys__list_directory` for `ls`, `sys__read_file` to read a file, and \
+`sys__search_files` to find files. When none of those fit and you genuinely need \
+to run a shell command, use `sys__run_command`: set `command` to the command and \
+`explanation` to an honest, plain-English description of exactly what it does and \
+any side effects (files written, data sent, etc.). `run_command` is NOT read-only \
+and always requires the user's explicit approval, so reach for it sparingly and \
+keep commands minimal. CRITICAL: after a tool returns a result, you MUST continue \
+and write a reply that answers the user's question using that result — do not stop \
+after calling a tool. If a tool call fails or returns no usable content, say so \
+rather than guessing.";
 
 /// Appended as a trailing `user` turn after each tool-result round, to re-anchor
 /// the model on answering instead of drifting (small local models otherwise tend
@@ -421,11 +428,17 @@ async fn run_agent_loop(
                     });
                     continue;
                 };
-                let (summary, detail) = mcp::describe_call(call);
+                let info = mcp::describe_call(call);
                 let (tx, rx) = oneshot::channel();
                 approvals.0.lock().unwrap().insert(call.id.clone(), tx);
                 on_delta
-                    .send(StreamDelta::approval(call, summary, detail))
+                    .send(StreamDelta::approval(
+                        call,
+                        info.summary,
+                        info.detail,
+                        info.explanation,
+                        info.warning,
+                    ))
                     .map_err(|e| format!("channel send failed: {e}"))?;
 
                 // Block until the user decides (or cancel_stream drains us). A
@@ -450,7 +463,7 @@ async fn run_agent_loop(
             // The resolved command line / target (for tools that run one) rides
             // along on the start event so the UI's live panel can show `$ …`.
             let command = if mcp::requires_approval(&call.name) {
-                Some(mcp::describe_call(call).1)
+                Some(mcp::describe_call(call).detail)
             } else {
                 None
             };

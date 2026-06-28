@@ -61,6 +61,7 @@ import { applyRegenSteer, applySourcesSteer } from "@/lib/variations";
 import { estimateTokens } from "@/lib/contextSize";
 import { buildBotSystemText, buildGroupChatSystemText } from "@/lib/bots";
 import { extractMentions } from "@/lib/mentions";
+import { notifyChatDone } from "@/lib/notify";
 import { runPersonaMemoryUpdate } from "@/lib/personaMemory";
 import { buildWorkspaceSystemText, filterWorkspaceFiles } from "@/lib/workspaces";
 import { buildSkillsIndexText } from "@/lib/skills";
@@ -91,7 +92,12 @@ import {
   buildGlobalSystemText,
   buildWorkspaceMemoryText,
 } from "@/lib/systemContext";
-import { mcpCloseThreadSessions } from "@/lib/mcp";
+import {
+  mcpCloseThreadSessions,
+  loadAutoApproveSysTools,
+  setAutoApproveSysTools,
+  isAutoApprovableTool,
+} from "@/lib/mcp";
 import { t } from "@/store/i18n";
 import { isKeylessProvider, PROVIDERS } from "@/lib/providers";
 import { createGate } from "@/lib/concurrency";
@@ -349,6 +355,11 @@ interface ThreadsState {
   /** "Approve all this chat" was chosen — subsequent gated calls in the current
    * send auto-approve without prompting. Reset at the start of each `send`. */
   autoApproveSysTools: boolean;
+  /** Persisted "auto mode": when true, the read-only system-diagnostics tools
+   * auto-approve across all sends/threads (loaded once in `init` from the
+   * `auto_approve_sys_tools` setting; NOT reset per send). Never covers the
+   * arbitrary `run_command` runner (see `isAutoApprovableTool`). */
+  autoApproveSysToolsAlways: boolean;
   /** A tool just finished and we're awaiting the model's follow-up text (the
    * post-tool "thinking" gap). Drives the loading indicator so a slow round
    * after a tool call doesn't look like a hang. Cleared on the next text token
@@ -744,6 +755,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   cancelling: false,
   pendingApproval: null,
   autoApproveSysTools: false,
+  autoApproveSysToolsAlways: false,
   awaitingModel: false,
   systemTokens: 0,
   composerInsert: null,
@@ -795,6 +807,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     // invalid provider id "" leaks into the picker and the critic resolution.
     const criticProvider = cp ? (cp as Provider) : null;
     const criticModel = cm ? cm : null;
+    // Persisted "auto mode" for the read-only system tools (don't ask each time).
+    const autoApproveSysToolsAlways = await loadAutoApproveSysTools();
     set({
       defaultProvider: def.provider,
       defaultModel: def.model,
@@ -806,6 +820,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       draftUsePlanner: plannerDefault,
       criticProvider,
       criticModel,
+      autoApproveSysToolsAlways,
     });
     const lastId = await getSetting(LAST_THREAD_KEY);
     if (lastId && threads.some((t) => t.id === lastId)) {
@@ -1125,6 +1140,9 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     // runningId is captured before try so the finally block can remove this
     // thread from runningStreams regardless of which thread is currently viewed.
     let runningId: string | null = null;
+    // Track whether this run failed, so the finally block only fires a
+    // "reply done" notification on a clean completion (not on error/cancel).
+    let errored = false;
     try {
       let id = get().currentThreadId;
       let provider: Provider;
@@ -1933,7 +1951,13 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           bumpActivity(threadId);
           if (event.approvalRequest) {
             const req = event.approvalRequest;
-            if (get().autoApproveSysTools) {
+            // Auto-approve only the read-only tools, and only when the user has
+            // opted in — persistently (auto mode) or "Approve all" this send.
+            // The arbitrary `run_command` runner is never auto-approved.
+            if (
+              isAutoApprovableTool(req.toolName) &&
+              (get().autoApproveSysToolsAlways || get().autoApproveSysTools)
+            ) {
               void approveToolCall(req.id, true);
             } else {
               set({ pendingApproval: req });
@@ -2109,6 +2133,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         if (bot) reviewExchange(bot, result.content);
       }
     } catch (e) {
+      errored = true;
       set({ error: friendlyError(e) });
       const id = get().currentThreadId;
       if (id) {
@@ -2118,6 +2143,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     } finally {
       if (runningId) {
         const wasViewing = get().currentThreadId === runningId;
+        // Read before the set() below resets `cancelling` to false.
+        const wasCancelled = get().cancelling;
         lastActivity.delete(runningId);
         set((s) => {
           const next = new Set(s.runningStreams);
@@ -2145,6 +2172,14 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             streamingModel: null,
           };
         });
+        // Notify on a clean completion. Rust no-ops when the window is focused,
+        // so we don't gate on `wasViewing` here — the requirement is "app not
+        // in focus", regardless of which thread is on screen.
+        if (!errored && !wasCancelled) {
+          const title =
+            get().threads.find((x) => x.id === runningId)?.title ?? "snak";
+          void notifyChatDone(runningId, title, t("notify.replyReady"));
+        }
       }
       void get().refreshSystemTokens();
     }
@@ -2324,7 +2359,13 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         bumpActivity(id);
         if (event.approvalRequest) {
           const req = event.approvalRequest;
-          if (get().autoApproveSysTools) {
+          // Auto-approve only the read-only tools, and only when the user has
+          // opted in — persistently (auto mode) or "Approve all" this send.
+          // The arbitrary `run_command` runner is never auto-approved.
+          if (
+            isAutoApprovableTool(req.toolName) &&
+            (get().autoApproveSysToolsAlways || get().autoApproveSysTools)
+          ) {
             void approveToolCall(req.id, true);
           } else {
             set({ pendingApproval: req });
@@ -2625,7 +2666,13 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         bumpActivity(id);
         if (event.approvalRequest) {
           const req = event.approvalRequest;
-          if (get().autoApproveSysTools) {
+          // Auto-approve only the read-only tools, and only when the user has
+          // opted in — persistently (auto mode) or "Approve all" this send.
+          // The arbitrary `run_command` runner is never auto-approved.
+          if (
+            isAutoApprovableTool(req.toolName) &&
+            (get().autoApproveSysToolsAlways || get().autoApproveSysTools)
+          ) {
             void approveToolCall(req.id, true);
           } else {
             set({ pendingApproval: req });
@@ -2882,9 +2929,16 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   resolveApproval: (approved, all = false) => {
     const req = get().pendingApproval;
     if (!req) return;
+    // "Always allow read-only tools" → persist auto mode so it survives across
+    // sends and threads (only offered for read-only tools — see ChatView).
+    if (approved && all) {
+      void setAutoApproveSysTools(true);
+    }
     set({
       pendingApproval: null,
-      ...(approved && all ? { autoApproveSysTools: true } : {}),
+      ...(approved && all
+        ? { autoApproveSysTools: true, autoApproveSysToolsAlways: true }
+        : {}),
     });
     void approveToolCall(req.id, approved);
   },

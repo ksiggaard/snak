@@ -6,6 +6,7 @@ import { DefaultModel } from "@/components/settings/DefaultModel";
 import { Memory } from "@/components/settings/Memory";
 import { Bots } from "@/components/settings/Bots";
 import { QuickActions } from "@/components/settings/QuickActions";
+import { SlashCommands } from "@/components/settings/SlashCommands";
 import { BehaviorSettings } from "@/components/settings/Behavior";
 import { Appearance } from "@/components/settings/Appearance";
 import { Language } from "@/components/settings/Language";
@@ -28,6 +29,7 @@ const COMPONENTS: Record<SettingsCategoryId, ComponentType> = {
   memory: Memory,
   bots: Bots,
   "quick-actions": QuickActions,
+  "slash-commands": SlashCommands,
   behavior: BehaviorSettings,
   appearance: Appearance,
   language: Language,

@@ -8,6 +8,7 @@ pub mod geocode;
 pub mod keys;
 pub mod languages;
 pub mod media;
+pub mod notify;
 pub mod ollama;
 pub mod quick;
 pub mod routing;

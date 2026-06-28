@@ -44,6 +44,7 @@ import { useBots } from "@/store/bots";
 import { useLibrary } from "@/store/library";
 import { usePlugins } from "@/store/plugins";
 import { useSkills } from "@/store/skills";
+import { useUserCommands } from "@/store/userCommands";
 import { useI18n, useT } from "@/store/i18n";
 import { useModels } from "@/store/models";
 import { useContextWindows } from "@/store/contextWindows";
@@ -156,6 +157,8 @@ function App() {
     // Skills (Agent Skills): load the discovered SKILL.md index so the system
     // prompt and the `skill__*` tool gate are current from first send.
     void useSkills.getState().list();
+    // User-authored slash commands: load so the composer palette has them.
+    void useUserCommands.getState().init();
   }, [
     init,
     initWorkspaces,
@@ -266,6 +269,19 @@ function App() {
     return () => {
       void unlisten.then((fn) => fn());
       void unlistenRecents.then((fn) => fn());
+    };
+  }, []);
+
+  // Click on a "reply done" OS notification (emitted by the Rust notify command
+  // after it raises the window): switch to chat and open the thread that finished.
+  useEffect(() => {
+    const unlisten = listen<string>("notify-activate", (e) => {
+      useView.getState().showChat();
+      const { threads, selectThread } = useThreads.getState();
+      if (threads.some((t) => t.id === e.payload)) void selectThread(e.payload);
+    });
+    return () => {
+      void unlisten.then((fn) => fn());
     };
   }, []);
 

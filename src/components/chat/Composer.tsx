@@ -55,12 +55,14 @@ import { isKeylessProvider, useProviders } from "@/lib/providers";
 import { takeScreenshot } from "@/lib/quick";
 import { openInTerminal } from "@/lib/terminal";
 import {
+  applyTemplate,
   availableCommands,
   matchCommands,
   parseSlashInput,
   resolveCommand,
   type SlashCommand,
 } from "@/lib/slashCommands";
+import { buildShortcutsHelp } from "@/lib/menuActions";
 import { SoundWave } from "@/components/chat/SoundWave";
 import { AudioRecorder } from "@/lib/audioRecorder";
 import { sttTranscribe } from "@/lib/audio";
@@ -70,6 +72,7 @@ import { BotAvatar } from "@/components/bots/BotAvatar";
 import { useBots } from "@/store/bots";
 import { selectRegistry, usePlugins } from "@/store/plugins";
 import { useContributions } from "@/store/contributions";
+import { useUserCommands } from "@/store/userCommands";
 import { useThreads } from "@/store/threads";
 import { useKeys } from "@/store/keys";
 import { useModels } from "@/store/models";
@@ -135,9 +138,12 @@ export function Composer({
   // Built-in commands + the enabled plugin `slash-command` contributions, read
   // off the T12 host registry (the single seam — never plugin internals).
   const slashContributions = usePlugins((s) => selectRegistry(s).slashCommands);
+  // User-authored commands (Settings → Slash commands) merge in by precedence
+  // built-in > user > plugin; the store is inited once at app mount.
+  const userCommands = useUserCommands((s) => s.commands);
   const commands = useMemo(
-    () => availableCommands(slashContributions),
-    [slashContributions],
+    () => availableCommands(slashContributions, userCommands),
+    [slashContributions, userCommands],
   );
   // Feeds slash-command output into the conversation without an LLM round-trip.
   const postNote = useThreads((s) => s.postNote);
@@ -652,31 +658,63 @@ export function Composer({
    *
    * - `terminal` — stage `args` for explicit user confirmation (the gate below),
    *   never auto-run.
+   * - `prompt` — a user command: merge its instructions template with `args`.
+   * - `compact` / `research` / `help` — built-in shortcuts to app features.
    * - `transform` — send `args` as a normal message.
    * - `note` — a contributed command with no host handler: explain it in-chat.
    */
   function runCommand(command: SlashCommand, args: string) {
-    if (command.kind === "terminal") {
-      if (!args.trim()) {
-        setAttachError(tNow("composer.terminalUsage"));
+    switch (command.kind) {
+      case "terminal":
+        if (!args.trim()) {
+          setAttachError(tNow("composer.terminalUsage"));
+          return;
+        }
+        // SAFETY GATE: never execute model/user shell input silently. Stash it
+        // and surface an explicit confirm prompt; staging only on confirm.
+        setPendingCommand({ command, args });
+        resetDraft();
         return;
-      }
-      // SAFETY GATE: never execute model/user shell input silently. Stash it and
-      // surface an explicit confirm prompt; staging only happens on confirm.
-      setPendingCommand({ command, args });
-      resetDraft();
-      return;
+      case "prompt":
+        onSend(applyTemplate(command.instructions ?? "", args), images, documents);
+        resetDraft();
+        return;
+      case "compact":
+        if (canCompact(threadMessages)) void compact();
+        else void postNote(tNow("composer.compactNothingNote"));
+        resetDraft();
+        return;
+      case "research":
+        void runResearch(args);
+        resetDraft();
+        return;
+      case "help":
+        void runHelp();
+        resetDraft();
+        return;
+      case "transform":
+        onSend(args, images, documents);
+        resetDraft();
+        return;
+      default:
+        // Unknown/declarative contribution — no executable handler in the host.
+        void postNote(
+          tNow("composer.pluginCommandNote", { command: command.command }),
+        );
+        resetDraft();
     }
-    if (command.kind === "transform") {
-      onSend(args, images, documents);
-      resetDraft();
-      return;
-    }
-    // Unknown/declarative contribution — no executable handler in the host.
-    void postNote(
-      tNow("composer.pluginCommandNote", { command: command.command }),
-    );
-    resetDraft();
+  }
+
+  /** /research: enable deep research, then send the question (or note if none). */
+  async function runResearch(args: string) {
+    await setDeepResearch(true);
+    if (args.trim()) onSend(args, images, documents);
+    else await postNote(tNow("composer.researchEnabledNote"));
+  }
+
+  /** /help: post the keyboard-shortcut cheat sheet into the thread. */
+  async function runHelp() {
+    await postNote(await buildShortcutsHelp());
   }
 
   function send() {

@@ -8,6 +8,7 @@ import {
   formatEnvText,
   gateServersForChat,
   gateServersForOffline,
+  isAutoApprovableTool,
   parseEnvText,
   parseServers,
   withBuiltins,
@@ -184,5 +185,14 @@ describe("env text helpers", () => {
     ]);
     const out = parseServers(json).find((s) => s.id === "fx");
     expect(out?.env).toEqual({ A: "1" });
+  });
+});
+
+describe("isAutoApprovableTool", () => {
+  it("auto-approves the read-only tools but never the command runner", () => {
+    expect(isAutoApprovableTool("sys__list_directory")).toBe(true);
+    expect(isAutoApprovableTool("sys__read_file")).toBe(true);
+    expect(isAutoApprovableTool("sys__run_diagnostic")).toBe(true);
+    expect(isAutoApprovableTool("sys__run_command")).toBe(false);
   });
 });

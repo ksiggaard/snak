@@ -42,16 +42,26 @@ export interface ParsedSlash {
  *
  * - `terminal` — stage `args` in an OS terminal behind a confirmation gate, then
  *   post a chat note. The reference command.
+ * - `prompt` — a user-authored prompt template: merge the saved `instructions`
+ *   with the typed `args` (via `applyTemplate`) and send as a normal message.
+ * - `compact` / `research` / `help` — built-in shortcuts to existing app
+ *   functionality (history compaction, deep-research mode, a keyboard-shortcut
+ *   cheat sheet). Handled in the Composer.
  * - `transform` — replace the composer text with `args` and send it as a normal
- *   message (e.g. a prompt-template command could rewrite here). The built-in
- *   `/send` uses this as a trivial example/escape hatch for a literal message
- *   beginning with a slash.
+ *   message (an escape hatch for a literal message beginning with a slash).
  * - `note` — a contributed command with no built-in handler: inject an
  *   explanatory assistant-side note instead of executing anything.
  */
-export type CommandKind = "terminal" | "transform" | "note";
+export type CommandKind =
+  | "terminal"
+  | "prompt"
+  | "compact"
+  | "research"
+  | "help"
+  | "transform"
+  | "note";
 
-/** A command available in the palette (built-in or plugin-contributed). */
+/** A command available in the palette (built-in, user-authored, or plugin). */
 export interface SlashCommand {
   /** The command word *with* leading slash, e.g. "/terminal". */
   command: string;
@@ -60,9 +70,28 @@ export interface SlashCommand {
   /** How the Composer should execute it. */
   kind: CommandKind;
   /** Where it came from (for the palette badge / debugging). */
-  source: "builtin" | "plugin";
+  source: "builtin" | "plugin" | "user";
   /** True if it needs an argument string to do anything. */
   requiresArgs: boolean;
+  /** Prompt template for `kind: "prompt"` (user commands); may contain `{input}`. */
+  instructions?: string;
+}
+
+/**
+ * A user-authored slash command (Settings → Slash commands). Three fields: the
+ * trigger word, an input hint (documents the expected argument, shown in the
+ * palette), and the instructions template. Stored as JSON in the `settings`
+ * table and sent to the model as a prompt template — never executed as code.
+ */
+export interface UserSlashCommand {
+  /** Stable id (crypto.randomUUID), used as the React key and for edits. */
+  id: string;
+  /** The command word, e.g. "/proof-read" (leading slash, normalized on save). */
+  command: string;
+  /** Hint for the expected argument; shown as the palette description. */
+  input: string;
+  /** Prompt template for how to handle the request; may contain `{input}`. */
+  instructions: string;
 }
 
 /** Built-in commands shipped with the app (behavior keyed by name). */
@@ -75,7 +104,34 @@ export const BUILTIN_COMMANDS: SlashCommand[] = [
     source: "builtin",
     requiresArgs: true,
   },
+  {
+    command: "/compact",
+    description: "Summarize older messages to free up the context window.",
+    kind: "compact",
+    source: "builtin",
+    requiresArgs: false,
+  },
+  {
+    command: "/research",
+    description:
+      "Turn on deep research and send your question — the model dispatches subagents.",
+    kind: "research",
+    source: "builtin",
+    requiresArgs: false,
+  },
+  {
+    command: "/help",
+    description: "Show keyboard shortcuts.",
+    kind: "help",
+    source: "builtin",
+    requiresArgs: false,
+  },
 ];
+
+/** Built-in command names — used to block user commands from shadowing them. */
+export const BUILTIN_COMMAND_NAMES: string[] = BUILTIN_COMMANDS.map((c) =>
+  normalizeName(c.command),
+);
 
 /** Normalize a command word: strip a single leading slash, lowercase. */
 function normalizeName(word: string): string {
@@ -84,6 +140,19 @@ function normalizeName(word: string): string {
 
 /** A valid command word is `/` + letters/digits/`-`/`_` (no spaces). */
 const COMMAND_WORD = /^\/[A-Za-z0-9][A-Za-z0-9_-]*$/;
+
+/**
+ * Normalize a user-typed command word to canonical `/lowercase`, or `null` if it
+ * isn't a syntactically valid command word. Used by the settings editor to
+ * validate and store user commands consistently with the palette.
+ */
+export function normalizeUserCommand(raw: string): string | null {
+  const trimmed = (raw ?? "").trim();
+  if (trimmed === "") return null;
+  const word = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  if (!COMMAND_WORD.test(word)) return null;
+  return `/${normalizeName(word)}`;
+}
 
 /**
  * Parse a raw composer string into a slash command, or `null` if it isn't one.
@@ -108,23 +177,40 @@ export function parseSlashInput(raw: string): ParsedSlash | null {
 }
 
 /**
- * The full set of available commands: built-ins plus enabled plugin
- * contributions. Plugin commands are deduped against built-ins (a built-in of
- * the same name wins) and given the `note` kind unless they match a known
- * built-in handler name — they're declarative, so we never execute their code.
+ * The full set of available commands, by precedence **built-in > user > plugin**
+ * (a higher-precedence command of the same name wins). User commands run their
+ * `instructions` template (`kind: "prompt"`); plugin contributions are
+ * declarative (`kind: "note"`) — we never execute their code.
  */
 export function availableCommands(
   contributions: SlashCommandContribution[],
+  userCommands: UserSlashCommand[] = [],
 ): SlashCommand[] {
   const byName = new Map<string, SlashCommand>();
   for (const c of BUILTIN_COMMANDS) {
     byName.set(normalizeName(c.command), c);
   }
+  for (const uc of userCommands) {
+    const raw = (uc.command ?? "").trim();
+    if (raw === "") continue;
+    const word = raw.startsWith("/") ? raw : `/${raw}`;
+    if (!COMMAND_WORD.test(word)) continue;
+    const name = normalizeName(word);
+    if (byName.has(name)) continue; // built-in wins
+    byName.set(name, {
+      command: `/${name}`,
+      description: (uc.input ?? "").trim() || "User command",
+      kind: "prompt",
+      source: "user",
+      requiresArgs: false,
+      instructions: uc.instructions ?? "",
+    });
+  }
   for (const c of contributions) {
     const word = (c.command ?? "").trim();
     if (word === "") continue;
     const name = normalizeName(word);
-    if (byName.has(name)) continue; // built-in of the same name wins
+    if (byName.has(name)) continue; // built-in or user of the same name wins
     if (!COMMAND_WORD.test(word.startsWith("/") ? word : `/${word}`)) continue;
     byName.set(name, {
       command: `/${name}`,
@@ -138,6 +224,50 @@ export function availableCommands(
   return Array.from(byName.values()).sort((a, b) =>
     a.command.localeCompare(b.command),
   );
+}
+
+/**
+ * Combine a user command's instructions template with the typed args. If the
+ * template contains `{input}`, the args are substituted there; otherwise they're
+ * appended after the instructions. With no args, the template is sent as-is.
+ */
+export function applyTemplate(instructions: string, args: string): string {
+  if (instructions.includes("{input}")) {
+    // Function replacer so `$` sequences in args aren't treated as patterns.
+    return instructions.replace(/\{input\}/g, () => args);
+  }
+  return args.trim() ? `${instructions}\n\n${args}` : instructions;
+}
+
+/**
+ * Parse the stored user-commands JSON into a clean list. Tolerant: returns `[]`
+ * for null/empty/malformed input and drops entries without a command word.
+ */
+export function parseUserCommands(
+  json: string | null | undefined,
+): UserSlashCommand[] {
+  if (!json) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  const out: UserSlashCommand[] = [];
+  for (const entry of parsed) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const e = entry as Record<string, unknown>;
+    const command = typeof e.command === "string" ? e.command : "";
+    if (!command.trim()) continue;
+    out.push({
+      id: typeof e.id === "string" && e.id ? e.id : crypto.randomUUID(),
+      command,
+      input: typeof e.input === "string" ? e.input : "",
+      instructions: typeof e.instructions === "string" ? e.instructions : "",
+    });
+  }
+  return out;
 }
 
 /**

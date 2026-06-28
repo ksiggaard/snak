@@ -318,9 +318,10 @@ describe("isModelOutput", () => {
         ev({
           approvalRequest: {
             id: "1",
-            toolName: "sys",
+            toolName: "sys__read_file",
             summary: "Read file",
             detail: "/etc/hosts",
+            explanation: "",
           },
         }),
       ),

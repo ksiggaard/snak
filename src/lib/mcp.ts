@@ -27,6 +27,23 @@ export const MCP_SERVERS_KEY = "mcp_servers";
  */
 export const ALLOW_CLOUD_SYS_TOOLS_KEY = "allow_cloud_sys_tools";
 
+/**
+ * Settings key for the persisted "auto mode": when `true`, the read-only
+ * system-diagnostics tools run without a per-call approval prompt (the user's
+ * "Always allow" choice survives across messages and threads). It NEVER covers
+ * the arbitrary `sys__run_command` runner — see `isAutoApprovableTool`.
+ */
+export const AUTO_APPROVE_SYS_TOOLS_KEY = "auto_approve_sys_tools";
+
+/**
+ * The one `sys__*` tool that is never auto-approved: the arbitrary command
+ * runner. It isn't read-only by construction, so it always requires an explicit
+ * per-call OK even when auto mode is on. Pure — unit-tested.
+ */
+export function isAutoApprovableTool(toolName: string): boolean {
+  return toolName !== "sys__run_command";
+}
+
 export type McpTransport = "builtin" | "stdio" | "http";
 
 export interface McpServer {
@@ -229,6 +246,16 @@ export async function loadAllowCloudSysTools(): Promise<boolean> {
 /** Persist the cloud opt-in for system diagnostics. */
 export async function setAllowCloudSysTools(allow: boolean): Promise<void> {
   await setSetting(ALLOW_CLOUD_SYS_TOOLS_KEY, allow ? "true" : "false");
+}
+
+/** Whether read-only system tools auto-run without a per-call prompt (off by default). */
+export async function loadAutoApproveSysTools(): Promise<boolean> {
+  return (await getSetting(AUTO_APPROVE_SYS_TOOLS_KEY)) === "true";
+}
+
+/** Persist the auto-approve ("auto mode") choice for read-only system tools. */
+export async function setAutoApproveSysTools(auto: boolean): Promise<void> {
+  await setSetting(AUTO_APPROVE_SYS_TOOLS_KEY, auto ? "true" : "false");
 }
 
 /**

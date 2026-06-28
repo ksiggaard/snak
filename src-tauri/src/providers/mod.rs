@@ -299,13 +299,21 @@ impl StreamDelta {
     }
 
     /// A request for the user to approve a gated tool call before it runs.
-    pub(crate) fn approval(call: &ToolCall, summary: String, detail: String) -> Self {
+    pub(crate) fn approval(
+        call: &ToolCall,
+        summary: String,
+        detail: String,
+        explanation: String,
+        warning: Option<String>,
+    ) -> Self {
         Self {
             approval_request: Some(ApprovalRequest {
                 id: call.id.clone(),
                 tool_name: call.name.clone(),
                 summary,
                 detail,
+                explanation,
+                warning,
             }),
             ..Default::default()
         }
@@ -323,6 +331,12 @@ pub struct ApprovalRequest {
     pub summary: String,
     /// The exact target — a path or the resolved command line.
     pub detail: String,
+    /// Optional plain-English description of what the call does (the model's
+    /// `explanation` for `run_command`; empty for the read-only tools).
+    pub explanation: String,
+    /// A risk warning when the call is not read-only (e.g. a `run_command` that
+    /// writes or deletes); absent for the read-only tools.
+    pub warning: Option<String>,
 }
 
 /// A compact, display-oriented view of a tool call, streamed to the UI and
