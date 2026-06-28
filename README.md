@@ -192,13 +192,40 @@ Pushing a version tag builds installers for **Linux, macOS and Windows** on GitH
 
 3. CI builds the three platforms in parallel and **auto-publishes** the release once all
    succeed — a universal `.dmg` (macOS), `.exe` + `.msi` (Windows), and `.deb`/`.rpm`/`.AppImage`
-   (Linux). No secrets are required.
+   (Linux), plus a signed `latest.json` the in-app updater reads.
 
-> **Unsigned builds:** the installers are not yet code-signed, so the OS shows a one-time
+> **Unsigned builds:** the installers are not OS-code-signed, so the OS shows a one-time
 > warning. On **macOS**, right-click the app → **Open** (or
 > `xattr -dr com.apple.quarantine /Applications/snak.app`). On **Windows**, click
-> **More info → Run anyway** on the SmartScreen prompt. Real signing/notarization can be
-> added later alongside the in-app updater.
+> **More info → Run anyway** on the SmartScreen prompt. (This is separate from the updater
+> signing below; OS code-signing/notarization can be added later.)
+
+### In-app updater
+
+On startup (and from **Settings → Updates**) snak checks the latest GitHub release and, if a
+newer build exists, prompts to download, install, and relaunch — via
+[`tauri-plugin-updater`](https://v2.tauri.app/plugin/updater/). It reads the signed
+`latest.json` from `…/releases/latest/download/latest.json`, so the release must be **published**
+(the pipeline auto-publishes). Updates apply to the macOS/Windows installers and the Linux
+**AppImage**; `.deb`/`.rpm` users update via their package manager.
+
+The updater requires a **minisign signing key** (separate from OS code-signing). One-time setup:
+
+```bash
+# Generate the keypair (private key → ~/.tauri/snak.key, public key → ~/.tauri/snak.key.pub)
+npm run tauri signer generate -- -w ~/.tauri/snak.key
+
+# Put the PUBLIC key in src-tauri/tauri.conf.json under plugins.updater.pubkey
+# Then store the PRIVATE key + its password as repo secrets so CI can sign releases:
+gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/snak.key
+gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD   # paste the password (empty if none)
+```
+
+> **Heads up:** because `bundle.createUpdaterArtifacts` is enabled, a local `npm run tauri build`
+> now also needs the signing key in the environment:
+> `export TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/snak.key)" TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""`.
+> `npm run tauri dev` is unaffected. Keep `~/.tauri/snak.key` backed up — losing it means existing
+> installs won't accept future updates.
 
 ### Local models with Ollama
 

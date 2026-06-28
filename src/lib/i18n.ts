@@ -457,10 +457,23 @@ export const en = {
   "settings.nav.plugins": "Plugins",
   "settings.nav.audio": "Audio",
   "settings.nav.planner": "Planner",
+  "settings.nav.updates": "Updates",
   "settings.nav.bots": "Personas",
   "settings.nav.quickActions": "Quick actions",
   "settings.nav.slashCommands": "Slash commands",
   "settings.nav.advanced": "Advanced",
+
+  // --- Settings: Updates / in-app updater ---------------------------------------------------
+  "updates.title": "Updates",
+  "updates.description": "Check for and install new versions of snak.",
+  "updates.currentVersion": "You're on version {version}.",
+  "updates.check": "Check for updates",
+  "updates.checking": "Checking…",
+  "updates.uptodate": "You're on the latest version.",
+  "update.availableTitle": "Update available",
+  "update.availableBody":
+    "Version {version} is available. Download, install and restart now?",
+  "update.install": "Install & restart",
 
   // --- Settings: Advanced (T55) -------------------------------------------------------------
   "advanced.title": "Advanced",

@@ -23,6 +23,11 @@ tauri-plugin-opener = "2"
 # Native "Save as…" dialog for downloading shared images to disk (T44).
 tauri-plugin-dialog = "2"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
+# In-app auto-updater: checks the GitHub release `latest.json`, then downloads
+# and installs a newer signed build. `process` provides `relaunch()` to restart
+# the app once the update is applied.
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # HTTP client for provider APIs. rustls avoids a system TLS dependency on the

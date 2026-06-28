@@ -33,6 +33,7 @@ import {
   type MenuAction,
 } from "@/lib/menuActions";
 import { setGlobalShortcut, type QuickPayload } from "@/lib/quick";
+import { checkForUpdate } from "@/lib/update";
 import {
   QUICK_RECENTS_EVENT,
   QUICK_RECENTS_REQUEST_EVENT,
@@ -159,6 +160,9 @@ function App() {
     void useSkills.getState().list();
     // User-authored slash commands: load so the composer palette has them.
     void useUserCommands.getState().init();
+    // In-app updater: silently check GitHub's latest release once at startup; if
+    // a newer signed build exists, prompt to download + install + relaunch.
+    void checkForUpdate({ silent: true });
   }, [
     init,
     initWorkspaces,

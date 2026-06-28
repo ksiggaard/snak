@@ -41,9 +41,18 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU1QzdEQjM5QTcxMTU2NjIKUldSaVZoR25PZHZINVFxWktPTXgwSnhVSm5YVVJMVzZ4TkJKL1JKbGd4dlB1OXBjQmR0TUhCdVoK",
+      "endpoints": [
+        "https://github.com/ksiggaard/snak/releases/latest/download/latest.json"
+      ]
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "resources": ["resources/plugins/**/*"],
     "icon": [
       "icons/32x32.png",

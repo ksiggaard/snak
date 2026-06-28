@@ -2,6 +2,7 @@ import {
   Bot,
   Boxes,
   Brain,
+  Download,
   Languages,
   ListTodo,
   Palette,
@@ -38,6 +39,7 @@ export type SettingsCategoryId =
   | "plugins"
   | "audio"
   | "planner"
+  | "updates"
   | "advanced";
 
 export interface SettingsSection {
@@ -71,5 +73,6 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "plugins", label: "settings.nav.plugins", Icon: Puzzle },
   { id: "audio", label: "settings.nav.audio", Icon: Volume2 },
   { id: "planner", label: "settings.nav.planner", Icon: ListTodo },
+  { id: "updates", label: "settings.nav.updates", Icon: Download },
   { id: "advanced", label: "settings.nav.advanced", Icon: Wrench },
 ];

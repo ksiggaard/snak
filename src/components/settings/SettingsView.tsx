@@ -15,6 +15,7 @@ import { Skills } from "@/components/settings/Skills";
 import { Plugins } from "@/components/settings/Plugins";
 import { Audio } from "@/components/settings/Audio";
 import { PlannerModel } from "@/components/settings/PlannerModel";
+import { Updates } from "@/components/settings/Updates";
 import { Advanced } from "@/components/settings/Advanced";
 import { useSettingsNav } from "@/store/settingsNav";
 import type { SettingsCategoryId } from "@/lib/settingsSections";
@@ -38,6 +39,7 @@ const COMPONENTS: Record<SettingsCategoryId, ComponentType> = {
   plugins: Plugins,
   audio: Audio,
   planner: PlannerModel,
+  updates: Updates,
   advanced: Advanced,
 };
 
