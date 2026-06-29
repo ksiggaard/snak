@@ -1,6 +1,6 @@
 [package]
 name = "snak"
-version = "0.6.0"
+version = "0.6.1"
 description = "Multi-provider LLM chat app for KDE"
 authors = ["you"]
 edition = "2021"
