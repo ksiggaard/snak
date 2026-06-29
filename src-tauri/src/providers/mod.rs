@@ -5,7 +5,6 @@
 
 pub mod anthropic;
 pub mod gemini;
-pub mod mistral;
 pub mod ollama;
 pub mod openai;
 
@@ -493,9 +492,16 @@ pub struct CompletionRequest<'a> {
     pub api_key: &'a str,
     pub messages: &'a [ChatMessage],
     pub tools: &'a [ToolDef],
-    /// Base URL for a user-added OpenAI-compatible provider (`{base}/chat/completions`).
-    /// `None` for the five built-in providers, which use their own hardcoded endpoints.
+    /// Base URL for the configured provider. For an OpenAI-compatible provider it
+    /// is `{base}/chat/completions`; for the `anthropic`/`gemini` protocols it is
+    /// the API root (the module appends the native path), defaulting to the
+    /// official endpoint when empty/`None`.
     pub base_url: Option<&'a str>,
+    /// Wire protocol the provider speaks: `"openai"` (the default — OpenAI,
+    /// Mistral, Groq, …, via the shared chat-completions engine), `"anthropic"`
+    /// (native Messages API), or `"gemini"` (native generateContent). Ollama is
+    /// dispatched by its `provider` id, not this field. `None` ⇒ `"openai"`.
+    pub protocol: Option<&'a str>,
     /// Capture the model's reasoning/thinking this request (global setting): the
     /// provider adds the relevant request param and emits `reasoning` deltas.
     /// `false` keeps the request byte-identical to before.
@@ -506,6 +512,13 @@ pub struct CompletionRequest<'a> {
     /// 0-based agent-loop round, stamped on any trace event so the UI groups
     /// request/response pairs by round.
     pub round: u32,
+    /// JSON Schema for constrained/structured output (planner & critic calls).
+    /// When set, the provider asks the model to emit JSON conforming to it via
+    /// its native mechanism — Ollama `format`, OpenAI/Mistral `response_format`
+    /// (`json_schema`), Gemini `responseSchema`, Anthropic `output_config.format`.
+    /// `None` keeps the request byte-identical (the no-schema invariant). Only
+    /// set for tool-less planner/critic calls, so it never combines with `tools`.
+    pub response_schema: Option<&'a serde_json::Value>,
 }
 
 /// Maximum length of a string left intact in an API trace; anything longer is
@@ -646,7 +659,11 @@ pub trait Provider {
     ) -> anyhow::Result<ChatResponse>;
 }
 
-/// Dispatch a streaming completion to the named provider.
+/// Dispatch a streaming completion. Ollama (the one keyless, local built-in with
+/// its own native API) is matched by `provider` id; every other provider is a
+/// configured entry dispatched by its wire `protocol` (defaulting to OpenAI-
+/// compatible). The `anthropic`/`gemini` modules read the base URL off the
+/// request, defaulting to their official endpoint when none is configured.
 pub async fn stream(
     client: &reqwest::Client,
     provider: &str,
@@ -654,21 +671,23 @@ pub async fn stream(
     channel: &Channel<StreamDelta>,
     cancel: &AtomicBool,
 ) -> anyhow::Result<ChatResponse> {
-    match provider {
+    if provider == "ollama" {
+        return ollama::Ollama.stream(client, req, channel, cancel).await;
+    }
+    match req.protocol.unwrap_or("openai") {
         "anthropic" => {
             anthropic::Anthropic
                 .stream(client, req, channel, cancel)
                 .await
         }
-        "openai" => openai::OpenAi.stream(client, req, channel, cancel).await,
-        "mistral" => mistral::Mistral.stream(client, req, channel, cancel).await,
         "gemini" => gemini::Gemini.stream(client, req, channel, cancel).await,
-        "ollama" => ollama::Ollama.stream(client, req, channel, cancel).await,
-        // User-added OpenAI-compatible provider: any unknown id streams through the
-        // shared OpenAI engine against the base URL carried on the request.
-        other => match req.base_url {
-            Some(base) => openai::chat_completions_stream(client, base, req, channel, cancel).await,
-            None => anyhow::bail!("unknown provider: {other}"),
+        // OpenAI-compatible (OpenAI, Mistral, Groq, OpenRouter, …): the shared
+        // chat-completions engine against the configured base URL.
+        _ => match req.base_url {
+            Some(base) if !base.is_empty() => {
+                openai::chat_completions_stream(client, base, req, channel, cancel).await
+            }
+            _ => anyhow::bail!("no base URL configured for provider {provider}"),
         },
     }
 }

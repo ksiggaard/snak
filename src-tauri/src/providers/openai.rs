@@ -1,5 +1,7 @@
-//! OpenAI Chat Completions API (SSE streaming). The request/response shape is
-//! shared with Mistral via `chat_completions_stream`.
+//! OpenAI Chat Completions API (SSE streaming). `chat_completions_stream` is the
+//! shared engine for every OpenAI-compatible provider (OpenAI, Mistral, Groq,
+//! OpenRouter, a local LM Studio/vLLM server, …) — dispatched by the `"openai"`
+//! protocol against the provider's configured base URL.
 
 use std::sync::atomic::AtomicBool;
 
@@ -8,25 +10,8 @@ use tauri::ipc::Channel;
 
 use super::{
     for_each_sse_data, is_cancelled, openai_tools, parse_openai_usage, redact_trace_body,
-    send_with_retry, ChatMessage, ChatResponse, CompletionRequest, Provider, StreamDelta, ToolCall,
-    Usage,
+    send_with_retry, ChatMessage, ChatResponse, CompletionRequest, StreamDelta, ToolCall, Usage,
 };
-
-const BASE_URL: &str = "https://api.openai.com/v1";
-
-pub struct OpenAi;
-
-impl Provider for OpenAi {
-    async fn stream(
-        &self,
-        client: &reqwest::Client,
-        req: &CompletionRequest<'_>,
-        channel: &Channel<StreamDelta>,
-        cancel: &AtomicBool,
-    ) -> anyhow::Result<ChatResponse> {
-        chat_completions_stream(client, BASE_URL, req, channel, cancel).await
-    }
-}
 
 /// Build the OpenAI chat-completions `messages` array from our `ChatMessage`s,
 /// including the Rust-synthesized assistant tool-call turns and `tool` result
@@ -137,6 +122,14 @@ pub(super) async fn chat_completions_stream(
     if !req.tools.is_empty() {
         body["tools"] = serde_json::Value::Array(openai_tools(req.tools));
     }
+    // Structured output (planner/critic): OpenAI/Mistral Structured Outputs. The
+    // retry below drops it if the model/endpoint doesn't support json_schema.
+    if let Some(schema) = req.response_schema {
+        body["response_format"] = serde_json::json!({
+            "type": "json_schema",
+            "json_schema": { "name": "plan", "schema": schema, "strict": true },
+        });
+    }
 
     // Developer trace: surface the exact (redacted) request before sending.
     if req.trace {
@@ -147,7 +140,7 @@ pub(super) async fn chat_completions_stream(
         ));
     }
 
-    let resp = send_with_retry(
+    let mut resp = send_with_retry(
         client
             .post(format!("{base_url}/chat/completions"))
             .bearer_auth(req.api_key)
@@ -156,6 +149,23 @@ pub(super) async fn chat_completions_stream(
     )
     .await
     .context("chat completions request failed")?;
+
+    // Resilience: structured output (response_format) 400s on models/endpoints
+    // that don't support json_schema. Drop it and retry once unconstrained.
+    if !resp.status().is_success() && req.response_schema.is_some() {
+        if let Some(o) = body.as_object_mut() {
+            o.remove("response_format");
+        }
+        resp = send_with_retry(
+            client
+                .post(format!("{base_url}/chat/completions"))
+                .bearer_auth(req.api_key)
+                .json(&body),
+            cancel,
+        )
+        .await
+        .context("chat completions retry failed")?;
+    }
 
     let status = resp.status();
     if !status.is_success() {

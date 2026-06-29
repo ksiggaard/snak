@@ -203,6 +203,9 @@ export async function chatStream(
     notes?: string | null;
     capabilities?: string[];
   }[],
+  // JSON Schema for structured/constrained output (planner & critic calls). The
+  // backend maps it to each provider's native mechanism. Omit for normal chat.
+  responseSchema?: object,
 ): Promise<ChatResult> {
   const channel = new Channel<StreamEvent>();
   channel.onmessage = (msg) => onDelta(msg);
@@ -213,12 +216,15 @@ export async function chatStream(
   // connectivity store here so `send()`'s call site stays unchanged.
   const { status, forceOffline } = useConnectivity.getState();
   const offline = deriveOffline(status, forceOffline);
-  // For a user-added OpenAI-compatible provider, the endpoint to stream against.
-  // Undefined for built-ins (Rust uses their hardcoded URLs). Resolved here so
-  // every caller (send / planner / deep-research / regenerate) gets it for free.
-  const baseUrl = useCustomProviders
+  // The configured provider's endpoint + wire protocol to stream against.
+  // Undefined for local Ollama (dispatched by id; Rust ignores both). Resolved
+  // here so every caller (send / planner / deep-research / regenerate) gets it
+  // for free.
+  const cp = useCustomProviders
     .getState()
-    .providers.find((p) => p.id === provider)?.baseUrl;
+    .providers.find((p) => p.id === provider);
+  const baseUrl = cp?.baseUrl;
+  const protocol = cp?.protocol;
   const mcpServers = skipTools
     ? undefined
     : await enabledServersForChat(provider, offline);
@@ -246,7 +252,9 @@ export async function chatStream(
     captureTrace,
     skipTools,
     plannerModels: plannerModels ?? undefined,
+    responseSchema: responseSchema ?? undefined,
     baseUrl,
+    protocol,
   });
 }
 

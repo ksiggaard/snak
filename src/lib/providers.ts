@@ -1,18 +1,16 @@
-// Provider registry (T18: sourced from enabled provider plugins).
+// Provider registry.
 //
-// The four providers are now built-in, enabled-by-default plugins of category
-// `provider` (descriptors in src-tauri/src/plugins/builtin/*.json). The *active*
-// provider list is derived from the enabled provider contributions surfaced by
-// the T12 host registry (`selectRegistry`). The hardcoded four remain as
-// `FALLBACK_PROVIDERS` / `PROVIDERS` so:
-//   1. the Rust dispatch (providers/mod.rs) always resolves these ids — disabling
-//      is a frontend-only concern, so the live streaming path never regresses;
-//   2. consumers reading before the plugin layer has loaded still get a sane,
-//      non-empty list instead of a broken/empty registry.
+// The app ships with NO cloud providers: users add them (OpenAI, Anthropic,
+// Mistral, Gemini, Groq, …) from the Custom Providers settings tab, optionally
+// starting from a preset (see `providerPresets.ts`). Each added provider is a
+// `CustomProvider` row carrying a wire `protocol`, so the Rust dispatch reuses
+// the native Anthropic/Gemini modules — not just the OpenAI-compatible engine.
 //
-// Disabling a provider plugin removes it from `useProviders()` everywhere
-// (ModelPicker, ApiKeys, send-gating). The all-disabled state is handled by the
-// consumers (see ModelPicker / Composer / ChatView).
+// The one remaining built-in is local **Ollama** — a keyless provider plugin
+// (descriptor in src-tauri/src/plugins/builtin/ollama.json) with its own daemon
+// UI. `useProviders()` returns the enabled provider contributions (just Ollama)
+// plus the user's custom providers. An empty result is a valid state (nothing
+// configured) handled by the consumers (see ModelChooser / Composer / ChatView).
 
 import { useMemo } from "react";
 import type { ProviderContribution } from "@/types/plugins";
@@ -31,57 +29,24 @@ export interface ProviderMeta {
 }
 
 /**
- * The provider ids the Rust dispatch (`providers::stream`) actually knows how to
- * stream. A `provider` plugin can only *describe* one of these — the host never
- * executes arbitrary provider code (T12 security model) — so we filter
- * contributions to this set, guarding against a malformed/unknown manifest
- * injecting an undispatchable provider into the UI.
+ * The provider ids the Rust dispatch (`providers::stream`) resolves *by id* — now
+ * just local Ollama (cloud providers are dispatched by their `protocol` instead).
+ * Provider-plugin contributions are filtered to this set, and custom-provider ids
+ * are kept clear of it so a user entry can never shadow the built-in Ollama.
  */
-export const KNOWN_PROVIDER_IDS = [
-  "anthropic",
-  "openai",
-  "mistral",
-  "gemini",
-  "ollama",
-] as const;
+export const KNOWN_PROVIDER_IDS = ["ollama"] as const;
 
 function isKnownProvider(id: string): id is Provider {
   return (KNOWN_PROVIDER_IDS as readonly string[]).includes(id);
 }
 
 /**
- * The hardcoded four. Always non-empty; used as the fallback before the plugin
- * registry has loaded and as the source of truth for the Rust dispatch ids.
- * Re-exported as `PROVIDERS` for the threads store, which reads `PROVIDERS[0]`
- * at module init for its draft defaults and needs a stable, non-empty constant.
+ * The built-in provider(s) shown before the plugin registry has loaded — now just
+ * keyless local Ollama (`keyHint: ""`, so no key row is ever rendered). Cloud
+ * providers are user-added (see `providerPresets.ts`), so this is intentionally
+ * NOT the source of the cloud list anymore.
  */
 export const FALLBACK_PROVIDERS: ProviderMeta[] = [
-  {
-    id: "anthropic",
-    label: "Anthropic",
-    defaultModel: "claude-opus-4-8",
-    keyHint: "sk-ant-…",
-  },
-  {
-    id: "openai",
-    label: "OpenAI",
-    defaultModel: "gpt-4o",
-    keyHint: "sk-…",
-  },
-  {
-    id: "mistral",
-    label: "Mistral",
-    defaultModel: "mistral-large-latest",
-    keyHint: "…",
-  },
-  {
-    id: "gemini",
-    label: "Google Gemini",
-    defaultModel: "gemini-2.0-flash",
-    keyHint: "AIza…",
-  },
-  // Keyless local provider (T37). Appended LAST so PROVIDERS[0] (the draft
-  // default) stays Anthropic. keyHint is "" — no key row is ever rendered.
   {
     id: "ollama",
     label: "Local (Ollama)",
@@ -90,7 +55,7 @@ export const FALLBACK_PROVIDERS: ProviderMeta[] = [
   },
 ];
 
-/** Back-compat alias (the threads store reads `PROVIDERS[0]` at module init). */
+/** Back-compat alias for the static built-in list. */
 export const PROVIDERS = FALLBACK_PROVIDERS;
 
 /**
@@ -175,8 +140,8 @@ export function useProviders(): ProviderMeta[] {
   // in a memo. Selecting a freshly-built registry array directly would return a
   // new reference every render and loop zustand's Object.is subscription.
   const plugins = usePlugins((s) => s.plugins);
-  // User-added OpenAI-compatible providers, appended after the built-ins. Their
-  // ids never collide with built-ins (the store excludes KNOWN_PROVIDER_IDS).
+  // User-added providers, appended after the built-in (Ollama). Their ids never
+  // collide with the built-in (the store excludes KNOWN_PROVIDER_IDS).
   const custom = useCustomProviders((s) => s.providers);
   return useMemo(
     () => [
@@ -190,4 +155,24 @@ export function useProviders(): ProviderMeta[] {
     ],
     [loaded, plugins, custom],
   );
+}
+
+/**
+ * Non-hook snapshot of the active provider list — same composition as
+ * `useProviders` (enabled provider-plugin contributions, i.e. just Ollama, plus
+ * the user's custom providers). For stores/helpers that run outside React (e.g.
+ * the threads store's default resolution). Reads the stores' current snapshots.
+ */
+export function activeProviders(): ProviderMeta[] {
+  const { loaded, plugins } = usePlugins.getState();
+  const custom = useCustomProviders.getState().providers;
+  return [
+    ...selectActiveProviders(loaded, buildRegistry(plugins).providers),
+    ...custom.map((c) => ({
+      id: c.id,
+      label: c.label,
+      defaultModel: c.defaultModel,
+      keyHint: "",
+    })),
+  ];
 }

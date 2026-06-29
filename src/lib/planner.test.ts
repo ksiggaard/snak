@@ -2,10 +2,18 @@ import { describe, expect, it } from "vitest";
 import {
   buildCriticRequest,
   buildCriticSystemPrompt,
+  buildPlannerSystemPrompt,
+  buildPlanFromSubtasks,
+  CRITIC_SCHEMA,
   executePlan,
+  LITE_PLAN_SCHEMA,
+  MAX_LITE_SUBTASKS,
   MAX_PLAN_STEPS,
   parseCriticResponse,
+  parseLitePlan,
   parsePlan,
+  PLAN_SCHEMA,
+  repairPlanJson,
   resolvePlannerTarget,
   resolveStepVariables,
   scoreModelForStep,
@@ -283,6 +291,191 @@ describe("parsePlan", () => {
     const result = parsePlan(planJson, allModels, providers, keyedProviders);
     expect(result).not.toBeNull();
     expect(result!.plan.strategy).toBe("direct");
+  });
+
+  // Stage 1: repair pass salvages almost-valid JSON from weaker models.
+  it("salvages a plan with a trailing comma", () => {
+    const planJson =
+      '```json\n{"strategy": "direct", "reasoning": "ok", "steps": [],}\n```';
+    const result = parsePlan(planJson, allModels, providers, keyedProviders);
+    expect(result).not.toBeNull();
+    expect(result!.plan.strategy).toBe("direct");
+  });
+
+  it("salvages a JSON-only reply wrapped in prose with smart quotes", () => {
+    const planJson =
+      "Here is the plan: {“strategy”: “direct”, “reasoning”: “”, “steps”: []} hope that helps";
+    const result = parsePlan(planJson, allModels, providers, keyedProviders);
+    expect(result).not.toBeNull();
+    expect(result!.plan.strategy).toBe("direct");
+  });
+});
+
+describe("repairPlanJson", () => {
+  it("strips // comments and trailing commas, normalizes smart quotes", () => {
+    const raw =
+      'prefix {\n // pick direct\n “strategy”: “direct”, “steps”: [],\n} suffix';
+    const repaired = repairPlanJson(raw);
+    expect(repaired).not.toBeNull();
+    expect(() => JSON.parse(repaired!)).not.toThrow();
+    expect(JSON.parse(repaired!).strategy).toBe("direct");
+  });
+
+  it("returns null when there's no plausible plan object", () => {
+    expect(repairPlanJson("no braces here")).toBeNull();
+    expect(repairPlanJson('{ "foo": 1 }')).toBeNull(); // no "strategy"
+  });
+});
+
+describe("buildPlannerSystemPrompt", () => {
+  // Stage 1: the model list is inlined; no list_available_models tool call.
+  it("inlines the models text and never instructs a tool call", () => {
+    const prompt = buildPlannerSystemPrompt(
+      '## Available Models\n- provider: "anthropic", model: "claude-sonnet-4-6" — Claude',
+      undefined,
+    );
+    expect(prompt).toContain('model: "claude-sonnet-4-6"');
+    expect(prompt).not.toContain("list_available_models");
+  });
+
+  it("appends user instructions when provided", () => {
+    const prompt = buildPlannerSystemPrompt(
+      "## Available Models\n- x",
+      "Prefer cheap models",
+    );
+    expect(prompt).toContain("Prefer cheap models");
+  });
+
+  it("falls back to direct-answer guidance when no models are available", () => {
+    const prompt = buildPlannerSystemPrompt("", undefined);
+    expect(prompt).toContain('"direct"');
+    expect(prompt).not.toContain("list_available_models");
+  });
+});
+
+describe("structured-output schemas (Stage 2)", () => {
+  it("PLAN_SCHEMA mirrors the Plan shape with strict objects", () => {
+    expect(PLAN_SCHEMA.type).toBe("object");
+    expect(PLAN_SCHEMA.additionalProperties).toBe(false);
+    expect([...PLAN_SCHEMA.required]).toEqual([
+      "strategy",
+      "reasoning",
+      "answer",
+      "steps",
+    ]);
+    expect([...PLAN_SCHEMA.properties.strategy.enum]).toEqual([
+      "direct",
+      "route",
+      "multi_step",
+    ]);
+    expect(PLAN_SCHEMA.properties.steps.items.additionalProperties).toBe(false);
+    expect([...PLAN_SCHEMA.properties.steps.items.required]).toEqual([
+      "id",
+      "description",
+      "provider",
+      "model",
+      "prompt",
+      "depends_on",
+    ]);
+  });
+
+  it("CRITIC_SCHEMA mirrors the critic verdict shape", () => {
+    expect([...CRITIC_SCHEMA.required]).toEqual(["approved", "issues"]);
+    expect(CRITIC_SCHEMA.properties.approved.type).toBe("boolean");
+  });
+});
+
+describe("lite planner (Stage 3)", () => {
+  const target = { provider: "ollama" as Provider, model: "qwen2.5:7b" };
+
+  it("buildPlanFromSubtasks: direct keeps the answer, no steps", () => {
+    const plan = buildPlanFromSubtasks(
+      { strategy: "direct", answer: "42", subtasks: [] },
+      "what is 6x7",
+      target,
+    );
+    expect(plan.strategy).toBe("direct");
+    expect(plan.answer).toBe("42");
+    expect(plan.steps).toHaveLength(0);
+  });
+
+  it("buildPlanFromSubtasks: multi_step builds workers + synthesis on target", () => {
+    const plan = buildPlanFromSubtasks(
+      { strategy: "multi_step", answer: "", subtasks: ["a", "b"] },
+      "compare a and b",
+      target,
+    );
+    expect(plan.strategy).toBe("multi_step");
+    expect(plan.steps).toHaveLength(3); // 2 workers + synthesis
+    const synth = plan.steps[plan.steps.length - 1];
+    expect(synth.id).toBe("synthesis");
+    expect(synth.depends_on).toEqual(["s0", "s1"]);
+    // Every step runs on the host-assigned target model (no model routing).
+    for (const s of plan.steps) {
+      expect(s.provider).toBe("ollama");
+      expect(s.model).toBe("qwen2.5:7b");
+    }
+    // Synthesis references the worker results + the original request.
+    expect(synth.prompt).toContain("{s0}");
+    expect(synth.prompt).toContain("{s1}");
+    expect(synth.prompt).toContain("compare a and b");
+  });
+
+  it("buildPlanFromSubtasks: multi_step with no subtasks degrades to direct", () => {
+    const plan = buildPlanFromSubtasks(
+      { strategy: "multi_step", answer: "", subtasks: [] },
+      "q",
+      target,
+    );
+    expect(plan.strategy).toBe("direct");
+  });
+
+  it("buildPlanFromSubtasks caps workers at MAX_LITE_SUBTASKS", () => {
+    const many = Array.from({ length: 20 }, (_, i) => `t${i}`);
+    const plan = buildPlanFromSubtasks(
+      { strategy: "multi_step", answer: "", subtasks: many },
+      "q",
+      target,
+    );
+    expect(plan.steps).toHaveLength(MAX_LITE_SUBTASKS + 1); // capped + synthesis
+  });
+
+  it("parseLitePlan: parses fenced JSON and builds a plan", () => {
+    const out = parseLitePlan(
+      '```json\n{"strategy":"multi_step","answer":"","subtasks":["x","y"]}\n```',
+      "do x and y",
+      target,
+    );
+    expect(out).not.toBeNull();
+    expect(out!.plan.steps).toHaveLength(3);
+    expect(out!.warnings).toHaveLength(0);
+  });
+
+  it("parseLitePlan: salvages almost-valid JSON via repair", () => {
+    const out = parseLitePlan(
+      'sure: {"strategy":"direct","answer":"hi","subtasks":[],}',
+      "greet",
+      target,
+    );
+    expect(out).not.toBeNull();
+    expect(out!.plan.strategy).toBe("direct");
+    expect(out!.plan.answer).toBe("hi");
+  });
+
+  it("parseLitePlan: returns null when unparseable", () => {
+    expect(parseLitePlan("no json here", "q", target)).toBeNull();
+  });
+
+  it("LITE_PLAN_SCHEMA has the expected shape", () => {
+    expect([...LITE_PLAN_SCHEMA.required]).toEqual([
+      "strategy",
+      "answer",
+      "subtasks",
+    ]);
+    expect([...LITE_PLAN_SCHEMA.properties.strategy.enum]).toEqual([
+      "direct",
+      "multi_step",
+    ]);
   });
 });
 

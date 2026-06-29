@@ -37,6 +37,25 @@ const SEED_MODELS: Row[] = [
   { id: 6, provider: "gemini", model_id: "gemini-2.0-flash", label: "Gemini 2.0 Flash", sort_order: 0, notes: "" },
 ];
 
+// Seeded settings. The app ships with no cloud providers, so web-only mode seeds
+// one demo custom provider (matching the seed thread's id + SEED_MODELS) so the
+// model picker and the simulated `chat_stream` path work out of the box. The
+// migration flag is pre-set so the built-in→custom migration (which would see the
+// stubbed `has_api_key`→true for every id) doesn't add phantom providers.
+const SEED_SETTINGS: Record<string, string> = {
+  last_thread_id: WEB_THREAD_ID,
+  providers_migrated_v2: "1",
+  custom_providers: JSON.stringify([
+    {
+      id: "anthropic",
+      label: "Anthropic",
+      protocol: "anthropic",
+      baseUrl: "https://api.anthropic.com",
+      defaultModel: "claude-opus-4-8",
+    },
+  ]),
+};
+
 const LOREM =
   "This is a seeded assistant reply used to give the web-only demo thread some " +
   "realistic height — a few sentences so the row is tall enough that a dozen of " +
@@ -88,7 +107,7 @@ function seed(): DbState {
       created_at: sqlNow(-3600 + i * 10),
     });
   }
-  return { threads, messages, settings: { last_thread_id: WEB_THREAD_ID }, models: SEED_MODELS };
+  return { threads, messages, settings: { ...SEED_SETTINGS }, models: SEED_MODELS };
 }
 
 function load(): DbState {
@@ -100,7 +119,9 @@ function load(): DbState {
         return {
           threads: s.threads,
           messages: s.messages,
-          settings: s.settings ?? {},
+          // Seed settings first so a demo provider is present even for an older
+          // stored state; persisted settings override (so web-mode edits stick).
+          settings: { ...SEED_SETTINGS, ...(s.settings ?? {}) },
           // Models aren't mutated by the app — always use the current seed list.
           models: SEED_MODELS,
         };

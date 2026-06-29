@@ -11,9 +11,20 @@ use super::{
     send_with_retry, ChatResponse, CompletionRequest, Provider, StreamDelta, ToolCall, Usage,
 };
 
-const API_URL: &str = "https://api.anthropic.com/v1/messages";
+/// Official API root; used when a provider configures no (or an empty) base URL.
+/// The native Messages path (`/v1/messages`) is appended to whatever base is in
+/// effect, so a preset or an Anthropic-compatible proxy can override it.
+const DEFAULT_BASE_URL: &str = "https://api.anthropic.com";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 const MAX_TOKENS: u32 = 4096;
+
+/// Build the native Messages endpoint URL for a (possibly empty/None) configured
+/// base, defaulting to the official root and trimming a trailing slash so the
+/// `/v1/messages` path never doubles up. Pure / unit-tested.
+fn messages_url(base: Option<&str>) -> String {
+    let base = base.filter(|s| !s.is_empty()).unwrap_or(DEFAULT_BASE_URL);
+    format!("{}/v1/messages", base.trim_end_matches('/'))
+}
 
 pub struct Anthropic;
 
@@ -122,6 +133,18 @@ impl Provider for Anthropic {
                 "display": "summarized",
             });
         }
+        // Structured output (planner/critic): constrain the reply to the given
+        // JSON Schema via Anthropic's native output_config.format. The retry
+        // below drops it if the model doesn't support structured outputs.
+        if let Some(schema) = req.response_schema {
+            body["output_config"] = serde_json::json!({
+                "format": { "type": "json_schema", "schema": schema },
+            });
+        }
+
+        // Native Messages endpoint against the configured base (preset, proxy, or
+        // the official default).
+        let url = messages_url(req.base_url);
 
         // Developer trace: surface the exact (redacted) request before sending.
         if req.trace {
@@ -134,7 +157,7 @@ impl Provider for Anthropic {
 
         let mut resp = send_with_retry(
             client
-                .post(API_URL)
+                .post(&url)
                 .header("x-api-key", req.api_key)
                 .header("anthropic-version", ANTHROPIC_VERSION)
                 .json(&body),
@@ -143,15 +166,17 @@ impl Provider for Anthropic {
         .await
         .context("anthropic request failed")?;
 
-        // Resilience: extended thinking 400s on older models. Rather than let an
-        // enabled global setting hard-break chat, drop `thinking` and retry once.
-        if !resp.status().is_success() && req.reasoning {
+        // Resilience: extended thinking 400s on older models, and structured
+        // output (output_config) 400s on models that don't support it. Rather
+        // than hard-break, drop the optional params and retry once.
+        if !resp.status().is_success() && (req.reasoning || req.response_schema.is_some()) {
             if let Some(obj) = body.as_object_mut() {
                 obj.remove("thinking");
+                obj.remove("output_config");
             }
             resp = send_with_retry(
                 client
-                    .post(API_URL)
+                    .post(&url)
                     .header("x-api-key", req.api_key)
                     .header("anthropic-version", ANTHROPIC_VERSION)
                     .json(&body),
@@ -335,6 +360,23 @@ impl PartialToolUse {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn messages_url_defaults_trims_and_overrides() {
+        assert_eq!(messages_url(None), "https://api.anthropic.com/v1/messages");
+        assert_eq!(
+            messages_url(Some("")),
+            "https://api.anthropic.com/v1/messages"
+        );
+        assert_eq!(
+            messages_url(Some("https://proxy.test")),
+            "https://proxy.test/v1/messages"
+        );
+        assert_eq!(
+            messages_url(Some("https://proxy.test/")),
+            "https://proxy.test/v1/messages"
+        );
+    }
 
     #[test]
     fn partial_tool_use_assembles_arguments() {

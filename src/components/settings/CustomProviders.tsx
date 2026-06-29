@@ -14,6 +14,8 @@ import { useKeys } from "@/store/keys";
 import { deleteApiKey, setApiKey } from "@/lib/keys";
 import { confirmDialog } from "@/store/confirm";
 import { useT } from "@/store/i18n";
+import { PROVIDER_PRESETS, presetById } from "@/lib/providerPresets";
+import type { ProviderProtocol } from "@/lib/db";
 
 /**
  * Custom providers settings: add any OpenAI-compatible endpoint (Groq,
@@ -37,6 +39,10 @@ export function CustomProviders() {
   const [endpoint, setEndpoint] = useState("");
   const [model, setModel] = useState("");
   const [key, setKey] = useState("");
+  const [protocol, setProtocol] = useState<ProviderProtocol>("openai");
+  // The chosen preset's id ("" = a fully manual entry). When set it pins the
+  // canonical provider id on add so keys/threads keep resolving.
+  const [presetId, setPresetId] = useState("");
   const [adding, setAdding] = useState(false);
 
   // Per-provider key drafts (set/replace an existing provider's key).
@@ -45,12 +51,40 @@ export function CustomProviders() {
 
   const canAdd = endpoint.trim().length > 0 && model.trim().length > 0;
 
+  // Pick a preset: pre-fill the form and pin its canonical id + protocol. The
+  // empty value is a fully manual entry (id derived from the label, OpenAI-
+  // compatible by default).
+  function pickPreset(id: string) {
+    setPresetId(id);
+    const preset = presetById(id);
+    if (preset) {
+      setName(preset.label);
+      setEndpoint(preset.baseUrl);
+      setModel(preset.defaultModel);
+      setProtocol(preset.protocol);
+      setKey("");
+    } else {
+      setProtocol("openai");
+    }
+  }
+
+  function resetForm() {
+    setName("");
+    setEndpoint("");
+    setModel("");
+    setKey("");
+    setProtocol("openai");
+    setPresetId("");
+  }
+
   async function submitAdd() {
     if (!canAdd) return;
     setAdding(true);
     try {
       const created = await add({
+        id: presetId || undefined,
         label: name.trim(),
+        protocol,
         baseUrl: endpoint.trim(),
         defaultModel: model.trim(),
       });
@@ -61,10 +95,7 @@ export function CustomProviders() {
         await setApiKey(created.id, k);
         await setPresent(created.id, true);
       }
-      setName("");
-      setEndpoint("");
-      setModel("");
-      setKey("");
+      resetForm();
     } finally {
       setAdding(false);
     }
@@ -169,6 +200,23 @@ export function CustomProviders() {
 
         {/* Add form */}
         <div className="flex flex-col gap-3 border-t pt-5">
+          {/* Preset picker — pre-fills the form for a well-known provider. */}
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="cp-preset">{t("customProviders.presetLabel")}</Label>
+            <select
+              id="cp-preset"
+              className="border-input bg-background h-9 rounded-md border px-2 text-sm"
+              value={presetId}
+              onChange={(e) => pickPreset(e.target.value)}
+            >
+              <option value="">{t("customProviders.presetCustom")}</option>
+              {PROVIDER_PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="cp-name">{t("customProviders.nameLabel")}</Label>
             <Input
@@ -191,6 +239,27 @@ export function CustomProviders() {
             <span className="text-muted-foreground text-xs">
               {t("customProviders.endpointHelp")}
             </span>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="cp-protocol">
+              {t("customProviders.protocolLabel")}
+            </Label>
+            <select
+              id="cp-protocol"
+              className="border-input bg-background h-9 rounded-md border px-2 text-sm"
+              value={protocol}
+              onChange={(e) => setProtocol(e.target.value as ProviderProtocol)}
+            >
+              <option value="openai">
+                {t("customProviders.protocolOpenai")}
+              </option>
+              <option value="anthropic">
+                {t("customProviders.protocolAnthropic")}
+              </option>
+              <option value="gemini">
+                {t("customProviders.protocolGemini")}
+              </option>
+            </select>
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="cp-model">{t("customProviders.modelLabel")}</Label>

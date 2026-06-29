@@ -1,6 +1,7 @@
 //! Local Ollama daemon (T37). **Endpoint decision:** chat goes through Ollama's
 //! OpenAI-compatible `/v1/chat/completions` endpoint, reusing the shared
-//! `openai::chat_completions_stream` driver exactly like Mistral does.
+//! `openai::chat_completions_stream` driver like the other OpenAI-compatible
+//! providers.
 //! Discovery/health use the **native** API (`/api/tags`, `/api/version`)
 //! instead, because it is richer (model size / modified date) and the compat
 //! layer adds nothing there.
@@ -105,6 +106,13 @@ async fn native_chat(
     if req.reasoning {
         body["think"] = Value::Bool(true);
     }
+    // Structured output (planner/critic): constrain the reply to the given JSON
+    // Schema via Ollama's native `format` (grammar-constrained decoding). This
+    // is the key reliability lever for small local models — they can no longer
+    // emit unparseable plan JSON. The retry below drops it if a model rejects it.
+    if let Some(schema) = req.response_schema {
+        body["format"] = schema.clone();
+    }
 
     // Developer trace: surface the exact (redacted) request before sending.
     if req.trace {
@@ -147,6 +155,16 @@ async fn native_chat(
         } else if req.reasoning && text.contains("does not support") {
             if let Some(o) = body.as_object_mut() {
                 o.remove("think");
+                true
+            } else {
+                false
+            }
+        } else if body.get("format").is_some() {
+            // Some models reject `format` (structured output). Drop it and retry
+            // unconstrained — the frontend's JSON repair / direct-answer fallback
+            // handles an unstructured reply.
+            if let Some(o) = body.as_object_mut() {
+                o.remove("format");
                 true
             } else {
                 false

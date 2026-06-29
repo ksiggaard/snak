@@ -5,6 +5,7 @@ import {
   getCustomProviders,
   setCustomProviders,
   type CustomProvider,
+  type ProviderProtocol,
 } from "@/lib/db";
 import { KNOWN_PROVIDER_IDS } from "@/lib/providers";
 import { useModels } from "@/store/models";
@@ -43,11 +44,16 @@ interface CustomProvidersState {
 
   /** Load (or reload) the custom providers from the db. */
   load: () => Promise<void>;
-  /** Add a provider (id derived from the label) and seed its default model.
-   * Returns the created provider so the caller can store its key, or null on
-   * error. */
+  /** Add a provider and seed its default model. The id is derived from the label
+   * unless an explicit `id` is given and free — presets and the built-in
+   * migration pass the canonical id (`anthropic`, `openai`, …) so an existing
+   * keychain key and prior threads keep resolving. `protocol` defaults to
+   * `"openai"`. Returns the created provider so the caller can store its key, or
+   * null on error. */
   add: (input: {
+    id?: string;
     label: string;
+    protocol?: ProviderProtocol;
     baseUrl: string;
     defaultModel: string;
   }) => Promise<CustomProvider | null>;
@@ -69,17 +75,21 @@ export const useCustomProviders = create<CustomProvidersState>((set, get) => ({
     }
   },
 
-  add: async ({ label, baseUrl, defaultModel }) => {
+  add: async ({ id: wantId, label, protocol, baseUrl, defaultModel }) => {
     try {
       const existing = get().providers;
       const taken = new Set<string>([
         ...(KNOWN_PROVIDER_IDS as readonly string[]),
         ...existing.map((p) => p.id),
       ]);
-      const id = makeId(label || baseUrl, taken);
+      // Honor an explicit canonical id when it's free (preset / migration);
+      // otherwise derive one from the label, suffixing on collision.
+      const id =
+        wantId && !taken.has(wantId) ? wantId : makeId(label || baseUrl, taken);
       const provider: CustomProvider = {
         id,
         label: label.trim() || id,
+        protocol: protocol ?? "openai",
         baseUrl: baseUrl.trim().replace(/\/+$/, ""),
         defaultModel: defaultModel.trim(),
       };

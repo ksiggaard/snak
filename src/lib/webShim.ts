@@ -7,10 +7,11 @@
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { WEB_ONLY } from "@/lib/webOnly";
 
-// The built-in plugin manifests (providers + renderers), the same JSON the Rust
-// backend seeds `list_plugins` from. Returning these (rather than []) keeps the
-// real providers (Anthropic/OpenAI/…) available so Send isn't disabled. Bundled
-// at build time via Vite's glob; each value is the parsed JSON object.
+// The built-in plugin manifests (renderers, audio, the /terminal command, and
+// the local Ollama provider), the same JSON the Rust backend seeds `list_plugins`
+// from. Cloud providers are no longer built in — web mode's chat provider comes
+// from the demo custom provider seeded in `webdb.ts`. Bundled at build time via
+// Vite's glob; each value is the parsed JSON object.
 const builtinManifests = import.meta.glob(
   "/src-tauri/src/plugins/builtin/*.json",
   { eager: true, import: "default" },
@@ -22,7 +23,7 @@ const BUILTIN_PLUGINS = Object.values(builtinManifests)
     manifest,
   }))
   // Ollama needs a local daemon that doesn't exist in the browser — drop it so
-  // web mode defaults to a cloud provider instead of an unreachable local one.
+  // web mode relies on the seeded custom provider instead of an unreachable one.
   .filter((p) => (p.manifest as { id?: string }).id !== "com.snak.ollama");
 
 const SIM_REPLY = [

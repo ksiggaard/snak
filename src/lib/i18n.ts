@@ -531,7 +531,7 @@ export const en = {
   // --- Settings: custom providers -----------------------------------------------------------
   "customProviders.title": "Custom providers",
   "customProviders.description":
-    "Add any OpenAI-compatible endpoint (Groq, OpenRouter, Together, DeepSeek, or a local server like LM Studio / vLLM). The key is stored in your OS keychain; leave it blank for a local server that needs none.",
+    "Add a provider from a preset (OpenAI, Anthropic, Gemini, Groq, …) or any compatible endpoint. Anthropic and Gemini use their native APIs; everything else is OpenAI-compatible. The key is stored in your OS keychain; leave it blank for a local server that needs none.",
   "customProviders.nameLabel": "Name",
   "customProviders.namePlaceholder": "Groq",
   "customProviders.endpointLabel": "Endpoint URL",
@@ -545,6 +545,12 @@ export const en = {
   "customProviders.none": "No custom providers yet.",
   "customProviders.removeConfirm":
     "Remove this provider? Its models and stored key are deleted.",
+  "customProviders.presetLabel": "Start from a preset",
+  "customProviders.presetCustom": "Custom (manual)",
+  "customProviders.protocolLabel": "API format",
+  "customProviders.protocolOpenai": "OpenAI-compatible",
+  "customProviders.protocolAnthropic": "Anthropic",
+  "customProviders.protocolGemini": "Gemini",
 
   // --- Settings: default model ------------------------------------------------------------------
   "defaultModel.title": "Default Model",
@@ -598,6 +604,18 @@ export const en = {
     "Select which models the planner may use and tag their capabilities. If no models are toggled on, all models are available.",
   "planner.capabilityHint":
     "Tag capabilities so the planner can match models to tasks.",
+  "planner.liteMode": "Lite mode (small models)",
+  "planner.liteModeHint":
+    "In lite mode the model only lists subtasks — snak builds the plan and assigns the models. Far easier for small/local models. Auto turns it on for local models.",
+  "planner.liteAuto": "Auto (local only)",
+  "planner.liteOn": "On",
+  "planner.liteOff": "Off",
+  "planner.testModel": "Test this model",
+  "planner.testRunning": "Testing…",
+  "planner.testOk": "Reliably produces structured plans",
+  "planner.testWeak": "May be unreliable as a planner — better as a worker",
+  "planner.testError":
+    "Test failed — check the model and key, and that the daemon is running.",
 
   // Unified progress indicator (chat + planner)
   "progress.step.generating": "Generating response",
@@ -619,6 +637,8 @@ export const en = {
     "⚠️ The plan ran but the final step produced no answer. Some steps may have failed — see the notes above.",
   "planner.note.fallback":
     "Planner model unavailable — falling back to {model}.",
+  "planner.note.directFallback":
+    "The planner couldn't produce a structured plan, so I answered directly with {model}.",
 
   // --- Settings: context windows (T53) -------------------------------------------
   "contextWindows.title": "Context windows",
@@ -665,6 +685,8 @@ export const en = {
   "ollama.inMemory": "{size} in memory",
   "ollama.unload": "Unload",
   "ollama.suggestedLabel": "Suggested models",
+  "ollama.plannerReady":
+    "Recommended for the planner (good at tools + structured output)",
 
   // --- Settings: memory / system prompt --------------------------------------------------------------
   "memory.title": "System prompt & memory",

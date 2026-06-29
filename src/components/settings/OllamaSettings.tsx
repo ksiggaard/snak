@@ -235,10 +235,19 @@ export function OllamaSettings() {
                 <button
                   key={s.name}
                   type="button"
-                  title={`${s.name} — ${s.note}`}
+                  title={
+                    s.plannerReady
+                      ? `${s.name} — ${s.note} · ${t("ollama.plannerReady")}`
+                      : `${s.name} — ${s.note}`
+                  }
                   onClick={() => void stage(s.name)}
                   className="bg-muted/40 hover:bg-muted rounded-md border px-2 py-1 font-mono text-xs transition-colors"
                 >
+                  {s.plannerReady && (
+                    <span className="text-primary mr-0.5" aria-hidden>
+                      ★
+                    </span>
+                  )}
                   {s.name}
                 </button>
               ))}
