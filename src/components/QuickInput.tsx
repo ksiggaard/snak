@@ -118,6 +118,7 @@ export function QuickInput() {
     ]).then(([dp, dm]) => {
       if (!active) return;
       const def = resolveDefault(dp, dm);
+      if (!def) return;
       setProvider(def.provider);
       setModel(def.model);
     });
