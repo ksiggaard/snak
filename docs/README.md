@@ -17,7 +17,8 @@ skills, slash commands, MCP, workspaces). Everything below points around it.
 | --- | --- |
 | [`../AGENTS.md`](../AGENTS.md) | **Canonical** architecture, conventions, layer boundary, per-subsystem detail |
 | [`../README.md`](../README.md) | Product overview, install, run, build |
-| [`../docs/`](../docs/) | Extension-authoring guides (`i18n.md`, `theming.md`) + dated `superpowers/{specs,plans}` design docs |
+| [`i18n.md`](./i18n.md), [`theming.md`](./theming.md) | Extension-authoring guides |
+| [`superpowers/`](./superpowers/) | Dated `{specs,plans}` design docs for in-flight features |
 | [`adr/`](./adr/) | Architecture Decision Records — the *why* behind the choices |
 | [`tasks/`](./tasks/) | Work items, one file per task, foldered by status (`todo`/`in-progress`/`done`) |
 
@@ -26,4 +27,4 @@ skills, slash commands, MCP, workspaces). Everything below points around it.
 - **Decisions** that are hard to reverse or that future agents will second-guess go in
   [`adr/`](./adr/) (copy `0000-template.md`). Don't bury rationale in prose only.
 - **Work** is tracked in [`tasks/`](./tasks/): a task is one file, its folder is its status.
-- **Design specs / plans** for in-flight features live under `../docs/superpowers/` (dated).
+- **Design specs / plans** for in-flight features live under [`superpowers/`](./superpowers/) (dated).
