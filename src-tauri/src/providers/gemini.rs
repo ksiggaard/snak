@@ -12,7 +12,43 @@ use super::{
     send_with_retry, ChatResponse, CompletionRequest, Provider, StreamDelta, ToolCall, Usage,
 };
 
-const BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
+/// Official API root (the `/v1beta/models` collection); used when a provider
+/// configures no (or an empty) base URL. The `{model}:streamGenerateContent`
+/// path is appended, so a preset or a Gemini-compatible proxy can override it.
+const DEFAULT_BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
+
+/// Build the streaming generateContent URL for a (possibly empty/None) configured
+/// base, defaulting to the official models root and trimming a trailing slash.
+/// Pure / unit-tested.
+fn generate_url(base: Option<&str>, model: &str) -> String {
+    let base = base.filter(|s| !s.is_empty()).unwrap_or(DEFAULT_BASE_URL);
+    format!(
+        "{}/{}:streamGenerateContent?alt=sse",
+        base.trim_end_matches('/'),
+        model
+    )
+}
+
+/// Strip JSON-Schema keywords that Gemini's `responseSchema` (a restricted
+/// OpenAPI subset) rejects — `additionalProperties`, `$schema`, `strict` —
+/// recursively, so a single canonical plan schema works across all providers.
+/// Pure / unit-tested.
+pub(crate) fn gemini_sanitize_schema(v: &serde_json::Value) -> serde_json::Value {
+    match v {
+        serde_json::Value::Object(map) => serde_json::Value::Object(
+            map.iter()
+                .filter(|(k, _)| {
+                    !matches!(k.as_str(), "additionalProperties" | "$schema" | "strict")
+                })
+                .map(|(k, val)| (k.clone(), gemini_sanitize_schema(val)))
+                .collect(),
+        ),
+        serde_json::Value::Array(items) => {
+            serde_json::Value::Array(items.iter().map(gemini_sanitize_schema).collect())
+        }
+        other => other.clone(),
+    }
+}
 
 pub struct Gemini;
 
@@ -99,10 +135,24 @@ impl Provider for Gemini {
         }
         // Reasoning capture: ask Gemini 2.x thinking models to return thought
         // summaries as `thought: true` parts (ignored by non-thinking models).
+        // generationConfig carries reasoning (thought summaries) and/or
+        // structured-output settings — build it up so the two don't clobber.
+        let mut gen_config = serde_json::Map::new();
         if req.reasoning {
-            body["generationConfig"] = serde_json::json!({
-                "thinkingConfig": { "includeThoughts": true }
-            });
+            gen_config.insert(
+                "thinkingConfig".into(),
+                serde_json::json!({ "includeThoughts": true }),
+            );
+        }
+        if let Some(schema) = req.response_schema {
+            gen_config.insert(
+                "responseMimeType".into(),
+                serde_json::Value::String("application/json".into()),
+            );
+            gen_config.insert("responseSchema".into(), gemini_sanitize_schema(schema));
+        }
+        if !gen_config.is_empty() {
+            body["generationConfig"] = serde_json::Value::Object(gen_config);
         }
 
         // Developer trace: surface the exact (redacted) request before sending.
@@ -114,16 +164,37 @@ impl Provider for Gemini {
             ));
         }
 
-        let url = format!("{BASE_URL}/{}:streamGenerateContent?alt=sse", req.model);
-        let resp = send_with_retry(
+        let url = generate_url(req.base_url, req.model);
+        let mut resp = send_with_retry(
             client
-                .post(url)
+                .post(&url)
                 .header("x-goog-api-key", req.api_key)
                 .json(&body),
             cancel,
         )
         .await
         .context("gemini request failed")?;
+
+        // Resilience: responseSchema 400s on models that don't support
+        // structured output. Drop it and retry once unconstrained.
+        if !resp.status().is_success() && req.response_schema.is_some() {
+            if let Some(gc) = body
+                .get_mut("generationConfig")
+                .and_then(|g| g.as_object_mut())
+            {
+                gc.remove("responseSchema");
+                gc.remove("responseMimeType");
+            }
+            resp = send_with_retry(
+                client
+                    .post(&url)
+                    .header("x-goog-api-key", req.api_key)
+                    .json(&body),
+                cancel,
+            )
+            .await
+            .context("gemini retry failed")?;
+        }
 
         let status = resp.status();
         if !status.is_success() {
@@ -195,5 +266,68 @@ impl Provider for Gemini {
             tool_calls,
             thinking_blocks: Vec::new(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{gemini_sanitize_schema, generate_url};
+    use serde_json::json;
+
+    #[test]
+    fn generate_url_defaults_trims_and_overrides() {
+        let official = "https://generativelanguage.googleapis.com/v1beta/models";
+        assert_eq!(
+            generate_url(None, "gemini-2.0-flash"),
+            format!("{official}/gemini-2.0-flash:streamGenerateContent?alt=sse")
+        );
+        assert_eq!(
+            generate_url(Some(""), "gemini-2.0-flash"),
+            format!("{official}/gemini-2.0-flash:streamGenerateContent?alt=sse")
+        );
+        assert_eq!(
+            generate_url(Some("https://proxy.test/"), "m"),
+            "https://proxy.test/m:streamGenerateContent?alt=sse"
+        );
+    }
+
+    #[test]
+    fn sanitize_strips_unsupported_keywords_recursively() {
+        let schema = json!({
+            "type": "object",
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "required": ["strategy", "steps"],
+            "properties": {
+                "strategy": { "type": "string", "enum": ["direct", "route"] },
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "strict": true,
+                        "properties": { "id": { "type": "string" } }
+                    }
+                }
+            }
+        });
+        let out = gemini_sanitize_schema(&schema);
+        // Unsupported keywords are gone, at every depth.
+        assert!(out.get("additionalProperties").is_none());
+        assert!(out.get("$schema").is_none());
+        assert!(out["properties"]["steps"]["items"]
+            .get("additionalProperties")
+            .is_none());
+        assert!(out["properties"]["steps"]["items"]
+            .get("strict")
+            .is_none());
+        // Supported structure is preserved.
+        assert_eq!(out["type"], "object");
+        assert_eq!(out["required"][0], "strategy");
+        assert_eq!(out["properties"]["strategy"]["enum"][0], "direct");
+        assert_eq!(
+            out["properties"]["steps"]["items"]["properties"]["id"]["type"],
+            "string"
+        );
     }
 }

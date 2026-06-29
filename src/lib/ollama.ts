@@ -93,6 +93,9 @@ export function reconcileOllamaModels(
 export interface SuggestedModel {
   name: string;
   note: string;
+  /** Recommended for the planner/orchestrator role: reliable at tool use and
+   *  structured (JSON) output, so it drives multi-step plans well. */
+  plannerReady?: boolean;
 }
 
 /**
@@ -104,6 +107,16 @@ export interface SuggestedModel {
 export const SUGGESTED_MODELS: SuggestedModel[] = [
   { name: "llama3.2:1b", note: "tiny, fast — good first model" },
   { name: "llama3.2:3b", note: "small general-purpose" },
+  {
+    name: "qwen2.5:7b",
+    note: "strong tools + JSON — good planner",
+    plannerReady: true,
+  },
+  {
+    name: "qwen2.5:14b",
+    note: "better planner (~9 GB)",
+    plannerReady: true,
+  },
   { name: "qwen2.5-coder:7b", note: "coding" },
   { name: "gemma3:4b", note: "small, vision-capable" },
   {

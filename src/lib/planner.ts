@@ -171,6 +171,10 @@ export interface PlanStep {
 export interface Plan {
   strategy: "direct" | "route" | "multi_step";
   reasoning: string;
+  /** For "direct": the complete answer. Structured (constrained) output can't
+   *  emit prose alongside the JSON, so the answer rides in this field. Empty for
+   *  route/multi_step (there, the worker/synthesis steps produce the answer). */
+  answer?: string;
   steps: PlanStep[];
 }
 
@@ -202,48 +206,51 @@ export interface CriticResult {
 /** Build the planner's system prompt.
  *  If `instructions` is non-empty it is appended as a user preference block. */
 export function buildPlannerSystemPrompt(
-  _models: Model[],
-  _providerMetas: ProviderMeta[],
+  modelsText: string,
   instructions?: string,
 ): string {
-  // The static model snapshot is intentionally omitted — the planner MUST
-  // call the list_available_models tool to get authoritative model IDs.
+  // The available models are inlined directly — no `list_available_models` tool
+  // round-trip. Small/local models often can't call tools reliably (Ollama even
+  // strips tools for models that don't support them), so a *required* tool call
+  // was the main source of hallucinated model names and blank/never-finished
+  // plans. The inlined list below is the single source of truth for IDs.
   return `You are a planning assistant with access to multiple AI models. Your job is to analyze the user's request and decide how best to handle it.
 
-## Available Models
-You have a \`list_available_models\` tool (no arguments). **You MUST call it first** before building any delegation plan. You have NO other way to know which models exist — the tool is your sole source of truth for provider IDs, model IDs, labels, and capabilities. Never guess, shorten, or invent model or provider names.
-
-Each model returned by the tool has capabilities (e.g. \`image_in\`, \`reasoning\`, \`tool_use\`). Match capabilities to subtask needs: use an \`image_in\`-capable model for image analysis, \`tool_use\` for web search, etc.
+${
+  modelsText
+    ? `${modelsText}\n\nUse ONLY the exact provider and model IDs listed above — never guess, shorten, or invent provider or model names. Each model lists its capabilities (e.g. \`image_in\`, \`reasoning\`, \`tool_use\`); match them to subtask needs (an \`image_in\` model for image analysis, a \`tool_use\` model for web search, etc.).`
+    : `No delegate models are available — use the "direct" strategy and answer the request yourself.`
+}
 
 ## Instructions
 1. Analyze the user's request. Is it simple and single-faceted, or complex and multi-faceted?
-2. **"direct" for simple questions.** Use "direct" for brief facts, straightforward explanations, simple code snippets, conversational replies, quick translations, or anything a single model can handle well in one pass. When using "direct", write the complete, substantive answer as your conversational response BEFORE the JSON plan block — the user sees this text as your final reply.
+2. **"direct" for simple questions.** Use "direct" for brief facts, straightforward explanations, simple code snippets, conversational replies, quick translations, or anything a single model can handle well in one pass. When using "direct", put your complete, substantive answer in the \`answer\` field — that text is what the user sees as your final reply.
 3. **"multi_step" — your primary mode for complex work.** Use "multi_step" when the request has multiple dimensions, requires research from different angles, has clearly independent subtasks, or would produce a better result through decomposition and synthesis. Use the capabilities each model advertises to match subtasks to the right model. The last step must synthesize all results into a coherent final answer. This is your core purpose — break down complex tasks and delegate.
 4. **"route" — a single delegation.** Use "route" (one step) when another model has a clear capability advantage for the entire task you cannot match: vision/image analysis, extremely long context, or a specialized domain you are demonstrably weaker at.
 
 ## Response Format
-For "direct" strategy: write the full answer to the user first (as you normally would), then append the plan JSON. The text before the JSON is the final answer the user sees.
-For "route" and "multi_step": output **ONLY** the JSON plan block — no prose before or after it. The worker steps produce the answer the user sees; any explanation you write here is discarded and only wastes tokens.
+Respond with a SINGLE JSON object (no prose before or after it):
+- For "direct": put your complete answer to the user in the "answer" field, and leave "steps" empty.
+- For "route" and "multi_step": leave "answer" as an empty string and fill in "steps" — the worker steps produce the answer the user sees.
 
-Examples:
-
-Direct (the conversational text IS the answer):
-The Z2 Extreme handheld market currently has three major contenders...
+Example (direct — the answer goes in the "answer" field):
 
 \`\`\`json
 {
   "strategy": "direct",
-  "reasoning": "...",
+  "reasoning": "one simple question",
+  "answer": "The Z2 Extreme handheld market currently has three major contenders...",
   "steps": []
 }
 \`\`\`
 
-Route / multi_step (JSON only — no surrounding text):
+Example (multi_step — "answer" empty, the steps drive the work):
 
 \`\`\`json
 {
   "strategy": "multi_step",
   "reasoning": "...",
+  "answer": "",
   "steps": [...]
 }
 \`\`\`
@@ -262,7 +269,7 @@ For delegation or multi-step plans, fill in the steps array. Each step has:
 - Keep step prompts self-contained — include all necessary context.
 - Keep "reasoning" to a single short sentence.
 - Never include a step that calls yourself (the planner).
-- Only output ONE JSON code block.${
+- Output only the single JSON object — nothing else.${
   instructions
     ? `\n\n## User Preferences\n${instructions}`
     : ""
@@ -431,6 +438,225 @@ export function validateSteps(
 export const MAX_PLAN_STEPS = 20;
 
 /**
+ * JSON Schema for a {@link Plan}, passed to providers for structured
+ * (constrained) output so the planner reliably emits valid JSON regardless of
+ * model size. `additionalProperties: false` + `required` on every object
+ * (OpenAI / Anthropic strict mode require it; Gemini strips it host-side).
+ * Non-recursive, no numeric/length constraints — within every provider's
+ * structured-output schema limits.
+ */
+export const PLAN_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["strategy", "reasoning", "answer", "steps"],
+  properties: {
+    strategy: { type: "string", enum: ["direct", "route", "multi_step"] },
+    reasoning: { type: "string" },
+    answer: { type: "string" },
+    steps: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "id",
+          "description",
+          "provider",
+          "model",
+          "prompt",
+          "depends_on",
+        ],
+        properties: {
+          id: { type: "string" },
+          description: { type: "string" },
+          provider: { type: "string" },
+          model: { type: "string" },
+          prompt: { type: "string" },
+          depends_on: { type: "array", items: { type: "string" } },
+        },
+      },
+    },
+  },
+} as const;
+
+/** JSON Schema for the critic verdict ({@link CriticResult}). */
+export const CRITIC_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["approved", "issues"],
+  properties: {
+    approved: { type: "boolean" },
+    issues: { type: "array", items: { type: "string" } },
+  },
+} as const;
+
+// ---------------------------------------------------------------------------
+// Lite planner (small/local models)
+// ---------------------------------------------------------------------------
+// The two hardest things for a weak model are routing (which model per step) and
+// building a correct dependency graph. The lite planner removes both: the model
+// only decides direct-vs-decompose and lists subtasks as plain strings; the HOST
+// assigns the model and wires the graph (workers in parallel → one synthesis).
+// All that's left for the model is decomposition, which small models can do.
+
+/** What a lite-mode planner model emits (much simpler than a full {@link Plan}). */
+export interface LitePlan {
+  strategy: "direct" | "multi_step";
+  /** The full answer, for "direct". Empty for "multi_step". */
+  answer: string;
+  /** Worker subtask prompts, for "multi_step". Empty for "direct". */
+  subtasks: string[];
+}
+
+/** Hard cap on lite subtasks (host-enforced), to bound fan-out + cost. */
+export const MAX_LITE_SUBTASKS = 6;
+
+/** JSON Schema for the lite-planner output (passed as structured output). */
+export const LITE_PLAN_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["strategy", "answer", "subtasks"],
+  properties: {
+    strategy: { type: "string", enum: ["direct", "multi_step"] },
+    answer: { type: "string" },
+    subtasks: { type: "array", items: { type: "string" } },
+  },
+} as const;
+
+/** Build the lite planner's (deliberately small) system prompt. */
+export function buildLitePlannerSystemPrompt(instructions?: string): string {
+  return `You are a planning assistant. Decide how to handle the user's request and reply with a SINGLE JSON object (no prose around it).
+
+## How to decide
+- If the request is simple — a fact, a short explanation, a small code snippet, a quick reply — use "direct" and put your full answer in the "answer" field. Leave "subtasks" empty.
+- If the request is complex or has several independent parts, use "multi_step": leave "answer" empty and list 2–${MAX_LITE_SUBTASKS} self-contained subtasks as plain strings in "subtasks". Each subtask must contain all the context needed to do it on its own — the worker doing it cannot see the others or the original request. A separate model will combine the results into the final answer, so do NOT add a "combine"/"synthesis" subtask yourself.
+
+Example (direct):
+\`\`\`json
+{ "strategy": "direct", "answer": "Paris is the capital of France.", "subtasks": [] }
+\`\`\`
+
+Example (multi_step):
+\`\`\`json
+{ "strategy": "multi_step", "answer": "", "subtasks": ["Summarize the main arguments FOR X, with sources.", "Summarize the main arguments AGAINST X, with sources."] }
+\`\`\`
+
+## Rules
+- Output only the JSON object — nothing else.
+- Keep subtasks focused and fully self-contained.${
+    instructions ? `\n\n## User Preferences\n${instructions}` : ""
+  }`;
+}
+
+function tryParseLite(raw: string): LitePlan | null {
+  try {
+    const obj = JSON.parse(raw);
+    if (
+      typeof obj.strategy === "string" &&
+      ["direct", "multi_step"].includes(obj.strategy)
+    ) {
+      const subtasks = Array.isArray(obj.subtasks)
+        ? (obj.subtasks as unknown[]).filter(
+            (s): s is string => typeof s === "string" && s.trim().length > 0,
+          )
+        : [];
+      return {
+        strategy: obj.strategy as LitePlan["strategy"],
+        answer: typeof obj.answer === "string" ? obj.answer : "",
+        subtasks,
+      };
+    }
+  } catch {
+    // Not a lite plan.
+  }
+  return null;
+}
+
+/** Extract a {@link LitePlan} from model output (fenced → raw → repair). */
+function extractLite(text: string): LitePlan | null {
+  const fenceRe = /```json\s*([\s\S]*?)\s*```/g;
+  let match;
+  while ((match = fenceRe.exec(text)) !== null) {
+    const lite = tryParseLite(match[1]);
+    if (lite) return lite;
+  }
+  const rawMatch = text.match(/\{[\s\S]*"strategy"[\s\S]*\}/);
+  if (rawMatch) {
+    const lite = tryParseLite(rawMatch[0]);
+    if (lite) return lite;
+  }
+  const repaired = repairPlanJson(text);
+  if (repaired) {
+    const lite = tryParseLite(repaired);
+    if (lite) return lite;
+  }
+  return null;
+}
+
+/**
+ * Parse a lite-planner reply into a full {@link Plan} the normal executor can
+ * run — returning the same `{ plan, warnings }` shape as {@link parsePlan} so the
+ * caller is uniform. Returns null when nothing parseable (the caller then does
+ * its direct-answer fallback). Pure.
+ */
+export function parseLitePlan(
+  text: string,
+  originalRequest: string,
+  target: PlannerTarget,
+): PlanResult | null {
+  const lite = extractLite(text);
+  if (!lite) return null;
+  return {
+    plan: buildPlanFromSubtasks(lite, originalRequest, target),
+    warnings: [],
+  };
+}
+
+/**
+ * Build a full {@link Plan} from a parsed {@link LitePlan}: each subtask becomes a
+ * worker step on `target`, plus a final synthesis step (also on `target`) that
+ * combines them via `{step_id}` placeholders. The host owns the graph and model
+ * assignment, so a weak model never has to. Pure / unit-tested.
+ */
+export function buildPlanFromSubtasks(
+  lite: LitePlan,
+  originalRequest: string,
+  target: PlannerTarget,
+): Plan {
+  if (lite.strategy === "direct" || lite.subtasks.length === 0) {
+    return { strategy: "direct", reasoning: "", answer: lite.answer, steps: [] };
+  }
+  const subtasks = lite.subtasks.slice(0, MAX_LITE_SUBTASKS);
+  const workers: PlanStep[] = subtasks.map((task, i) => ({
+    id: `s${i}`,
+    description: task,
+    provider: target.provider,
+    model: target.model,
+    prompt: task,
+    depends_on: [],
+  }));
+  const synthesisPrompt =
+    "Using the results below, write a single complete answer to the user's request. " +
+    "Do not mention the steps or that the work was split up.\n\n" +
+    `User request:\n${originalRequest}\n\n` +
+    workers.map((w, i) => `Result ${i + 1}:\n{${w.id}}`).join("\n\n");
+  const synthesis: PlanStep = {
+    id: "synthesis",
+    description: "Combine the results into the final answer",
+    provider: target.provider,
+    model: target.model,
+    prompt: synthesisPrompt,
+    depends_on: workers.map((w) => w.id),
+  };
+  return {
+    strategy: "multi_step",
+    reasoning: "",
+    answer: "",
+    steps: [...workers, synthesis],
+  };
+}
+
+/**
  * Parse the plan from the planner's output and validate all model references
  * against the configured models list. Returns the corrected plan with warnings
  * about any fixed hallucinations. Oversized plans are truncated to
@@ -474,7 +700,35 @@ function extractPlan(text: string): Plan | null {
     if (plan) return plan;
   }
 
+  // Repair pass: weaker models emit *almost*-valid JSON — trailing commas, smart
+  // quotes, // comments, prose around the object. Salvage the largest {…} span
+  // after a light cleanup. (Stage 2's constrained decoding makes this rarely
+  // necessary; it's the cheap safety net before the direct-answer fallback.)
+  const repaired = repairPlanJson(text);
+  if (repaired) {
+    const plan = tryParsePlan(repaired);
+    if (plan) return plan;
+  }
+
   return null;
+}
+
+/**
+ * Best-effort cleanup of almost-valid plan JSON: isolate the largest `{…}` span
+ * (which must mention `strategy`), strip `//` line comments and trailing commas,
+ * and normalize smart double-quotes to ASCII. Returns null when there's nothing
+ * plausibly a plan. Pure / unit-tested.
+ */
+export function repairPlanJson(text: string): string | null {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return null;
+  const span = text.slice(start, end + 1);
+  if (!span.includes("strategy")) return null;
+  return span
+    .replace(/\/\/[^\n\r]*/g, "") // strip // line comments
+    .replace(/[“”]/g, '"') // smart double quotes → "
+    .replace(/,(\s*[}\]])/g, "$1"); // trailing commas before } or ]
 }
 
 function tryParsePlan(raw: string): Plan | null {
@@ -512,6 +766,7 @@ function tryParsePlan(raw: string): Plan | null {
       return {
         strategy: obj.strategy as Plan["strategy"],
         reasoning: typeof obj.reasoning === "string" ? obj.reasoning : "",
+        answer: typeof obj.answer === "string" ? obj.answer : "",
         steps,
       };
     }

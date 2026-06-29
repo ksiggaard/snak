@@ -147,8 +147,13 @@ pub async fn chat_stream(
     #[allow(non_snake_case)] captureTrace: Option<bool>,
     #[allow(non_snake_case)] skipTools: Option<bool>,
     #[allow(non_snake_case)] plannerModels: Option<Vec<PlannerModelInfo>>,
-    // Base URL for a user-added OpenAI-compatible provider; absent for built-ins.
+    // JSON Schema for structured planner/critic output; None for normal chat.
+    #[allow(non_snake_case)] responseSchema: Option<serde_json::Value>,
+    // Base URL for the configured provider (OpenAI-compatible: the API root;
+    // anthropic/gemini: overrides their default endpoint). Absent ⇒ default.
     #[allow(non_snake_case)] baseUrl: Option<String>,
+    // Wire protocol: "openai" (default) | "anthropic" | "gemini". Ollama ignores it.
+    protocol: Option<String>,
     sessions: State<'_, McpSessions>,
     cancel: State<'_, CancelFlag>,
     approvals: State<'_, PendingApprovals>,
@@ -164,19 +169,15 @@ pub async fn chat_stream(
     }
 
     // Keyless providers (local Ollama) skip the keychain: the daemon ignores
-    // Authorization, so an empty key is passed through.
+    // Authorization, so an empty key is passed through. Every other provider is a
+    // configured entry whose key is optional (a local OpenAI-compatible server may
+    // need none) — a missing key streams with an empty credential and the
+    // upstream 401 surfaces as the error. Cached read: the keychain (and its OS
+    // authorization prompt) is hit at most once per provider per app run.
     let api_key = if providers::is_keyless(&provider) {
         String::new()
-    } else if baseUrl.is_some() {
-        // User-added OpenAI-compatible provider: the key is optional (a local
-        // server may need none), so a missing key streams with an empty Bearer
-        // rather than erroring.
-        keys::get_api_key_cached(&key_cache, &provider)?.unwrap_or_default()
     } else {
-        // Cached read: the keychain (and its OS authorization prompt) is hit at
-        // most once per provider per app run, not on every message send.
-        keys::get_api_key_cached(&key_cache, &provider)?
-            .ok_or_else(|| format!("No API key set for {provider}. Add one in Settings."))?
+        keys::get_api_key_cached(&key_cache, &provider)?.unwrap_or_default()
     };
 
     let client = reqwest::Client::new();
@@ -239,6 +240,7 @@ pub async fn chat_stream(
         &model,
         &api_key,
         baseUrl.as_deref(),
+        protocol.as_deref(),
         history,
         &tools,
         &servers,
@@ -253,6 +255,7 @@ pub async fn chat_stream(
         captureReasoning.unwrap_or(false),
         captureTrace.unwrap_or(false),
         &plannerModels,
+        responseSchema.as_ref(),
         &skill_rt,
     )
     .await
@@ -275,6 +278,7 @@ async fn run_agent_loop(
     model: &str,
     api_key: &str,
     base_url: Option<&str>,
+    protocol: Option<&str>,
     mut history: Vec<ChatMessage>,
     tools: &[ToolDef],
     servers: &[ServerConfig],
@@ -289,6 +293,7 @@ async fn run_agent_loop(
     reasoning: bool,
     trace: bool,
     planner_models: &Option<Vec<PlannerModelInfo>>,
+    response_schema: Option<&serde_json::Value>,
     skill_rt: &mcp::skill_tool::SkillRuntime,
 ) -> Result<ChatResponse, String> {
     // The full streamed transcript: text deltas across every round. Returned as
@@ -306,9 +311,11 @@ async fn run_agent_loop(
             messages: &history,
             tools,
             base_url,
+            protocol,
             reasoning,
             trace,
             round: _round as u32,
+            response_schema,
         };
 
         let mut resp = providers::stream(client, provider, &req, on_delta, cancel)
@@ -350,6 +357,7 @@ async fn run_agent_loop(
                     model,
                     api_key,
                     base_url,
+                    protocol,
                     tools,
                     servers,
                     sessions,
@@ -416,6 +424,36 @@ async fn run_agent_loop(
                     });
                     continue;
                 }
+            }
+
+            // Hallucinated tool name: the model asked for a tool that isn't in
+            // the exposed set (small/local models do this often, especially when
+            // they invent a model id as a tool). Tell it the tool doesn't exist —
+            // with the real list — so it can recover, rather than routing a bogus
+            // call to MCP and dead-ending.
+            if !tools.iter().any(|t| t.name == call.name) {
+                let available = tools
+                    .iter()
+                    .map(|t| t.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let _ = on_delta.send(StreamDelta::tool(call, None));
+                let _ = on_delta.send(StreamDelta::tool_done(&call.id, false));
+                results.push(ToolResult {
+                    tool_call_id: call.id.clone(),
+                    name: call.name.clone(),
+                    content: format!(
+                        "No tool named \"{}\" exists. Available tools: {}. Do not call \
+                         unavailable tools — answer using the information you already have.",
+                        call.name,
+                        if available.is_empty() {
+                            "(none)"
+                        } else {
+                            &available
+                        }
+                    ),
+                });
+                continue;
             }
 
             if mcp::requires_approval(&call.name) {
@@ -539,9 +577,11 @@ async fn run_agent_loop(
         messages: &history,
         tools: &[],
         base_url,
+        protocol,
         reasoning,
         trace,
         round: max_rounds as u32,
+        response_schema,
     };
     let mut resp = providers::stream(client, provider, &req, on_delta, cancel)
         .await
@@ -579,6 +619,7 @@ async fn run_subagents(
     model: &str,
     api_key: &str,
     base_url: Option<&str>,
+    protocol: Option<&str>,
     orchestrator_tools: &[ToolDef],
     servers: &[ServerConfig],
     sessions: &McpSessions,
@@ -662,6 +703,7 @@ async fn run_subagents(
                 model,
                 api_key,
                 base_url,
+                protocol,
                 history,
                 sub_tools,
                 servers,
@@ -679,6 +721,7 @@ async fn run_subagents(
                 false,
                 false,
                 &None, // no planner tools for subagents
+                None,  // no structured-output schema for subagents
                 skill_rt,
             ))
             .await;

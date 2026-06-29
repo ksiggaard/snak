@@ -26,13 +26,14 @@ describe("parseCustomProviders (tolerant parse)", () => {
       {
         id: "groq",
         label: "Groq",
+        protocol: "openai",
         baseUrl: "https://api.groq.com/openai/v1",
         defaultModel: "llama-3.3",
       },
     ]);
   });
 
-  it("defaults a missing label to the id and a missing model to empty string", () => {
+  it("defaults a missing label to the id, missing model to empty, missing protocol to openai", () => {
     const out = parseCustomProviders(
       JSON.stringify([{ id: "local", baseUrl: "http://localhost:1234/v1" }]),
     );
@@ -40,9 +41,27 @@ describe("parseCustomProviders (tolerant parse)", () => {
       {
         id: "local",
         label: "local",
+        protocol: "openai",
         baseUrl: "http://localhost:1234/v1",
         defaultModel: "",
       },
+    ]);
+  });
+
+  it("keeps a valid protocol and coerces an unknown one to openai", () => {
+    const out = parseCustomProviders(
+      JSON.stringify([
+        { id: "a", baseUrl: "https://a", protocol: "anthropic" },
+        { id: "g", baseUrl: "https://g", protocol: "gemini" },
+        { id: "x", baseUrl: "https://x", protocol: "bogus" },
+        { id: "y", baseUrl: "https://y" },
+      ]),
+    );
+    expect(out.map((p) => p.protocol)).toEqual([
+      "anthropic",
+      "gemini",
+      "openai",
+      "openai",
     ]);
   });
 });

@@ -147,10 +147,8 @@ pub fn validate_manifest(m: &PluginManifest) -> Result<(), String> {
 /// it flows through the same `parse_manifest` validation path as user plugins.
 fn builtin_manifests() -> Vec<PluginManifest> {
     const BUILTINS: &[&str] = &[
-        include_str!("builtin/anthropic.json"),
-        include_str!("builtin/openai.json"),
-        include_str!("builtin/mistral.json"),
-        include_str!("builtin/gemini.json"),
+        // Local Ollama is the only built-in `provider` plugin; the cloud
+        // providers are now user-added custom providers (see lib/providerPresets).
         include_str!("builtin/ollama.json"),
         include_str!("builtin/terminal.json"),
         include_str!("builtin/youtube.json"),
@@ -398,13 +396,14 @@ mod tests {
     #[test]
     fn all_builtins_valid_with_expected_default_enablement() {
         let builtins = builtin_manifests();
-        // Five provider plugins (T18/T37) + the /terminal slash-command plugin
-        // (T14) + two renderer plugins (youtube, artifacts) + the audio plugin
-        // (TTS/STT, disabled by default). Mermaid, charts, and maps migrated to
-        // runtime plugins (Phase B), so they are no longer declarative built-ins.
-        assert_eq!(builtins.len(), 9, "expected 9 built-in plugins");
+        // One provider plugin (local Ollama — the cloud providers are now
+        // user-added custom providers) + the /terminal slash-command plugin (T14)
+        // + two renderer plugins (youtube, artifacts) + the audio plugin (TTS/STT,
+        // disabled by default). Mermaid, charts, and maps migrated to runtime
+        // plugins (Phase B), so they are no longer declarative built-ins.
+        assert_eq!(builtins.len(), 5, "expected 5 built-in plugins");
         let providers = builtins.iter().filter(|m| m.category == "provider").count();
-        assert_eq!(providers, 5, "expected 5 built-in providers");
+        assert_eq!(providers, 1, "expected 1 built-in provider (ollama)");
         for m in &builtins {
             validate_manifest(m).expect("built-in must validate");
             if m.id == "com.snak.audio" {

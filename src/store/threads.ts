@@ -82,10 +82,15 @@ import { useModels } from "@/store/models";
 import { useOllama } from "@/store/ollama";
 import {
   buildPlannerSystemPrompt,
+  buildLitePlannerSystemPrompt,
   buildCriticSystemPrompt,
   buildCriticRequest,
   parsePlan,
+  parseLitePlan,
   parseCriticResponse,
+  PLAN_SCHEMA,
+  LITE_PLAN_SCHEMA,
+  CRITIC_SCHEMA,
   executePlan,
   stripPlanJsonFence,
   resolvePlannerTarget,
@@ -105,7 +110,9 @@ import {
   isAutoApprovableTool,
 } from "@/lib/mcp";
 import { t } from "@/store/i18n";
-import { isKeylessProvider, PROVIDERS } from "@/lib/providers";
+import { activeProviders, isKeylessProvider } from "@/lib/providers";
+import { useCustomProviders } from "@/store/customProviders";
+import { migrateBuiltinProviders } from "@/lib/migrateProviders";
 import { createGate } from "@/lib/concurrency";
 import { evaluateStale, STALE_CHECK_MS } from "@/lib/staleness";
 import { deriveOffline, useConnectivity } from "@/store/connectivity";
@@ -289,17 +296,40 @@ export interface DefaultModel {
 }
 
 /**
- * Resolve the persisted default (the `default_provider` / `default_model`
- * settings strings) into a concrete provider+model, falling back to the first
- * built-in provider when unset. Pure. The two keys are always written together
- * by `setDefaultModel`, so they are either both present or both absent.
+ * Resolve the persisted default (`default_provider` / `default_model` settings
+ * strings) into a concrete provider+model, or `null` when unset. Pure. The two
+ * keys are always written together by `setDefaultModel`, so they are either both
+ * present or both absent. (`effectiveDefault` layers availability/fallback on it.)
  */
 export function resolveDefault(
   provider: string | null,
   model: string | null,
+): DefaultModel | null {
+  return provider && model ? { provider: provider as Provider, model } : null;
+}
+
+/**
+ * The provider+model a draft should start on: the persisted default when its
+ * provider is still configured, else the first configured custom provider, else
+ * any available provider (e.g. local Ollama), else empty — `{ provider: "",
+ * model: "" }`, which the composer renders as its "no providers" state. Reads the
+ * live provider stores, so call it at action time, not at module init.
+ */
+function effectiveDefault(
+  provider: string | null,
+  model: string | null,
 ): DefaultModel {
-  if (provider && model) return { provider: provider as Provider, model };
-  return { provider: PROVIDERS[0].id, model: PROVIDERS[0].defaultModel };
+  const available = activeProviders();
+  const persisted = resolveDefault(provider, model);
+  if (persisted && available.some((p) => p.id === persisted.provider)) {
+    return persisted;
+  }
+  // Prefer a user-configured provider over the local Ollama fallback.
+  const customs = useCustomProviders.getState().providers;
+  const first = customs[0] ?? available[0];
+  return first
+    ? { provider: first.id, model: first.defaultModel }
+    : { provider: "", model: "" };
 }
 
 interface ThreadsState {
@@ -753,12 +783,14 @@ export const useThreads = create<ThreadsState>((set, get) => ({
   threads: [],
   currentThreadId: null,
   messages: [],
-  draftProvider: PROVIDERS[0].id,
-  draftModel: PROVIDERS[0].defaultModel,
-  defaultProvider: PROVIDERS[0].id,
-  defaultModel: PROVIDERS[0].defaultModel,
-  plannerProvider: PROVIDERS[0].id,
-  plannerModel: PROVIDERS[0].defaultModel,
+  // Empty until init() resolves the persisted/first-available default; the
+  // composer renders an empty provider as its "no providers configured" state.
+  draftProvider: "",
+  draftModel: "",
+  defaultProvider: "",
+  defaultModel: "",
+  plannerProvider: "",
+  plannerModel: "",
   plannerDefault: false,
   draftUsePlanner: false,
   criticProvider: null,
@@ -804,20 +836,28 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     await purgeEphemeralThreads();
     const threads = await listThreads();
     set({ threads, initialized: true });
+    // One-time migration of formerly-built-in cloud providers the user has a key
+    // for (reuses canonical ids so keys + threads keep working). Custom providers
+    // back the default resolution below (the app ships with no cloud providers),
+    // so run the migration and load them before picking a default.
+    const migrated = await migrateBuiltinProviders();
+    await useCustomProviders.getState().load();
+    // Reflect the migrated providers' stored keys in the presence cache + store.
+    for (const id of migrated) await useKeys.getState().setPresent(id, true);
     // Load the persisted default and seed the draft from it before deciding
     // which thread to open, so a fresh-draft launch starts on the default.
     const [dp, dm] = await Promise.all([
       getSetting(DEFAULT_PROVIDER_KEY),
       getSetting(DEFAULT_MODEL_KEY),
     ]);
-    const def = resolveDefault(dp, dm);
+    const def = effectiveDefault(dp, dm);
     // Load planner settings.
     const [pp, pm, pdRaw] = await Promise.all([
       getSetting(PLANNER_PROVIDER_KEY),
       getSetting(PLANNER_MODEL_KEY),
       getSetting(PLANNER_DEFAULT_KEY),
     ]);
-    const plannerDef = resolveDefault(pp, pm);
+    const plannerDef = effectiveDefault(pp, pm);
     const plannerDefault = pdRaw === "1";
     // Load critic settings (null = fall back to planner model).
     const [cp, cm] = await Promise.all([
@@ -905,6 +945,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
 
   startNewChat: (opts) => {
     const usePlanner = get().plannerDefault;
+    const def = effectiveDefault(get().defaultProvider, get().defaultModel);
     set({
       currentThreadId: null,
       messages: [],
@@ -915,8 +956,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       draftDeepResearch: false,
       draftOutputType: DEFAULT_OUTPUT_TYPE,
       draftBotId: null,
-      draftProvider: get().defaultProvider,
-      draftModel: get().defaultModel,
+      draftProvider: def.provider,
+      draftModel: def.model,
       draftUsePlanner: usePlanner,
     });
     void get().refreshSystemTokens();
@@ -927,6 +968,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
 
   startNewChatInWorkspace: (workspaceId) => {
     const usePlanner = get().plannerDefault;
+    const def = effectiveDefault(get().defaultProvider, get().defaultModel);
     set({
       currentThreadId: null,
       messages: [],
@@ -937,8 +979,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       draftDeepResearch: false,
       draftOutputType: DEFAULT_OUTPUT_TYPE,
       draftBotId: null,
-      draftProvider: get().defaultProvider,
-      draftModel: get().defaultModel,
+      draftProvider: def.provider,
+      draftModel: def.model,
       draftUsePlanner: usePlanner,
     });
     void get().refreshSystemTokens();
@@ -953,6 +995,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
     const hasDefault =
       bot.default_provider !== null && bot.default_model !== null;
     const usePlanner = get().plannerDefault;
+    const def = effectiveDefault(get().defaultProvider, get().defaultModel);
     set({
       currentThreadId: null,
       messages: [],
@@ -963,8 +1006,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       draftDeepResearch: false,
       draftOutputType: DEFAULT_OUTPUT_TYPE,
       draftBotId: bot.id,
-      draftProvider: hasDefault ? bot.default_provider! : get().defaultProvider,
-      draftModel: hasDefault ? bot.default_model! : get().defaultModel,
+      draftProvider: hasDefault ? bot.default_provider! : def.provider,
+      draftModel: hasDefault ? bot.default_model! : def.model,
       draftUsePlanner: usePlanner,
     });
     void get().refreshSystemTokens();
@@ -1173,7 +1216,8 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         deriveOffline(status, forceOffline)
       ) {
         const label =
-          PROVIDERS.find((p) => p.id === effProvider)?.label ?? effProvider;
+          activeProviders().find((p) => p.id === effProvider)?.label ??
+          effProvider;
         set({ error: t("composer.offline", { provider: label }) });
         return;
       }
@@ -1315,7 +1359,11 @@ export const useThreads = create<ThreadsState>((set, get) => ({
       const keyed = useKeys.getState().present;
       const hasKey = (p: Provider) => isKeylessProvider(p) || keyed.has(p);
       // Providers usable for plan step dispatch (has key or is keyless).
-      const keyedProviders = new Set(PROVIDERS.map((p) => p.id).filter(hasKey));
+      const keyedProviders = new Set(
+        activeProviders()
+          .map((p) => p.id)
+          .filter(hasKey),
+      );
 
       // System context shared by every reply of this send (skills/global/
       // workspace); the persona block is per-reply and slots in between.
@@ -1376,13 +1424,47 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             isKeylessProvider(p) ? ollamaReady : !offline,
           ),
         );
+        // Resolve the allowed-models list the planner may delegate to (keyed +
+        // reachable right now), filtered by the user's planner_model_config, and
+        // render it as text. This list is inlined directly into the planner
+        // prompt (and the critic/revision prompts) — there is no
+        // list_available_models tool round-trip — so small/local models that
+        // can't call tools still see authoritative provider/model IDs.
+        const configRaw = await getSetting("planner_model_config");
+        const config: PlannerModelConfig | null = configRaw
+          ? (JSON.parse(configRaw) as PlannerModelConfig)
+          : null;
+        const keyedModels = allModels.filter((m) =>
+          availableProviders.has(m.provider),
+        );
+        const plannerModelsList = buildPlannerModels(keyedModels, config);
+        const modelsText =
+          plannerModelsList.length > 0
+            ? "## Available Models\n" +
+              plannerModelsList
+                .map((m) => {
+                  const caps =
+                    m.capabilities && m.capabilities.length > 0
+                      ? ` [${m.capabilities.join(", ")}]`
+                      : "";
+                  return `- provider: "${m.provider}", model: "${m.model_id}" — ${m.label}${caps}`;
+                })
+                .join("\n")
+            : "";
         const plannerInstructions =
           (await getSetting("planner_instructions")) ?? undefined;
-        const plannerPrompt = buildPlannerSystemPrompt(
-          allModels,
-          PROVIDERS,
-          plannerInstructions,
-        );
+        // Lite mode (small/local models): the model only lists subtasks; the
+        // host builds the dependency graph + assigns models (see
+        // buildPlanFromSubtasks). Default "auto" → on for keyless/local planners,
+        // which struggle most with routing + dependency graphs.
+        const liteSetting = (await getSetting("planner_lite_mode")) ?? "auto";
+        const liteMode =
+          liteSetting === "on" ||
+          (liteSetting !== "off" && isKeylessProvider(plannerProvider));
+        const plannerPrompt = liteMode
+          ? buildLitePlannerSystemPrompt(plannerInstructions)
+          : buildPlannerSystemPrompt(modelsText, plannerInstructions);
+        const plannerSchema = liteMode ? LITE_PLAN_SCHEMA : PLAN_SCHEMA;
 
         // Build API history: planner system prompt first, then shared context,
         // then the conversation history.
@@ -1440,39 +1522,19 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         // planner text comes back as `plannerResult.content`, so deltas are a
         // no-op.
         const started = Date.now();
-        const configRaw = await getSetting("planner_model_config");
-        const config: PlannerModelConfig | null = configRaw
-          ? (JSON.parse(configRaw) as PlannerModelConfig)
-          : null;
-        // Only show models the planner can actually reach right now (keyed +
-        // online for cloud, daemon-up for Ollama) — so it never delegates to a
-        // dead provider.
-        const keyedModels = allModels.filter((m) =>
-          availableProviders.has(m.provider),
-        );
-        const plannerModelsList = buildPlannerModels(keyedModels, config);
-        // Compact text snapshot of the available models, embedded into the
-        // critic + revision prompts so those calls (which don't expose the
-        // list_available_models tool) can still verify provider/model validity.
-        const modelsText =
-          plannerModelsList.length > 0
-            ? "## Available Models\n" +
-              plannerModelsList
-                .map((m) => {
-                  const caps =
-                    m.capabilities && m.capabilities.length > 0
-                      ? ` [${m.capabilities.join(", ")}]`
-                      : "";
-                  return `- provider: "${m.provider}", model: "${m.model_id}" — ${m.label}${caps}`;
-                })
-                .join("\n")
-            : "";
         // Critique rounds: how many critique/revise passes to run (0 disables
-        // the loop). Capped at 5; defaults to 2.
+        // the loop). Capped at 5. Default 2 for capable (keyed) planners, but 0
+        // for local/keyless planners — the critic's extra JSON round-trips are
+        // exactly what small models fail, and a failed critic parse forces a
+        // blind re-plan that can degrade a good plan. An explicit user setting
+        // always wins.
         const criticRoundsRaw = await getSetting("planner_critic_rounds");
+        const criticDefault = isKeylessProvider(plannerProvider) ? 0 : 2;
         const criticRounds = (() => {
-          const n = criticRoundsRaw ? parseInt(criticRoundsRaw, 10) : 2;
-          return Number.isNaN(n) ? 2 : Math.max(0, Math.min(5, n));
+          const n = criticRoundsRaw
+            ? parseInt(criticRoundsRaw, 10)
+            : criticDefault;
+          return Number.isNaN(n) ? criticDefault : Math.max(0, Math.min(5, n));
         })();
         const callPlanner = () =>
           chatStream(
@@ -1483,9 +1545,10 @@ export const useThreads = create<ThreadsState>((set, get) => ({
               if (e.text) bumpActivity(tid);
             },
             tid,
-            false,
-            false,
-            plannerModelsList,
+            false, // deepResearch
+            true, // skipTools — the planner gets no tools; the model list is inlined into the prompt
+            undefined, // plannerModels — inlined into the prompt instead
+            plannerSchema, // structured output: the model must emit valid JSON (full or lite plan)
           );
         let plannerResult: Awaited<ReturnType<typeof callPlanner>>;
         try {
@@ -1520,12 +1583,19 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         // Parse the plan. The planner phase is never shown as a message — only
         // the final answer (direct prose, or the synthesis step) surfaces, with
         // the plan attached to it as a collapsed record (PlanPanel).
-        const parseResult = parsePlan(
-          plannerResult.content,
-          allModels,
-          PROVIDERS,
-          availableProviders,
-        );
+        // Lite mode parses subtasks and builds the plan host-side; full mode
+        // parses + validates the model's own plan. Both yield { plan, warnings }.
+        const parseResult = liteMode
+          ? parseLitePlan(plannerResult.content, content, {
+              provider: plannerProvider,
+              model: plannerModel,
+            })
+          : parsePlan(
+              plannerResult.content,
+              allModels,
+              activeProviders(),
+              availableProviders,
+            );
         let plan = parseResult?.plan ?? null;
 
         // Record a usage row for a model call on a given message.
@@ -1559,8 +1629,13 @@ export const useThreads = create<ThreadsState>((set, get) => ({
         let answerMsgId = "";
 
         if (!plan || plan.strategy === "direct") {
-          // Direct (or unparseable) — the planner's own prose IS the answer.
-          const displayContent = stripPlanJsonFence(plannerResult.content);
+          // Direct: the structured plan carries the answer in `plan.answer`
+          // (constrained output can't emit prose alongside the JSON). Unparseable
+          // (!plan): fall back to whatever prose the planner produced. Either way,
+          // an empty result drops to the direct-answer fallback below.
+          const displayContent = plan
+            ? (plan.answer ?? "").trim()
+            : stripPlanJsonFence(plannerResult.content);
           if (displayContent.length > 0) {
             const directMsg = await addMessage({
               thread_id: tid,
@@ -1578,6 +1653,71 @@ export const useThreads = create<ThreadsState>((set, get) => ({
               plannerResult.model || plannerModel,
               plannerResult.usage,
             );
+          } else {
+            // The planner produced no usable prose — e.g. a JSON-only reply that
+            // failed to parse (even after repair), or it stopped early. NEVER
+            // leave the turn blank: answer the user directly with the planner
+            // model over the real conversation (planner framing dropped, tools
+            // available as in a normal send), streamed live, and say why.
+            await get().postNote(
+              t("planner.note.directFallback", {
+                model: `${plannerProvider}:${plannerModel}`,
+              }),
+            );
+            setProgress(3, `${plannerProvider}:${plannerModel}`);
+            let fbAcc = "";
+            let fbFlush = 0;
+            set({
+              streamingContent: "",
+              streamingProvider: plannerProvider,
+              streamingModel: plannerModel,
+              awaitingModel: false,
+            });
+            const fbResult = await chatStream(
+              plannerProvider,
+              plannerModel,
+              history.slice(1), // drop the planner system prompt — answer normally
+              (e) => {
+                if (!e.text) return;
+                bumpActivity(tid);
+                fbAcc += e.text;
+                const now = performance.now();
+                if (now - fbFlush > 100 && get().currentThreadId === tid) {
+                  fbFlush = now;
+                  set({
+                    streamingContent: fbAcc,
+                    streamingProvider: plannerProvider,
+                    streamingModel: plannerModel,
+                    awaitingModel: false,
+                  });
+                }
+              },
+              tid,
+              false, // deepResearch
+            );
+            if (fbResult.content.length > 0) {
+              const fbMsg = await addMessage({
+                thread_id: tid,
+                role: "assistant",
+                content: fbResult.content,
+                duration_ms: Math.round(Date.now() - started),
+                provider: plannerProvider,
+                model: plannerModel,
+                output_type: outputType,
+              });
+              answerMsgId = fbMsg.id;
+              await recordUsage(
+                fbMsg.id,
+                plannerProvider,
+                fbResult.model || plannerModel,
+                fbResult.usage,
+              );
+              set({
+                streamingContent: null,
+                streamingProvider: null,
+                streamingModel: null,
+              });
+            }
           }
           setProgress(
             3,
@@ -1603,6 +1743,7 @@ export const useThreads = create<ThreadsState>((set, get) => ({
             provider: Provider,
             model: string,
             messages: ApiMessage[],
+            responseSchema?: object,
           ) =>
             chatStream(
               provider,
@@ -1612,7 +1753,10 @@ export const useThreads = create<ThreadsState>((set, get) => ({
                 if (e.text) bumpActivity(tid);
               },
               tid,
-              false,
+              false, // deepResearch
+              true, // skipTools — critic/revision passes use no tools
+              undefined, // plannerModels
+              responseSchema,
             );
 
           // Critique loop — `criticRounds` passes (0 disables it). Skipped
@@ -1637,7 +1781,12 @@ export const useThreads = create<ThreadsState>((set, get) => ({
               { role: "system", content: buildCriticSystemPrompt(), images: [] },
               { role: "user", content: buildCriticRequest(content, plan, modelsText), images: [] },
             ];
-            const criticResult = await callHidden(criticProvider, criticModel, criticMessages);
+            const criticResult = await callHidden(
+              criticProvider,
+              criticModel,
+              criticMessages,
+              CRITIC_SCHEMA,
+            );
             const criticVerdict = parseCriticResponse(criticResult.content);
             if (criticVerdict?.approved) break;
             if (round === MAX_ROUNDS) break;
@@ -1661,8 +1810,13 @@ export const useThreads = create<ThreadsState>((set, get) => ({
               { role: "assistant", content: `Previous plan:\n\`\`\`json\n${JSON.stringify(plan)}\n\`\`\``, images: [] },
               { role: "user", content: `Critique:\n${issues}\n\n${modelsText ? modelsText + "\n\n" : ""}Please revise the plan to address these issues. Only use provider and model IDs exactly as listed in the available models above. Output only the JSON plan.`, images: [] },
             ];
-            const revisedResult = await callHidden(plannerProvider, plannerModel, replanHistory);
-            const revisedParse = parsePlan(revisedResult.content, allModels, PROVIDERS, availableProviders);
+            const revisedResult = await callHidden(
+              plannerProvider,
+              plannerModel,
+              replanHistory,
+              PLAN_SCHEMA,
+            );
+            const revisedParse = parsePlan(revisedResult.content, allModels, activeProviders(), availableProviders);
             if (!revisedParse) continue; // Couldn't parse the revision — try again.
             plan = revisedParse.plan;
             if (revisedParse.warnings.length > 0) {
@@ -1817,18 +1971,20 @@ export const useThreads = create<ThreadsState>((set, get) => ({
           if (dropped.length > 0) {
             await get().postNote(t("planner.note.stepsDropped", { ids: dropped.join(", ") }));
           }
-          // Guarantee a final answer: if the synthesis produced nothing,
-          // persist a clear message so the turn is never left blank.
-          if (!answerMsgId && !get().cancelling) {
-            const noAnswer = await addMessage({
-              thread_id: tid,
-              role: "assistant",
-              content: t("planner.note.noAnswer"),
-              provider: plannerProvider,
-              model: plannerModel,
-            });
-            answerMsgId = noAnswer.id;
-          }
+        }
+
+        // Guarantee a final answer across both paths (direct fallback or the
+        // synthesis step): if neither produced anything, persist a clear note so
+        // the turn is never left blank.
+        if (!answerMsgId && !get().cancelling) {
+          const noAnswer = await addMessage({
+            thread_id: tid,
+            role: "assistant",
+            content: t("planner.note.noAnswer"),
+            provider: plannerProvider,
+            model: plannerModel,
+          });
+          answerMsgId = noAnswer.id;
         }
 
         // Attach the final plan (collapsed PlanPanel record) + the planner's

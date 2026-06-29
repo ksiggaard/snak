@@ -798,11 +798,27 @@ export async function setQuickActions(json: string): Promise<void> {
   await setSetting(QUICK_ACTIONS_KEY, json);
 }
 
-/** A user-added OpenAI-compatible provider: an id, a label, an endpoint base URL
- * (`{baseUrl}/chat/completions`), and the model new threads default to. */
+/** Wire protocol a provider speaks. `"openai"` = the shared OpenAI-compatible
+ * chat-completions engine (OpenAI, Mistral, Groq, OpenRouter, a local LM
+ * Studio/vLLM server, …); `"anthropic"` / `"gemini"` route through the native
+ * Rust modules so their non-OpenAI request shapes are preserved. */
+export type ProviderProtocol = "openai" | "anthropic" | "gemini";
+
+/** Coerce an arbitrary value to a known protocol, defaulting to `"openai"` (the
+ * value for entries stored before the field existed). Pure. */
+export function normalizeProtocol(v: unknown): ProviderProtocol {
+  return v === "anthropic" || v === "gemini" ? v : "openai";
+}
+
+/** A configured provider: an id, a label, the wire protocol, an endpoint base URL
+ * (OpenAI-compatible: `{baseUrl}/chat/completions`; anthropic/gemini: the API
+ * root the native module appends its path to), and the model new threads default
+ * to. Since this refactor, the cloud providers users add from presets are stored
+ * here too — the app ships with none. */
 export interface CustomProvider {
   id: string;
   label: string;
+  protocol: ProviderProtocol;
   baseUrl: string;
   defaultModel: string;
 }
@@ -832,6 +848,7 @@ export function parseCustomProviders(raw: string | null): CustomProvider[] {
         out.push({
           id: p.id,
           label: (p.label as string) || p.id,
+          protocol: normalizeProtocol(p.protocol),
           baseUrl: p.baseUrl,
           defaultModel: (p.defaultModel as string) ?? "",
         });
@@ -1639,8 +1656,11 @@ export async function addModel(input: {
 }): Promise<void> {
   const db = await getDb();
   // Single statement so the sort_order computation and insert can't race.
+  // OR IGNORE makes it idempotent: seeding a provider's default model that
+  // already exists (e.g. a canonical-id preset whose model migration 006 seeded)
+  // is a silent no-op instead of a UNIQUE(provider, model_id) failure.
   await db.execute(
-    `INSERT INTO models (provider, model_id, label, sort_order, notes)
+    `INSERT OR IGNORE INTO models (provider, model_id, label, sort_order, notes)
      SELECT $1, $2, $3, COALESCE(MAX(sort_order), -1) + 1, $5
         FROM models WHERE provider = $4`,
     [

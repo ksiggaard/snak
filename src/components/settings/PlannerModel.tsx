@@ -21,6 +21,7 @@ import { useT } from "@/store/i18n";
 import { useProviders, isKeylessProvider } from "@/lib/providers";
 import { buildModelOptions, currentModelLabel } from "@/lib/modelOptions";
 import { getSetting, setSetting } from "@/lib/db";
+import { chatStream } from "@/lib/chat";
 import { ModelChooser } from "@/components/chat/ModelChooser";
 import {
   PLANNER_CAPABILITIES,
@@ -29,6 +30,15 @@ import {
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import type { Provider } from "@/types/db";
+
+/** Trivial schema used to probe whether the planner model can produce structured
+ *  JSON output — the core capability the planner depends on. */
+const PROBE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["ok"],
+  properties: { ok: { type: "boolean" } },
+} as const;
 
 /**
  * Planner model settings: the model that orchestrates complex multi-model tasks.
@@ -61,6 +71,24 @@ export function PlannerModel() {
   const [criticRounds, setCriticRounds] = useState(2);
   const [criticRoundsLoaded, setCriticRoundsLoaded] = useState(false);
 
+  // Lite mode for small/local planners (auto | on | off).
+  const [liteMode, setLiteMode] = useState<"auto" | "on" | "off">("auto");
+  const [liteModeLoaded, setLiteModeLoaded] = useState(false);
+
+  // On-demand capability preflight for the chosen planner model.
+  const [probe, setProbe] = useState<
+    "idle" | "running" | "ok" | "weak" | "error"
+  >("idle");
+  // Reset the badge when the planner model changes. Render-time adjustment (not
+  // a useEffect — the react-hooks/set-state-in-effect rule forbids the effect
+  // form for syncing local state to a changing input).
+  const plannerKey = `${plannerProvider}:${plannerModel}`;
+  const [probedKey, setProbedKey] = useState(plannerKey);
+  if (probedKey !== plannerKey) {
+    setProbedKey(plannerKey);
+    setProbe("idle");
+  }
+
   useEffect(() => {
     void getSetting("planner_instructions").then((v) => {
       setInstructions(v ?? "");
@@ -89,6 +117,13 @@ export function PlannerModel() {
     });
   }, []);
 
+  useEffect(() => {
+    void getSetting("planner_lite_mode").then((v) => {
+      if (v === "on" || v === "off" || v === "auto") setLiteMode(v);
+      setLiteModeLoaded(true);
+    });
+  }, []);
+
   const saveInstructions = (value: string) => {
     setInstructions(value);
     void setSetting("planner_instructions", value);
@@ -99,6 +134,55 @@ export function PlannerModel() {
     setCriticRounds(clamped);
     void setSetting("planner_critic_rounds", String(clamped));
   };
+
+  const saveLiteMode = (value: "auto" | "on" | "off") => {
+    setLiteMode(value);
+    void setSetting("planner_lite_mode", value);
+  };
+
+  // Capability preflight: ask the planner model for a trivial structured JSON
+  // reply and check it comes back valid. Tells the user up front whether the
+  // model can drive the planner (vs. being usable only as a worker).
+  async function runPreflight() {
+    setProbe("running");
+    try {
+      const res = await chatStream(
+        plannerProvider,
+        plannerModel,
+        [
+          {
+            role: "user",
+            content: 'Reply with the JSON {"ok": true} and nothing else.',
+            images: [],
+          },
+        ],
+        () => {},
+        "__preflight__",
+        false, // deepResearch
+        true, // skipTools
+        undefined, // plannerModels
+        PROBE_SCHEMA,
+      );
+      let parsed: unknown = null;
+      try {
+        parsed = JSON.parse(res.content.trim());
+      } catch {
+        const m = res.content.match(/\{[\s\S]*?\}/);
+        if (m) {
+          try {
+            parsed = JSON.parse(m[0]);
+          } catch {
+            /* leave null */
+          }
+        }
+      }
+      const ok =
+        !!parsed && typeof (parsed as { ok?: unknown }).ok === "boolean";
+      setProbe(ok ? "ok" : "weak");
+    } catch {
+      setProbe("error");
+    }
+  }
 
   const saveConfig = (next: PlannerModelConfig) => {
     setConfig(next);
@@ -173,6 +257,35 @@ export function PlannerModel() {
           />
         )}
 
+        {/* Capability preflight — does this model reliably produce structured plans? */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={probe === "running" || options.length === 0}
+            onClick={() => void runPreflight()}
+          >
+            {probe === "running"
+              ? t("planner.testRunning")
+              : t("planner.testModel")}
+          </Button>
+          {probe === "ok" && (
+            <span className="text-xs text-green-600 dark:text-green-400">
+              ✓ {t("planner.testOk")}
+            </span>
+          )}
+          {probe === "weak" && (
+            <span className="text-xs text-amber-600 dark:text-amber-400">
+              ⚠ {t("planner.testWeak")}
+            </span>
+          )}
+          {probe === "error" && (
+            <span className="text-destructive text-xs">
+              {t("planner.testError")}
+            </span>
+          )}
+        </div>
+
         {!hasEnoughModels && (
           <p className="text-muted-foreground text-xs">
             {t("planner.needsMoreModels")}
@@ -237,6 +350,29 @@ export function PlannerModel() {
           </select>
           <p className="text-muted-foreground text-xs">
             {t("planner.criticRoundsHint")}
+          </p>
+        </div>
+
+        {/* Lite mode (small/local models) */}
+        <div className="flex flex-col gap-2">
+          <label htmlFor="planner-lite-mode" className="text-sm leading-tight">
+            {t("planner.liteMode")}
+          </label>
+          <select
+            id="planner-lite-mode"
+            className="border-input bg-background h-9 w-44 rounded-md border px-2 text-sm"
+            value={liteMode}
+            disabled={!liteModeLoaded}
+            onChange={(e) =>
+              saveLiteMode(e.target.value as "auto" | "on" | "off")
+            }
+          >
+            <option value="auto">{t("planner.liteAuto")}</option>
+            <option value="on">{t("planner.liteOn")}</option>
+            <option value="off">{t("planner.liteOff")}</option>
+          </select>
+          <p className="text-muted-foreground text-xs">
+            {t("planner.liteModeHint")}
           </p>
         </div>
 

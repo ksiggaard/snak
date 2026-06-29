@@ -2,16 +2,11 @@
 // src-tauri/migrations/001_init.sql). Timestamps are SQLite `datetime('now')`
 // strings (UTC, "YYYY-MM-DD HH:MM:SS").
 
-// The five built-ins plus any user-added OpenAI-compatible provider id. The
-// `string & {}` arm keeps literal autocomplete for the built-ins while allowing
-// arbitrary custom ids (validated/dispatched at runtime, not in the type).
-export type Provider =
-  | "anthropic"
-  | "openai"
-  | "mistral"
-  | "gemini"
-  | "ollama"
-  | (string & {});
+// Built-in local Ollama plus any user-added provider id (the cloud providers are
+// now custom-provider entries, so their ids are ordinary strings). The
+// `string & {}` arm keeps literal autocomplete for `ollama` while allowing
+// arbitrary ids (validated/dispatched at runtime, not in the type).
+export type Provider = "ollama" | (string & {});
 
 export type Role = "user" | "assistant" | "system";
 

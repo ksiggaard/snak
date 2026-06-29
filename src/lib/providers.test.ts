@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   PROVIDERS,
   FALLBACK_PROVIDERS,
+  KNOWN_PROVIDER_IDS,
   isKeylessProvider,
   providersFromContributions,
   selectActiveProviders,
@@ -11,17 +12,10 @@ import {
 import type { ProviderContribution } from "@/types/plugins";
 import type { Provider } from "@/types/db";
 
-const EXPECTED_IDS: Provider[] = [
-  "anthropic",
-  "openai",
-  "mistral",
-  "gemini",
-  "ollama",
-];
-
 describe("PROVIDERS registry", () => {
-  it("lists exactly the supported providers, in order (ollama last)", () => {
-    expect(PROVIDERS.map((p) => p.id)).toEqual(EXPECTED_IDS);
+  it("is just the keyless local built-in (Ollama) — cloud providers are user-added", () => {
+    expect(PROVIDERS.map((p) => p.id)).toEqual(["ollama"]);
+    expect(KNOWN_PROVIDER_IDS).toEqual(["ollama"]);
   });
 
   it("uses unique ids", () => {
@@ -37,10 +31,6 @@ describe("PROVIDERS registry", () => {
       if (!isKeylessProvider(p.id)) expect(p.keyHint.trim()).not.toBe("");
     }
   });
-
-  it("has Anthropic first (the default provider for new threads)", () => {
-    expect(PROVIDERS[0].id).toBe("anthropic");
-  });
 });
 
 const contrib = (
@@ -54,17 +44,16 @@ const contrib = (
   ...over,
 });
 
-describe("providersFromContributions (T18 registry derivation)", () => {
+describe("providersFromContributions (registry derivation)", () => {
   it("maps enabled provider contributions to ProviderMeta", () => {
     const out = providersFromContributions([
-      contrib("anthropic", { label: "Anthropic", defaultModel: "claude-x" }),
-      contrib("openai"),
+      contrib("ollama", { label: "Local (Ollama)", defaultModel: "llama3.2" }),
     ]);
-    expect(out.map((p) => p.id)).toEqual(["anthropic", "openai"]);
+    expect(out.map((p) => p.id)).toEqual(["ollama"]);
     expect(out[0]).toEqual({
-      id: "anthropic",
-      label: "Anthropic",
-      defaultModel: "claude-x",
+      id: "ollama",
+      label: "Local (Ollama)",
+      defaultModel: "llama3.2",
       keyHint: "hint",
     });
   });
@@ -73,18 +62,18 @@ describe("providersFromContributions (T18 registry derivation)", () => {
     expect(providersFromContributions([])).toEqual([]);
   });
 
-  it("drops ids the Rust dispatch doesn't know (undispatchable)", () => {
+  it("drops ids the Rust dispatch doesn't know by id (only ollama is known)", () => {
     const out = providersFromContributions([
-      contrib("anthropic"),
-      contrib("totally-made-up"),
+      contrib("ollama"),
+      contrib("anthropic"), // a cloud provider is no longer a known built-in id
     ]);
-    expect(out.map((p) => p.id)).toEqual(["anthropic"]);
+    expect(out.map((p) => p.id)).toEqual(["ollama"]);
   });
 
   it("de-dupes by id (first contribution wins)", () => {
     const out = providersFromContributions([
-      contrib("openai", { label: "First" }),
-      contrib("openai", { label: "Second" }),
+      contrib("ollama", { label: "First" }),
+      contrib("ollama", { label: "Second" }),
     ]);
     expect(out).toHaveLength(1);
     expect(out[0].label).toBe("First");
@@ -92,20 +81,17 @@ describe("providersFromContributions (T18 registry derivation)", () => {
 });
 
 describe("selectActiveProviders (load-state + fallback)", () => {
-  it("returns the hardcoded four before the plugin layer has loaded", () => {
+  it("returns the built-in fallback before the plugin layer has loaded", () => {
     expect(selectActiveProviders(false, [])).toBe(FALLBACK_PROVIDERS);
     // Even if (somehow) contributions are present, not-loaded uses the fallback.
-    expect(selectActiveProviders(false, [contrib("openai")])).toBe(
+    expect(selectActiveProviders(false, [contrib("ollama")])).toBe(
       FALLBACK_PROVIDERS,
     );
   });
 
   it("returns the enabled providers once loaded", () => {
-    const out = selectActiveProviders(true, [
-      contrib("gemini"),
-      contrib("mistral"),
-    ]);
-    expect(out.map((p) => p.id)).toEqual(["gemini", "mistral"]);
+    const out = selectActiveProviders(true, [contrib("ollama")]);
+    expect(out.map((p) => p.id)).toEqual(["ollama"]);
   });
 
   it("returns [] (all-disabled) when loaded with no enabled providers", () => {
@@ -113,7 +99,7 @@ describe("selectActiveProviders (load-state + fallback)", () => {
   });
 });
 
-describe("keyless providers (T37)", () => {
+describe("keyless providers", () => {
   const meta = (id: Provider): ProviderMeta => ({
     id,
     label: id,
@@ -123,37 +109,26 @@ describe("keyless providers (T37)", () => {
 
   it("isKeylessProvider knows ollama and nothing else", () => {
     expect(isKeylessProvider("ollama")).toBe(true);
-    for (const id of ["anthropic", "openai", "mistral", "gemini", "nope"]) {
+    for (const id of ["anthropic", "openai", "groq", "nope"]) {
       expect(isKeylessProvider(id)).toBe(false);
     }
   });
 
-  it("withKeylessProviders unions enabled keyless ids into the presence set", () => {
+  it("withKeylessProviders unions the keyless built-in (ollama) into the presence set", () => {
     const present = new Set<Provider>(["anthropic"]);
-    const out = withKeylessProviders(present, [
-      meta("anthropic"),
-      meta("ollama"),
-    ]);
+    const out = withKeylessProviders(present, [meta("ollama")]);
     expect([...out].sort()).toEqual(["anthropic", "ollama"]);
     // Pure: the input set is untouched.
     expect([...present]).toEqual(["anthropic"]);
   });
 
-  it("withKeylessProviders adds nothing when no keyless provider is enabled", () => {
-    const out = withKeylessProviders(new Set<Provider>(["openai"]), [
-      meta("openai"),
-      meta("gemini"),
-    ]);
-    expect([...out]).toEqual(["openai"]);
-  });
-
-  it("withKeylessProviders treats custom (non-builtin) providers as available, key or not", () => {
-    // A user-added OpenAI-compatible provider (id not in KNOWN_PROVIDER_IDS) is
-    // key-optional, so it counts as available even with an empty presence set.
+  it("treats every custom provider as available, key or not", () => {
+    // With no built-in keyed providers left, any id other than the keyless
+    // built-in (ollama) is a custom entry — key-optional, so always available.
     const out = withKeylessProviders(new Set<Provider>(), [
-      meta("openai"), // built-in, keyed → NOT auto-added without a key
-      meta("groq"), // custom → auto-added
+      meta("anthropic"), // user-added (canonical id reused) → available
+      meta("groq"), // user-added → available
     ]);
-    expect([...out]).toEqual(["groq"]);
+    expect([...out].sort()).toEqual(["anthropic", "groq"]);
   });
 });
