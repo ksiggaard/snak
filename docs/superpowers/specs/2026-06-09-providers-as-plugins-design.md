@@ -1,3 +1,13 @@
+> 📐 **Historical design doc.** A dated, point-in-time design record — kept for the
+> rationale, not as current truth. For how the feature works today,
+> [`AGENTS.md`](../../../AGENTS.md) is canonical; where this doc and the code disagree,
+> the code wins.
+
+> ⚠️ **Superseded — see [ADR-0010](../../adr/0010-cloud-providers-are-user-added-custom-providers.md).**
+> This design was *not* shipped. Cloud providers are **user-added custom providers**
+> (settings rows seeded from presets), **not** plugins; only local Ollama is a built-in
+> provider. Read this only for the history of the abandoned approach.
+
 # T18 — Providers as built-in plugins (design)
 
 ## Goal

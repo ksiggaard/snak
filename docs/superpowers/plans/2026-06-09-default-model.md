@@ -1,3 +1,8 @@
+> 📐 **Historical design doc.** A dated, point-in-time design record — kept for the
+> rationale, not as current truth. For how the feature works today,
+> [`AGENTS.md`](../../../AGENTS.md) is canonical; where this doc and the code disagree,
+> the code wins.
+
 # Configurable Default Model Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

@@ -1,3 +1,12 @@
+> 📐 **Historical design doc.** A dated, point-in-time design record — kept for the
+> rationale, not as current truth. For how the feature works today,
+> [`AGENTS.md`](../../../AGENTS.md) is canonical; where this doc and the code disagree,
+> the code wins.
+>
+> 🔁 **Renamed:** "projects" shipped and was later renamed to **workspaces** (migration `022`:
+> `projects`→`workspaces`, `project_files`→`workspace_files`, `threads.project_id`→`workspace_id`).
+> See [AGENTS.md §Workspaces](../../../AGENTS.md#workspaces). This doc keeps the original "projects" naming.
+
 # T20 — Projects (grouped threads with shared instructions + files)
 
 ## Goal

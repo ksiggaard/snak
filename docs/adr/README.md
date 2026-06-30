@@ -29,5 +29,13 @@ one (set the old one's status to `superseded by ADR-NNNN`).
 | [0004](./0004-plugins-are-declarative.md) | Plugins are declarative (no code execution) | accepted |
 | [0005](./0005-two-windows-one-bundle.md) | Two windows, one bundle | accepted |
 | [0006](./0006-skills-via-progressive-disclosure.md) | Skills load via progressive disclosure | accepted |
+| [0007](./0007-runtime-plugins-are-trusted-js.md) | Runtime plugins are executable, trusted JS | accepted |
+| [0008](./0008-mcp-stateful-per-thread-sessions.md) | MCP servers run as stateful per-thread sessions | accepted |
+| [0009](./0009-deep-research-via-subagents.md) | Deep research runs as dispatched parallel subagents | accepted |
+| [0010](./0010-cloud-providers-are-user-added-custom-providers.md) | Cloud providers are user-added custom providers, not plugins | accepted |
+| [0011](./0011-document-attachments-as-extracted-text.md) | Document attachments inject extracted text everywhere | accepted |
 
-These were back-filled from decisions already described in [`../../AGENTS.md`](../../AGENTS.md).
+ADRs 0001–0006 were back-filled from decisions already described in
+[`../../AGENTS.md`](../../AGENTS.md); 0007–0011 record subsystems added since (runtime plugins,
+MCP, deep research, custom providers, document attachments). ADR-0010 supersedes the T18
+"providers as plugins" design (`../superpowers/specs/2026-06-09-providers-as-plugins-design.md`).

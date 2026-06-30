@@ -1,3 +1,8 @@
+> 📐 **Historical design doc.** A dated, point-in-time design record — kept for the
+> rationale, not as current truth. For how the feature works today,
+> [`AGENTS.md`](../../../AGENTS.md) is canonical; where this doc and the code disagree,
+> the code wins.
+
 # Stateful per-thread MCP sessions (via rmcp)
 
 **Date:** 2026-06-15
