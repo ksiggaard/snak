@@ -40,4 +40,4 @@ Before touching Anthropic request shapes, model ids, streaming, or multimodal, c
 ## Reference
 
 - ADR-0002 (provider calls in Rust over HTTP), ADR-0010 (custom providers, not plugins).
-- `AGENTS.md` §Providers & chat, §Secrets / API keys.
+- `docs/architecture/providers.md`; `AGENTS.md` §Secrets / API keys.

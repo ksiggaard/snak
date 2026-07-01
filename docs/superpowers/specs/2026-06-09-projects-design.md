@@ -5,7 +5,7 @@
 >
 > 🔁 **Renamed:** "projects" shipped and was later renamed to **workspaces** (migration `022`:
 > `projects`→`workspaces`, `project_files`→`workspace_files`, `threads.project_id`→`workspace_id`).
-> See [AGENTS.md §Workspaces](../../../AGENTS.md#workspaces). This doc keeps the original "projects" naming.
+> See [Workspaces](../../architecture/workspaces.md). This doc keeps the original "projects" naming.
 
 # T20 — Projects (grouped threads with shared instructions + files)
 

@@ -1,0 +1,21 @@
+# Shapes the auto-generated release notes (see release.yml's generate_release_notes).
+# Categories match merged PRs by label; unlabelled PRs fall into "Other changes".
+# https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+    authors:
+      - dependabot
+  categories:
+    - title: Features
+      labels:
+        - feature
+        - enhancement
+    - title: Bug Fixes
+      labels:
+        - bug
+        - fix
+    - title: Other changes
+      labels:
+        - "*"

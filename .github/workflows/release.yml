@@ -35,7 +35,10 @@ jobs:
               repo: context.repo.repo,
               tag_name: tag,
               name: `snak ${tag}`,
+              // body is pre-pended to GitHub's auto-generated "What's Changed"
+              // notes (categorised per .github/release.yml).
               body: 'Download the installer for your platform from the assets below.',
+              generate_release_notes: true,
               draft: true,
               prerelease: false,
             });
